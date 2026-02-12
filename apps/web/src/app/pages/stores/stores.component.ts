@@ -1,0 +1,759 @@
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import {
+  StoreService,
+  StoreDto,
+  DeliveryRuleDto,
+  CreateStoreDto,
+  CreateDeliveryRuleDto,
+} from '../../services/store.service';
+
+@Component({
+  selector: 'app-stores',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
+    <div class="stores-page">
+      <header class="page-header">
+        <h1>🏪 Şube Yönetimi</h1>
+        <button class="add-btn" (click)="showAddStore = true">+ Yeni Şube</button>
+      </header>
+
+      <!-- Stores List -->
+      <div class="stores-grid">
+        @for (store of stores(); track store.id) {
+          <div class="store-card" [class.inactive]="!store.isActive">
+            <div class="store-header">
+              <h3>{{ store.name }}</h3>
+              <span class="status-badge" [class.active]="store.isActive">
+                {{ store.isActive ? 'Aktif' : 'Pasif' }}
+              </span>
+            </div>
+
+            <div class="store-info">
+              @if (store.address) {
+                <p class="address">📍 {{ store.address }}</p>
+              }
+              @if (store.phone) {
+                <p class="phone">📞 {{ store.phone }}</p>
+              }
+              <p class="coords">
+                🌐 {{ store.lat.toFixed(6) }}, {{ store.lng.toFixed(6) }}
+              </p>
+            </div>
+
+            <!-- Delivery Rules -->
+            <div class="delivery-rules">
+              <h4>
+                Teslimat Kuralları
+                <button class="add-rule-btn" (click)="openAddRule(store)">+</button>
+              </h4>
+              @if (store.deliveryRules && store.deliveryRules.length > 0) {
+                @for (rule of store.deliveryRules; track rule.id) {
+                  <div class="rule-item" [class.inactive]="!rule.isActive">
+                    <div class="rule-info">
+                      <span class="radius">📏 {{ rule.radiusKm }} km</span>
+                      <span class="fee">🚗 {{ rule.deliveryFee }} TL</span>
+                      <span class="min-basket">🛒 Min: {{ rule.minBasket }} TL</span>
+                    </div>
+                    <div class="rule-actions">
+                      <button class="edit-btn" (click)="editRule(rule)">✏️</button>
+                      <button class="delete-btn" (click)="deleteRule(rule)">🗑️</button>
+                    </div>
+                  </div>
+                }
+              } @else {
+                <p class="no-rules">Teslimat kuralı yok</p>
+              }
+            </div>
+
+            <div class="store-actions">
+              <button class="edit-btn" (click)="editStore(store)">Düzenle</button>
+              <button class="toggle-btn" (click)="toggleStore(store)">
+                {{ store.isActive ? 'Devre Dışı' : 'Aktifleştir' }}
+              </button>
+              <button class="delete-btn" (click)="deleteStore(store)">Sil</button>
+            </div>
+          </div>
+        }
+
+        @if (stores().length === 0 && !loading()) {
+          <div class="empty-state">
+            <span class="empty-icon">🏪</span>
+            <p>Henüz şube eklenmemiş</p>
+            <button class="add-btn" (click)="showAddStore = true">İlk Şubeyi Ekle</button>
+          </div>
+        }
+      </div>
+
+      <!-- Add/Edit Store Modal -->
+      @if (showAddStore || editingStore()) {
+        <div class="modal-overlay" (click)="closeStoreModal()">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <h2>{{ editingStore() ? 'Şube Düzenle' : 'Yeni Şube' }}</h2>
+            <form (ngSubmit)="saveStore()">
+              <div class="form-group">
+                <label>Şube Adı *</label>
+                <input type="text" [(ngModel)]="storeForm.name" name="name" required />
+              </div>
+              <div class="form-group">
+                <label>Adres</label>
+                <textarea [(ngModel)]="storeForm.address" name="address" rows="2"></textarea>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Enlem (Lat) *</label>
+                  <input type="number" step="any" [(ngModel)]="storeForm.lat" name="lat" required />
+                </div>
+                <div class="form-group">
+                  <label>Boylam (Lng) *</label>
+                  <input type="number" step="any" [(ngModel)]="storeForm.lng" name="lng" required />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Telefon</label>
+                <input type="tel" [(ngModel)]="storeForm.phone" name="phone" />
+              </div>
+              <div class="form-group checkbox">
+                <label>
+                  <input type="checkbox" [(ngModel)]="storeForm.isActive" name="isActive" />
+                  Aktif
+                </label>
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="cancel-btn" (click)="closeStoreModal()">İptal</button>
+                <button type="submit" class="save-btn">Kaydet</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      }
+
+      <!-- Add/Edit Delivery Rule Modal -->
+      @if (showAddRule || editingRule()) {
+        <div class="modal-overlay" (click)="closeRuleModal()">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <h2>{{ editingRule() ? 'Kural Düzenle' : 'Yeni Teslimat Kuralı' }}</h2>
+            <p class="modal-subtitle" *ngIf="selectedStoreForRule()">
+              {{ selectedStoreForRule()?.name }}
+            </p>
+            <form (ngSubmit)="saveRule()">
+              <div class="form-group">
+                <label>Teslimat Yarıçapı (km) *</label>
+                <input type="number" step="0.1" min="0.1" [(ngModel)]="ruleForm.radiusKm" name="radiusKm" required />
+              </div>
+              <div class="form-group">
+                <label>Minimum Sepet (TL) *</label>
+                <input type="number" step="0.01" min="0" [(ngModel)]="ruleForm.minBasket" name="minBasket" required />
+              </div>
+              <div class="form-group">
+                <label>Teslimat Ücreti (TL) *</label>
+                <input type="number" step="0.01" min="0" [(ngModel)]="ruleForm.deliveryFee" name="deliveryFee" required />
+              </div>
+              <div class="form-group checkbox">
+                <label>
+                  <input type="checkbox" [(ngModel)]="ruleForm.isActive" name="isActive" />
+                  Aktif
+                </label>
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="cancel-btn" (click)="closeRuleModal()">İptal</button>
+                <button type="submit" class="save-btn">Kaydet</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      }
+
+      <!-- Geo Check Test Section -->
+      <div class="geo-test-section">
+        <h3>🧪 Servis Alanı Test</h3>
+        <div class="geo-test-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Test Enlem</label>
+              <input type="number" step="any" [(ngModel)]="testLat" />
+            </div>
+            <div class="form-group">
+              <label>Test Boylam</label>
+              <input type="number" step="any" [(ngModel)]="testLng" />
+            </div>
+            <button class="test-btn" (click)="testGeoCheck()">Test Et</button>
+          </div>
+        </div>
+        @if (geoTestResult()) {
+          <div class="geo-test-result" [class.success]="geoTestResult()!.isWithinServiceArea" [class.error]="!geoTestResult()!.isWithinServiceArea">
+            <p><strong>{{ geoTestResult()!.isWithinServiceArea ? '✅ Servis Alanı İçinde' : '❌ Servis Alanı Dışında' }}</strong></p>
+            <p>{{ geoTestResult()!.message }}</p>
+            @if (geoTestResult()!.nearestStore) {
+              <p>En yakın şube: {{ geoTestResult()!.nearestStore!.name }} ({{ geoTestResult()!.distance }} km)</p>
+            }
+            @if (geoTestResult()!.deliveryRule) {
+              <p>Teslimat ücreti: {{ geoTestResult()!.deliveryRule!.deliveryFee }} TL | Min sepet: {{ geoTestResult()!.deliveryRule!.minBasket }} TL</p>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  `,
+  styles: [`
+    :host {
+      display: block;
+      height: 100%;
+    }
+
+    .stores-page {
+      padding: 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .page-header h1 {
+      font-size: 1.75rem;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+    }
+
+    .add-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent-primary, #6366f1);
+      color: white;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .add-btn:hover {
+      background: var(--accent-primary-dark, #5558e3);
+    }
+
+    .stores-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 20px;
+    }
+
+    .store-card {
+      background: var(--bg-secondary, #1a1a2e);
+      border-radius: 12px;
+      border: 1px solid var(--border-color, #333);
+      padding: 20px;
+      transition: all 0.2s;
+    }
+
+    .store-card:hover {
+      border-color: var(--accent-primary, #6366f1);
+    }
+
+    .store-card.inactive {
+      opacity: 0.7;
+    }
+
+    .store-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .store-header h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+    }
+
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: #ef4444;
+      color: white;
+    }
+
+    .status-badge.active {
+      background: #10b981;
+    }
+
+    .store-info {
+      margin-bottom: 16px;
+    }
+
+    .store-info p {
+      margin: 6px 0;
+      font-size: 0.9rem;
+      color: var(--text-secondary, #888);
+    }
+
+    .delivery-rules {
+      border-top: 1px solid var(--border-color, #333);
+      padding-top: 16px;
+      margin-bottom: 16px;
+    }
+
+    .delivery-rules h4 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .add-rule-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1px solid var(--accent-primary, #6366f1);
+      background: transparent;
+      color: var(--accent-primary, #6366f1);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .add-rule-btn:hover {
+      background: var(--accent-primary, #6366f1);
+      color: white;
+    }
+
+    .rule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--bg-tertiary, #252542);
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    .rule-item.inactive {
+      opacity: 0.6;
+    }
+
+    .rule-info {
+      display: flex;
+      gap: 12px;
+      font-size: 0.85rem;
+      color: var(--text-primary, #fff);
+    }
+
+    .rule-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .rule-actions button {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .rule-actions button:hover {
+      opacity: 1;
+    }
+
+    .no-rules {
+      font-size: 0.85rem;
+      color: var(--text-secondary, #888);
+      font-style: italic;
+    }
+
+    .store-actions {
+      display: flex;
+      gap: 8px;
+      border-top: 1px solid var(--border-color, #333);
+      padding-top: 16px;
+    }
+
+    .store-actions button {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: none;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .edit-btn {
+      background: var(--bg-tertiary, #252542);
+      color: var(--text-primary, #fff);
+    }
+
+    .toggle-btn {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .delete-btn {
+      background: transparent;
+      border: 1px solid #ef4444 !important;
+      color: #ef4444;
+    }
+
+    .delete-btn:hover {
+      background: #ef4444;
+      color: white;
+    }
+
+    .empty-state {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 64px;
+      background: var(--bg-secondary, #1a1a2e);
+      border-radius: 12px;
+      border: 1px dashed var(--border-color, #333);
+    }
+
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 16px;
+    }
+
+    .empty-state p {
+      color: var(--text-secondary, #888);
+      margin-bottom: 16px;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: var(--bg-secondary, #1a1a2e);
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 480px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .modal h2 {
+      margin-bottom: 8px;
+      color: var(--text-primary, #fff);
+    }
+
+    .modal-subtitle {
+      color: var(--text-secondary, #888);
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      color: var(--text-secondary, #888);
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color, #333);
+      background: var(--bg-tertiary, #252542);
+      color: var(--text-primary, #fff);
+      font-size: 0.95rem;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 16px;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
+    .form-group.checkbox label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .form-group.checkbox input {
+      width: auto;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      margin-top: 24px;
+    }
+
+    .cancel-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color, #333);
+      background: transparent;
+      color: var(--text-primary, #fff);
+      cursor: pointer;
+    }
+
+    .save-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent-primary, #6366f1);
+      color: white;
+      cursor: pointer;
+    }
+
+    /* Geo Test Section */
+    .geo-test-section {
+      margin-top: 32px;
+      padding: 20px;
+      background: var(--bg-secondary, #1a1a2e);
+      border-radius: 12px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .geo-test-section h3 {
+      margin-bottom: 16px;
+      color: var(--text-primary, #fff);
+    }
+
+    .geo-test-form .form-row {
+      align-items: flex-end;
+    }
+
+    .test-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent-primary, #6366f1);
+      color: white;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .geo-test-result {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 8px;
+    }
+
+    .geo-test-result.success {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid #10b981;
+    }
+
+    .geo-test-result.error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid #ef4444;
+    }
+
+    .geo-test-result p {
+      margin: 4px 0;
+      color: var(--text-primary, #fff);
+    }
+  `]
+})
+export class StoresComponent implements OnInit {
+  private storeService = inject(StoreService);
+
+  stores = signal<StoreDto[]>([]);
+  loading = signal(false);
+
+  // Store form
+  showAddStore = false;
+  editingStore = signal<StoreDto | null>(null);
+  storeForm: CreateStoreDto = { name: '', lat: 0, lng: 0, isActive: true };
+
+  // Rule form
+  showAddRule = false;
+  editingRule = signal<DeliveryRuleDto | null>(null);
+  selectedStoreForRule = signal<StoreDto | null>(null);
+  ruleForm: CreateDeliveryRuleDto = { storeId: '', radiusKm: 5, minBasket: 50, deliveryFee: 10, isActive: true };
+
+  // Geo test
+  testLat = 41.0082; // Istanbul default
+  testLng = 28.9784;
+  geoTestResult = signal<any | null>(null);
+
+  ngOnInit(): void {
+    this.loadStores();
+  }
+
+  loadStores(): void {
+    this.loading.set(true);
+    this.storeService.getStores(true).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.stores.set(res.data);
+        }
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
+  }
+
+  // ==================== STORE CRUD ====================
+
+  editStore(store: StoreDto): void {
+    this.editingStore.set(store);
+    this.storeForm = {
+      name: store.name,
+      address: store.address || undefined,
+      lat: store.lat,
+      lng: store.lng,
+      phone: store.phone || undefined,
+      isActive: store.isActive,
+    };
+  }
+
+  closeStoreModal(): void {
+    this.showAddStore = false;
+    this.editingStore.set(null);
+    this.storeForm = { name: '', lat: 0, lng: 0, isActive: true };
+  }
+
+  saveStore(): void {
+    const editing = this.editingStore();
+    if (editing) {
+      this.storeService.updateStore(editing.id, this.storeForm).subscribe({
+        next: () => {
+          this.closeStoreModal();
+          this.loadStores();
+        },
+        error: (err) => console.error('Update store failed:', err),
+      });
+    } else {
+      this.storeService.createStore(this.storeForm).subscribe({
+        next: () => {
+          this.closeStoreModal();
+          this.loadStores();
+        },
+        error: (err) => console.error('Create store failed:', err),
+      });
+    }
+  }
+
+  toggleStore(store: StoreDto): void {
+    this.storeService.updateStore(store.id, { isActive: !store.isActive }).subscribe({
+      next: () => this.loadStores(),
+      error: (err) => console.error('Toggle store failed:', err),
+    });
+  }
+
+  deleteStore(store: StoreDto): void {
+    if (confirm(`"${store.name}" şubesini silmek istediğinize emin misiniz?`)) {
+      this.storeService.deleteStore(store.id).subscribe({
+        next: () => this.loadStores(),
+        error: (err) => console.error('Delete store failed:', err),
+      });
+    }
+  }
+
+  // ==================== RULE CRUD ====================
+
+  openAddRule(store: StoreDto): void {
+    this.selectedStoreForRule.set(store);
+    this.ruleForm = { storeId: store.id, radiusKm: 5, minBasket: 50, deliveryFee: 10, isActive: true };
+    this.showAddRule = true;
+  }
+
+  editRule(rule: DeliveryRuleDto): void {
+    this.editingRule.set(rule);
+    this.ruleForm = {
+      storeId: rule.storeId,
+      radiusKm: rule.radiusKm,
+      minBasket: rule.minBasket,
+      deliveryFee: rule.deliveryFee,
+      isActive: rule.isActive,
+    };
+  }
+
+  closeRuleModal(): void {
+    this.showAddRule = false;
+    this.editingRule.set(null);
+    this.selectedStoreForRule.set(null);
+    this.ruleForm = { storeId: '', radiusKm: 5, minBasket: 50, deliveryFee: 10, isActive: true };
+  }
+
+  saveRule(): void {
+    const editing = this.editingRule();
+    if (editing) {
+      this.storeService.updateDeliveryRule(editing.id, {
+        radiusKm: this.ruleForm.radiusKm,
+        minBasket: this.ruleForm.minBasket,
+        deliveryFee: this.ruleForm.deliveryFee,
+        isActive: this.ruleForm.isActive,
+      }).subscribe({
+        next: () => {
+          this.closeRuleModal();
+          this.loadStores();
+        },
+        error: (err) => console.error('Update rule failed:', err),
+      });
+    } else {
+      this.storeService.createDeliveryRule(this.ruleForm).subscribe({
+        next: () => {
+          this.closeRuleModal();
+          this.loadStores();
+        },
+        error: (err) => console.error('Create rule failed:', err),
+      });
+    }
+  }
+
+  deleteRule(rule: DeliveryRuleDto): void {
+    if (confirm('Bu teslimat kuralını silmek istediğinize emin misiniz?')) {
+      this.storeService.deleteDeliveryRule(rule.id).subscribe({
+        next: () => this.loadStores(),
+        error: (err) => console.error('Delete rule failed:', err),
+      });
+    }
+  }
+
+  // ==================== GEO TEST ====================
+
+  testGeoCheck(): void {
+    this.storeService.checkServiceArea(this.testLat, this.testLng).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.geoTestResult.set(res.data);
+        }
+      },
+      error: (err) => console.error('Geo check failed:', err),
+    });
+  }
+}
+
+

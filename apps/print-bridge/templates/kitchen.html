@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      width: 80mm;
+      padding: 5mm;
+      background: white;
+    }
+    .header {
+      text-align: center;
+      border-bottom: 2px dashed #000;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+    }
+    .header h1 {
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .order-number {
+      font-size: 24px;
+      font-weight: bold;
+      margin: 8px 0;
+    }
+    .timestamp {
+      font-size: 10px;
+      color: #666;
+    }
+    .items {
+      margin: 10px 0;
+    }
+    .item {
+      margin-bottom: 8px;
+      border-bottom: 1px dotted #ccc;
+      padding-bottom: 8px;
+    }
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      font-weight: bold;
+    }
+    .item-qty {
+      font-size: 16px;
+    }
+    .item-name {
+      flex: 1;
+      margin-left: 8px;
+    }
+    .item-options {
+      margin-left: 20px;
+      font-size: 11px;
+      color: #333;
+    }
+    .item-notes {
+      margin-left: 20px;
+      font-style: italic;
+      font-size: 10px;
+      color: #666;
+    }
+    .notes {
+      margin-top: 10px;
+      padding: 8px;
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+    .notes-title {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .footer {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 10px;
+      color: #666;
+      border-top: 2px dashed #000;
+      padding-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🍳 MUTFAK FİŞİ</h1>
+    {{#storeName}}
+    <div style="font-size: 12px; font-weight: bold; color: #333; margin: 4px 0;">🏪 {{storeName}}</div>
+    {{/storeName}}
+    <div class="order-number">#{{orderNumber}}</div>
+    <div class="timestamp">{{timestamp}}</div>
+  </div>
+
+  <div class="items">
+    {{#items}}
+    <div class="item">
+      <div class="item-header">
+        <span class="item-qty">{{qty}}x</span>
+        <span class="item-name">{{name}}</span>
+      </div>
+      {{#options.length}}
+      <div class="item-options">
+        {{#options}}
+        → {{.}}<br>
+        {{/options}}
+      </div>
+      {{/options.length}}
+      {{#notes}}
+      <div class="item-notes">📝 {{notes}}</div>
+      {{/notes}}
+    </div>
+    {{/items}}
+  </div>
+
+  {{#notes}}
+  <div class="notes">
+    <div class="notes-title">📋 SİPARİŞ NOTU:</div>
+    {{notes}}
+  </div>
+  {{/notes}}
+
+  <div class="footer">
+    Yazdırma Zamanı: {{printTime}}
+  </div>
+</body>
+</html>
+
+

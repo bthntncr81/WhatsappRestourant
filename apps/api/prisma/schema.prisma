@@ -1,0 +1,659 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships Membership[]
+
+  // Menu relations
+  menuVersions     MenuVersion[]
+  menuItems        MenuItem[]
+  menuOptionGroups MenuOptionGroup[]
+  menuOptions      MenuOption[]
+  menuSynonyms     MenuSynonym[]
+
+  // Inbox relations
+  conversations Conversation[]
+  messages      Message[]
+
+  // Order relations
+  orders       Order[]
+  orderIntents OrderIntent[]
+  printJobs    PrintJob[]
+
+  // Store relations
+  stores        Store[]
+  deliveryRules DeliveryRule[]
+
+  // Billing relations
+  subscription        Subscription?
+  storedCards         StoredCard[]
+  billingTransactions BillingTransaction[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  memberships  Membership[]
+  messages     Message[]    @relation("SenderMessages")
+
+  // Agent features
+  conversationAssignments ConversationAssignment[]
+  conversationLocks       ConversationLock[]
+  internalNotes           InternalNote[]
+  participatingIn         ConversationParticipant[]
+
+  @@map("users")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  AGENT
+  STAFF
+}
+
+model Membership {
+  id        String     @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      MemberRole @default(STAFF)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("memberships")
+}
+
+// ==================== MENU MODELS ====================
+
+model MenuVersion {
+  id          String    @id @default(cuid())
+  tenantId    String
+  version     Int
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items        MenuItem[]
+  optionGroups MenuOptionGroup[]
+  options      MenuOption[]
+  synonyms     MenuSynonym[]
+
+  @@unique([tenantId, version])
+  @@map("menu_versions")
+}
+
+model MenuItem {
+  id          String  @id @default(cuid())
+  tenantId    String
+  versionId   String
+  name        String
+  description String?
+  basePrice   Decimal @db.Decimal(10, 2)
+  category    String
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  version      MenuVersion             @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  optionGroups MenuItemOptionGroup[]
+  synonyms     MenuSynonym[]           @relation("ItemSynonyms")
+
+  @@index([tenantId, versionId])
+  @@index([tenantId, versionId, category])
+  @@map("menu_items")
+}
+
+enum OptionGroupType {
+  SINGLE
+  MULTI
+}
+
+model MenuOptionGroup {
+  id        String          @id @default(cuid())
+  tenantId  String
+  versionId String
+  name      String
+  type      OptionGroupType @default(SINGLE)
+  required  Boolean         @default(false)
+  minSelect Int             @default(0)
+  maxSelect Int?
+  sortOrder Int             @default(0)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  tenant  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  version MenuVersion             @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  options MenuOption[]
+  items   MenuItemOptionGroup[]
+
+  @@index([tenantId, versionId])
+  @@map("menu_option_groups")
+}
+
+model MenuOption {
+  id         String   @id @default(cuid())
+  tenantId   String
+  versionId  String
+  groupId    String
+  name       String
+  priceDelta Decimal  @default(0) @db.Decimal(10, 2)
+  isDefault  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  version  MenuVersion     @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  group    MenuOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  synonyms MenuSynonym[]   @relation("OptionSynonyms")
+
+  @@index([tenantId, versionId])
+  @@index([groupId])
+  @@map("menu_options")
+}
+
+model MenuItemOptionGroup {
+  itemId    String
+  groupId   String
+  sortOrder Int    @default(0)
+
+  item  MenuItem        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  group MenuOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, groupId])
+  @@map("menu_item_option_groups")
+}
+
+model MenuSynonym {
+  id             String  @id @default(cuid())
+  tenantId       String
+  versionId      String
+  phrase         String
+  mapsToItemId   String?
+  mapsToOptionId String?
+  weight         Int     @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  version  MenuVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  item     MenuItem?    @relation("ItemSynonyms", fields: [mapsToItemId], references: [id], onDelete: Cascade)
+  option   MenuOption?  @relation("OptionSynonyms", fields: [mapsToOptionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, versionId])
+  @@index([tenantId, versionId, phrase])
+  @@map("menu_synonyms")
+}
+
+// ==================== INBOX / WHATSAPP MODELS ====================
+
+enum ConversationStatus {
+  OPEN
+  PENDING_AGENT
+  CLOSED
+}
+
+model Conversation {
+  id            String             @id @default(cuid())
+  tenantId      String
+  customerPhone String
+  customerName  String?
+  status        ConversationStatus @default(OPEN)
+  lastMessageAt DateTime           @default(now())
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  // Geo check result (stored when customer sends location)
+  customerLat      Float?
+  customerLng      Float?
+  isWithinService  Boolean?
+  nearestStoreId   String?
+  geoCheckJson     Json?   // Full GeoCheckResult for reference
+
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages      Message[]
+  orders        Order[]
+  orderIntents  OrderIntent[]
+  assignments   ConversationAssignment[]
+  lock          ConversationLock?
+  internalNotes InternalNote[]
+  participants  ConversationParticipant[]
+
+  @@unique([tenantId, customerPhone])
+  @@index([tenantId, status])
+  @@index([tenantId, lastMessageAt])
+  @@map("conversations")
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+enum MessageKind {
+  TEXT
+  LOCATION
+  IMAGE
+  VOICE
+  SYSTEM
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  tenantId       String
+  conversationId String
+  direction      MessageDirection
+  kind           MessageKind      @default(TEXT)
+  text           String?
+  payloadJson    Json?
+  senderUserId   String?
+  externalId     String?
+  createdAt      DateTime         @default(now())
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User?         @relation("SenderMessages", fields: [senderUserId], references: [id], onDelete: SetNull)
+  orderIntents OrderIntent[]
+
+  @@index([tenantId, conversationId])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ==================== ORDER MODELS ====================
+
+enum OrderStatus {
+  DRAFT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  tenantId       String
+  conversationId String
+  storeId        String?     // Assigned store/branch for the order
+  orderNumber    Int?        // Sequential order number per tenant
+  status         OrderStatus @default(DRAFT)
+  totalPrice     Decimal     @db.Decimal(10, 2)
+  notes          String?
+  customerPhone  String?
+  customerName   String?
+  deliveryAddress String?
+  paymentMethod  String?     // CASH, CARD, ONLINE
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  confirmedAt    DateTime?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  items        OrderItem[]
+  printJobs    PrintJob[]
+
+  @@index([tenantId, conversationId])
+  @@index([tenantId, status])
+  @@index([tenantId, orderNumber])
+  @@index([tenantId, storeId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  menuItemId String
+  menuItemName String
+  qty        Int      @default(1)
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  optionsJson Json?
+  extrasJson  Json?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderIntent {
+  id                   String   @id @default(cuid())
+  tenantId             String
+  conversationId       String
+  lastUserMessageId    String
+  extractedJson        Json
+  confidence           Float
+  needsClarification   Boolean  @default(false)
+  clarificationQuestion String?
+  agentFeedback        String?  // 'correct' | 'incorrect' | null
+  createdAt            DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  lastMessage  Message      @relation(fields: [lastUserMessageId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conversationId])
+  @@index([conversationId, createdAt])
+  @@map("order_intents")
+}
+
+// ==================== AGENT ASSIGNMENT & COLLABORATION ====================
+
+model ConversationAssignment {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  assignedUserId String
+  assignedAt     DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  assignedUser User         @relation(fields: [assignedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId]) // Only one active assignment per conversation
+  @@index([tenantId, assignedUserId])
+  @@map("conversation_assignments")
+}
+
+model ConversationLock {
+  conversationId String   @id
+  lockedByUserId String
+  lockedAt       DateTime @default(now())
+  expiresAt      DateTime
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  lockedBy     User         @relation(fields: [lockedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([lockedByUserId])
+  @@index([expiresAt])
+  @@map("conversation_locks")
+}
+
+model ConversationParticipant {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  userId         String
+  canWrite       Boolean  @default(false)
+  joinedAt       DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([tenantId, userId])
+  @@map("conversation_participants")
+}
+
+model InternalNote {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String
+  authorUserId   String
+  text           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       User         @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conversationId])
+  @@index([conversationId, createdAt])
+  @@map("internal_notes")
+}
+
+// ==================== PRINT JOBS ====================
+
+enum PrintJobType {
+  KITCHEN
+  COURIER
+}
+
+enum PrintJobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model PrintJob {
+  id          String         @id @default(cuid())
+  tenantId    String
+  orderId     String
+  type        PrintJobType
+  status      PrintJobStatus @default(PENDING)
+  payloadJson Json
+  errorMessage String?
+  retryCount  Int            @default(0)
+  createdAt   DateTime       @default(now())
+  processedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, orderId])
+  @@map("print_jobs")
+}
+
+// ==================== STORES & DELIVERY ====================
+
+model Store {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  address   String?
+  lat       Float
+  lng       Float
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveryRules DeliveryRule[]
+  orders        Order[]
+
+  @@index([tenantId, isActive])
+  @@map("stores")
+}
+
+// For future: polygon zones
+// model DeliveryZone {
+//   id        String   @id @default(cuid())
+//   tenantId  String
+//   storeId   String
+//   name      String
+//   polygon   Json     // GeoJSON Polygon
+//   priority  Int      @default(0)
+//   ...
+// }
+
+model DeliveryRule {
+  id          String   @id @default(cuid())
+  tenantId    String
+  storeId     String
+  radiusKm    Float    // Delivery radius in kilometers
+  minBasket   Decimal  @db.Decimal(10, 2) // Minimum order amount
+  deliveryFee Decimal  @db.Decimal(10, 2) // Delivery fee
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, storeId])
+  @@index([tenantId, isActive])
+  @@map("delivery_rules")
+}
+
+// ==================== BILLING & SUBSCRIPTION ====================
+
+enum SubscriptionPlan {
+  TRIAL
+  STARTER
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING
+  CANCELLED
+  EXPIRED
+  UNPAID
+}
+
+enum BillingCycle {
+  MONTHLY
+  ANNUAL
+}
+
+model Subscription {
+  id                      String             @id @default(cuid())
+  tenantId                String             @unique
+  plan                    SubscriptionPlan   @default(TRIAL)
+  status                  SubscriptionStatus @default(ACTIVE)
+  billingCycle            BillingCycle       @default(MONTHLY)
+  
+  // iyzico references
+  iyzicoSubscriptionRef   String?            // iyzico subscription reference code
+  iyzicoCustomerRef       String?            // iyzico customer reference code
+  
+  // Trial info
+  trialEndsAt             DateTime?
+  
+  // Billing period
+  currentPeriodStart      DateTime           @default(now())
+  currentPeriodEnd        DateTime?
+  
+  // Usage limits based on plan
+  monthlyOrderLimit       Int                @default(50)   // Orders per month
+  monthlyMessageLimit     Int                @default(500)  // WhatsApp messages
+  maxStores               Int                @default(1)    // Max store branches
+  maxUsers                Int                @default(2)    // Max team members
+  
+  // Current usage (reset monthly)
+  ordersUsed              Int                @default(0)
+  messagesUsed            Int                @default(0)
+  usageResetAt            DateTime           @default(now())
+  
+  // Auto-renewal
+  autoRenew               Boolean            @default(true)
+  cancelledAt             DateTime?
+  cancelAtPeriodEnd       Boolean            @default(false)
+  
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  tenant                  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([plan])
+  @@map("subscriptions")
+}
+
+model StoredCard {
+  id              String   @id @default(cuid())
+  tenantId        String
+  
+  // iyzico card tokens
+  cardUserKey     String   // iyzico card user key
+  cardToken       String   // iyzico card token
+  
+  // Card display info
+  cardAlias       String?
+  cardAssociation String?  // VISA, MASTERCARD, etc.
+  cardFamily      String?  // Bonus, Maximum, etc.
+  cardBankName    String?
+  binNumber       String?  // First 6 digits
+  lastFourDigits  String?
+  cardType        String?  // CREDIT_CARD, DEBIT_CARD
+  
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, isDefault])
+  @@map("stored_cards")
+}
+
+enum TransactionType {
+  SUBSCRIPTION_PAYMENT
+  SUBSCRIPTION_UPGRADE
+  SUBSCRIPTION_RENEWAL
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model BillingTransaction {
+  id                    String            @id @default(cuid())
+  tenantId              String
+  
+  type                  TransactionType
+  status                TransactionStatus @default(PENDING)
+  
+  // Amount info
+  amount                Decimal           @db.Decimal(10, 2)
+  currency              String            @default("TRY")
+  
+  // Plan info at time of transaction
+  plan                  SubscriptionPlan?
+  billingCycle          BillingCycle?
+  
+  // iyzico references
+  iyzicoPaymentId       String?
+  iyzicoConversationId  String?
+  
+  // Error tracking
+  errorCode             String?
+  errorMessage          String?
+  
+  // Metadata
+  metadata              Json?
+  
+  createdAt             DateTime          @default(now())
+  processedAt           DateTime?
+
+  tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([createdAt])
+  @@map("billing_transactions")
+}
