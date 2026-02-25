@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { z } from 'zod';
 import {
   ApiResponse,
@@ -15,6 +16,43 @@ import { createLogger } from '../logger';
 
 const router = Router();
 const logger = createLogger();
+
+/**
+ * Verify Meta webhook signature (HMAC-SHA256)
+ * Returns true if valid, false if invalid, null if no verification needed
+ */
+function verifyMetaSignature(
+  signature: string | undefined,
+  rawBody: Buffer | undefined,
+  appSecret: string,
+): boolean | null {
+  if (!signature) return null; // No signature header = no verification needed
+
+  if (!rawBody) {
+    logger.warn('Webhook signature present but rawBody not captured');
+    return false;
+  }
+
+  try {
+    const expectedSig = crypto
+      .createHmac('sha256', appSecret)
+      .update(rawBody)
+      .digest('hex');
+    const providedHash = signature.replace('sha256=', '');
+
+    // timingSafeEqual requires equal length buffers
+    const expectedBuf = Buffer.from(expectedSig, 'hex');
+    const providedBuf = Buffer.from(providedHash, 'hex');
+    if (expectedBuf.length !== providedBuf.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(expectedBuf, providedBuf);
+  } catch (error) {
+    logger.error({ error }, 'Signature verification error');
+    return false;
+  }
+}
 
 // Validation schemas
 const webhookPayloadSchema = z.object({
@@ -202,25 +240,22 @@ router.post(
     const { tenantId } = req.params;
     try {
       // Verify webhook signature if tenant has appSecret configured
-      const signature = req.headers['x-hub-signature-256'] as string;
-      if (signature && (req as any).rawBody) {
-        const config = await whatsappConfigService.getDecryptedConfig(tenantId);
-        if (config?.appSecret) {
-          const crypto = await import('crypto');
-          const expectedSig = crypto.default
-            .createHmac('sha256', config.appSecret)
-            .update((req as any).rawBody)
-            .digest('hex');
-          const providedHash = signature.replace('sha256=', '');
-          const isValid = crypto.default.timingSafeEqual(
-            Buffer.from(expectedSig, 'hex'),
-            Buffer.from(providedHash, 'hex'),
-          );
-          if (!isValid) {
-            logger.warn({ tenantId }, 'Invalid webhook signature');
+      const signature = req.headers['x-hub-signature-256'] as string | undefined;
+      const rawBody = (req as any).rawBody as Buffer | undefined;
+
+      if (signature) {
+        const tenantConfig = await whatsappConfigService.getDecryptedConfig(tenantId);
+        if (tenantConfig?.appSecret) {
+          const result = verifyMetaSignature(signature, rawBody, tenantConfig.appSecret);
+          if (result === false) {
+            logger.warn(
+              { tenantId, hasRawBody: !!rawBody, signaturePrefix: signature.substring(0, 20) },
+              'Webhook signature verification failed',
+            );
             return res.status(403).json({ success: false, error: 'Invalid signature' });
           }
         }
+        // If no appSecret configured, skip verification (tenant hasn't set it up yet)
       }
 
       logger.info(
