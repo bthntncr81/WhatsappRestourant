@@ -30,6 +30,7 @@ export interface JwtConfig {
 
 export interface OpenAIConfig {
   apiKey: string | undefined;
+  orgId: string | undefined;
   model: string;
 }
 

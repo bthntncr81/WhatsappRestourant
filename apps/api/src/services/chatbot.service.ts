@@ -141,63 +141,149 @@ export class ChatbotService {
       const menu = await menuService.getPublishedMenu(tenantId);
       if (!menu || !menu.categories) return items;
 
-      const allMenuItems: { id: string; name: string; price: number; nameLower: string }[] = [];
+      const allMenuItems: { id: string; name: string; price: number; nameLower: string; nameNormalized: string; nameNoSpaces: string }[] = [];
       
       for (const category of menu.categories) {
         for (const item of category.items) {
+          const nameLower = item.name.toLowerCase();
           allMenuItems.push({
             id: item.id,
             name: item.name,
             price: item.basePrice,
-            nameLower: item.name.toLowerCase()
+            nameLower,
+            nameNormalized: this.normalizeForMatch(nameLower),
+            nameNoSpaces: nameLower.replace(/\s+/g, ''),
           });
         }
       }
 
       const lowerMessage = message.toLowerCase();
-      
-      // Parse message to find items with quantities
-      // Pattern: "X adet/tane ITEM" or just "ITEM" or "X ITEM"
-      // Examples: "2 adet adana kebap", "1 kola", "lahmacun"
+      const normalizedMessage = this.normalizeForMatch(lowerMessage);
+      const noSpacesMessage = lowerMessage.replace(/\s+/g, '');
       
       // Sort menu items by name length (longest first) to match more specific items first
       allMenuItems.sort((a, b) => b.nameLower.length - a.nameLower.length);
 
       // Track what parts of the message we've already matched
       let remainingMessage = lowerMessage;
+      let remainingNormalized = normalizedMessage;
+      let remainingNoSpaces = noSpacesMessage;
+      const matchedItemIds = new Set<string>();
 
       for (const menuItem of allMenuItems) {
-        // Check if item name is in the message
-        if (!remainingMessage.includes(menuItem.nameLower)) continue;
+        if (matchedItemIds.has(menuItem.id)) continue;
 
-        // Try to find quantity before the item name
-        // Pattern: (number)? (adet|tane)? (daha|de|da|fazla)? (item name)
-        // Examples: "2 adet adana kebap", "2 tane daha pizza", "1 kola", "lahmacun"
+        // Check multiple matching strategies:
+        // 1. Exact include (e.g. "kola" in "bir kola istiyorum")
+        // 2. Normalized include (handles Turkish chars: ş->s, ç->c, etc.)
+        // 3. No-space include (e.g. "cheeseburger" matches "cheese burger")
+        // 4. Word-by-word match (all words of item name found in message)
+        const hasExactMatch = remainingMessage.includes(menuItem.nameLower);
+        const hasNormalizedMatch = remainingNormalized.includes(menuItem.nameNormalized);
+        const hasNoSpaceMatch = remainingNoSpaces.includes(menuItem.nameNoSpaces);
+        const hasWordMatch = this.allWordsMatch(menuItem.nameLower, remainingMessage);
+
+        if (!hasExactMatch && !hasNormalizedMatch && !hasNoSpaceMatch && !hasWordMatch) continue;
+
+        // Determine which form to use for quantity regex
+        let matchTarget = remainingMessage;
+        let namePattern = menuItem.nameLower;
+
+        if (hasExactMatch) {
+          matchTarget = remainingMessage;
+          namePattern = menuItem.nameLower;
+        } else if (hasNoSpaceMatch) {
+          matchTarget = remainingNoSpaces;
+          namePattern = menuItem.nameNoSpaces;
+        } else if (hasNormalizedMatch) {
+          matchTarget = remainingNormalized;
+          namePattern = menuItem.nameNormalized;
+        } else if (hasWordMatch) {
+          matchTarget = remainingMessage;
+          // Build pattern that matches words in any order with stuff in between
+          namePattern = menuItem.nameLower;
+        }
+
+        // Try to find quantity before/near the item name
+        let qty = 1;
+
+        // Strategy 1: Look for "N (adet|tane)? itemName" pattern
         const itemPattern = new RegExp(
-          `(\\d+)?\\s*(adet|tane)?\\s*(daha|de|da|fazla|dahi)?\\s*${this.escapeRegex(menuItem.nameLower)}`,
+          `(\\d+)?\\s*(adet|tane)?\\s*(daha|de|da|fazla|dahi)?\\s*${this.escapeRegex(namePattern)}`,
           'i'
         );
-        const match = remainingMessage.match(itemPattern);
+        const match = matchTarget.match(itemPattern);
+        if (match && match[1]) {
+          qty = parseInt(match[1]);
+        }
 
-        if (match) {
-          const qty = match[1] ? parseInt(match[1]) : 1;
-          
-          items.push({
-            menuItemId: menuItem.id,
-            menuItemName: menuItem.name,
-            qty: qty,
-            unitPrice: menuItem.price
-          });
+        // Strategy 2: Look for "bir/iki/üç itemName" pattern (Turkish number words)
+        if (qty === 1) {
+          const turkishNumbers: Record<string, number> = {
+            'bir': 1, 'iki': 2, 'üç': 3, 'uc': 3, 'dört': 4, 'dort': 4,
+            'beş': 5, 'bes': 5, 'altı': 6, 'alti': 6, 'yedi': 7, 'sekiz': 8,
+            'dokuz': 9, 'on': 10
+          };
+          const wordQtyPattern = new RegExp(
+            `(${Object.keys(turkishNumbers).join('|')})\\s*(adet|tane)?\\s*(daha|de|da|fazla|dahi)?\\s*${this.escapeRegex(namePattern)}`,
+            'i'
+          );
+          const wordMatch = matchTarget.match(wordQtyPattern);
+          if (wordMatch && wordMatch[1]) {
+            qty = turkishNumbers[wordMatch[1].toLowerCase()] || 1;
+          }
+        }
 
-          // Remove matched part from remaining message to avoid double-matching
+        items.push({
+          menuItemId: menuItem.id,
+          menuItemName: menuItem.name,
+          qty: qty,
+          unitPrice: menuItem.price
+        });
+
+        matchedItemIds.add(menuItem.id);
+
+        // Remove matched parts
+        if (hasExactMatch && match) {
           remainingMessage = remainingMessage.replace(itemPattern, ' ');
         }
+        remainingNormalized = remainingNormalized.replace(new RegExp(this.escapeRegex(menuItem.nameNormalized), 'i'), ' ');
+        remainingNoSpaces = remainingNoSpaces.replace(new RegExp(this.escapeRegex(menuItem.nameNoSpaces), 'i'), ' ');
       }
     } catch (error) {
       logger.warn({ tenantId, error }, 'Error extracting order items');
     }
 
     return items;
+  }
+
+  /**
+   * Normalize text for fuzzy matching: remove diacritics, Turkish chars
+   */
+  private normalizeForMatch(text: string): string {
+    return text
+      .replace(/ş/g, 's').replace(/Ş/g, 's')
+      .replace(/ç/g, 'c').replace(/Ç/g, 'c')
+      .replace(/ğ/g, 'g').replace(/Ğ/g, 'g')
+      .replace(/ü/g, 'u').replace(/Ü/g, 'u')
+      .replace(/ö/g, 'o').replace(/Ö/g, 'o')
+      .replace(/ı/g, 'i').replace(/İ/g, 'i')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  /**
+   * Check if all words of itemName appear in the message
+   */
+  private allWordsMatch(itemName: string, message: string): boolean {
+    const itemWords = itemName.split(/\s+/).filter(w => w.length > 1);
+    if (itemWords.length === 0) return false;
+    const messageNorm = this.normalizeForMatch(message);
+    return itemWords.every(word => {
+      const normWord = this.normalizeForMatch(word);
+      return messageNorm.includes(normWord);
+    });
   }
 
   private escapeRegex(string: string): string {

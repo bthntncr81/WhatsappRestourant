@@ -53,6 +53,7 @@ export function getConfig(): AppConfig {
     },
     openai: {
       apiKey: env.OPENAI_API_KEY,
+      orgId: env.OPENAI_ORG_ID,
       model: env.OPENAI_MODEL,
     },
   };

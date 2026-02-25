@@ -96,6 +96,7 @@ export class LlmOrderExtractorService {
     if (this.config.openai.apiKey) {
       this.client = new OpenAI({
         apiKey: this.config.openai.apiKey,
+        organization: this.config.openai.orgId,
       });
     } else {
       logger.warn('OpenAI API key not configured - LLM extraction disabled');
