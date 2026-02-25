@@ -16,6 +16,19 @@ import {
 
 const logger = createLogger();
 
+/**
+ * Normalize Turkish text for keyword matching.
+ * Handles İ/I/ı/i inconsistencies in JavaScript's toLowerCase().
+ * 'İ'.toLowerCase() produces 'i̇' (i + combining dot above) instead of 'i'.
+ */
+function normalizeTr(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\u0307/g, '') // Remove combining dot above (İ→i̇→i)
+    .replace(/ı/g, 'i')     // Dotless ı → i
+    .trim();
+}
+
 // Keywords for user intent detection
 const CONFIRM_KEYWORDS = ['evet', 'onayla', 'tamam', 'olsun', 'tamamla', 'onayliyorum'];
 const CANCEL_KEYWORDS = ['iptal', 'vazgec', 'istemiyorum', 'sil', 'temizle'];
@@ -64,6 +77,18 @@ export class ConversationFlowService {
     );
 
     try {
+      // Global reset command - works in any phase
+      const RESET_KEYWORDS = ['sifirla', 'sıfırla', 'reset', 'bastan', 'baştan'];
+      const normalizedText = normalizeTr(ctx.message.text || '');
+      if (currentPhase !== 'IDLE' && RESET_KEYWORDS.some(k => normalizedText.includes(k))) {
+        logger.info({ tenantId, conversationId, phase: currentPhase }, 'User requested conversation reset');
+        await this.cancelActiveOrder(ctx);
+        // Always force phase to IDLE (cancelActiveOrder may skip if no active order)
+        await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
+        await this.sendText(ctx, '🔄 Konuşma sıfırlandı. Yeni sipariş vermek için menüden seçim yapabilirsiniz.\n\n📋 *Menü* görmek için "menü" yazın.');
+        return;
+      }
+
       let nextPhase: ConversationPhase;
 
       switch (currentPhase) {
@@ -147,7 +172,7 @@ export class ConversationFlowService {
    */
   private async handleIdle(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message } = ctx;
-    const text = message.text?.toLowerCase().trim() || '';
+    const text = normalizeTr(message.text || '');
 
     // Adim 10: Faz-mesaj turu uyumsuzlugu - IDLE'da TEXT olmayan mesajlar
     if (message.kind !== 'TEXT' || !text) {
@@ -214,7 +239,7 @@ export class ConversationFlowService {
    */
   private async handleOrderCollecting(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message, conversation } = ctx;
-    const text = message.text?.toLowerCase().trim() || '';
+    const text = normalizeTr(message.text || '');
 
     // Adim 10: Faz-mesaj turu uyumsuzlugu
     if (message.kind === 'LOCATION') {
@@ -281,7 +306,7 @@ export class ConversationFlowService {
    */
   private async handleOrderReview(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message } = ctx;
-    const text = message.text?.toLowerCase().trim() || '';
+    const text = normalizeTr(message.text || '');
 
     if (message.kind !== 'TEXT' || !text) {
       return 'ORDER_REVIEW';
@@ -340,7 +365,7 @@ export class ConversationFlowService {
     }
 
     // Cancel
-    const text = message.text?.toLowerCase().trim() || '';
+    const text = normalizeTr(message.text || '');
     if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
@@ -363,7 +388,7 @@ export class ConversationFlowService {
    */
   private async handlePaymentMethodSelection(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message, payload, conversation } = ctx;
-    const text = message.text?.toLowerCase().trim() || '';
+    const text = normalizeTr(message.text || '');
 
     // Interactive button reply
     const buttonId = payload.interactive?.buttonReply?.id;
@@ -394,7 +419,7 @@ export class ConversationFlowService {
    */
   private async handlePaymentPending(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message, conversation } = ctx;
-    const text = message.text?.toLowerCase().trim() || '';
+    const text = normalizeTr(message.text || '');
 
     // Switch to cash
     if (this.matchesKeyword(text, CASH_KEYWORDS)) {
@@ -454,7 +479,7 @@ export class ConversationFlowService {
    * In a real scenario an agent would resolve this; for chatbot testing we auto-recover.
    */
   private async handleAgentHandoff(ctx: FlowContext): Promise<ConversationPhase> {
-    const text = ctx.message.text?.toLowerCase().trim() || '';
+    const text = normalizeTr(ctx.message.text || '');
 
     // Any text message resets to IDLE and gets processed as a new interaction
     if (ctx.message.kind === 'TEXT' && text) {

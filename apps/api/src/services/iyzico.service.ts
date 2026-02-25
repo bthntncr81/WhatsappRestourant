@@ -65,6 +65,21 @@ function generateAuthHeader(
 }
 
 /**
+ * Format price for iyzico (e.g. "155.00" -> "155.0", "130" -> "130.0")
+ * iyzico expects at least one decimal place but no trailing zeros
+ */
+export function formatPrice(price: string | number): string {
+  if (price === null || price === undefined) return '0.0';
+  const num = typeof price === 'string' ? parseFloat(price) : price;
+  if (!isFinite(num)) return '0.0';
+  const result = num.toString();
+  if (result.indexOf('.') === -1) {
+    return result + '.0';
+  }
+  return result;
+}
+
+/**
  * Sanitize Turkish characters for iyzico (they don't accept Turkish chars)
  */
 export function sanitizeForIyzico(text: string | null | undefined): string {
@@ -148,7 +163,7 @@ export class IyzicoService {
     };
 
     try {
-      logger.debug({ method, path }, 'Making iyzico request');
+      logger.info({ method, path, body: requestBody.substring(0, 500) }, 'Making iyzico request');
 
       const response = await fetch(url, {
         method,
@@ -511,8 +526,8 @@ export class IyzicoService {
     const body = {
       locale: 'tr',
       conversationId: params.conversationId,
-      price: params.price,
-      paidPrice: params.paidPrice,
+      price: formatPrice(params.price),
+      paidPrice: formatPrice(params.paidPrice),
       currency: 'TRY',
       basketId: params.basketId,
       paymentGroup: 'PRODUCT',
@@ -550,7 +565,7 @@ export class IyzicoService {
         name: sanitizeForIyzico(item.name),
         category1: sanitizeForIyzico(item.category1),
         itemType: item.itemType,
-        price: item.price,
+        price: formatPrice(item.price),
       })),
     };
 
@@ -559,7 +574,7 @@ export class IyzicoService {
       checkoutFormContent: string;
       paymentPageUrl: string;
       tokenExpireTime: number;
-    }>('POST', '/payment/iyzi-pos/checkoutform/initialize/auth/ecom', body);
+    }>('POST', '/payment/iyzipos/checkoutform/initialize/auth/ecom', body);
 
     if (result.success && result.data) {
       return {
@@ -593,7 +608,7 @@ export class IyzicoService {
       price: number;
       paidPrice: number;
       errorMessage?: string;
-    }>('POST', '/payment/iyzi-pos/checkoutform/auth/ecom/detail', body);
+    }>('POST', '/payment/iyzipos/checkoutform/auth/ecom/detail', body);
 
     if (result.success && result.data) {
       return {

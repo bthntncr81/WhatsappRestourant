@@ -43,6 +43,29 @@ export class OrderPaymentService {
       price: (Number(item.unitPrice) * item.qty).toFixed(2),
     }));
 
+    // Ensure basket items sum matches total price (iyzico requirement)
+    const basketSum = basketItems.reduce((sum, item) => sum + Number(item.price), 0);
+    logger.info({
+      orderId,
+      totalPrice,
+      basketSum,
+      basketItemCount: basketItems.length,
+      callbackUrl,
+      basketItems: basketItems.map(i => ({ name: i.name, price: i.price })),
+    }, 'Preparing iyzico checkout');
+
+    // If basket sum doesn't match total (e.g. delivery fee), adjust
+    const priceDiff = totalPrice - basketSum;
+    if (Math.abs(priceDiff) > 0.01) {
+      basketItems.push({
+        id: `delivery-${orderId.slice(0, 10)}`,
+        name: 'Teslimat Ucreti',
+        category1: 'Hizmet',
+        itemType: 'PHYSICAL' as const,
+        price: priceDiff.toFixed(2),
+      });
+    }
+
     // Initialize checkout form
     const result = await iyzicoService.initializeCheckoutForm({
       price: totalPrice.toFixed(2),

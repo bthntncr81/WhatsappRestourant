@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -8,6 +8,7 @@ import {
   CreateStoreDto,
   CreateDeliveryRuleDto,
 } from '../../services/store.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-stores',
@@ -17,7 +18,7 @@ import {
     <div class="stores-page">
       <header class="page-header">
         <h1>🏪 Şube Yönetimi</h1>
-        <button class="add-btn" (click)="showAddStore = true">+ Yeni Şube</button>
+        <button class="add-btn" (click)="openAddStoreModal()">+ Yeni Şube</button>
       </header>
 
       <!-- Stores List -->
@@ -82,7 +83,7 @@ import {
           <div class="empty-state">
             <span class="empty-icon">🏪</span>
             <p>Henüz şube eklenmemiş</p>
-            <button class="add-btn" (click)="showAddStore = true">İlk Şubeyi Ekle</button>
+            <button class="add-btn" (click)="openAddStoreModal()">İlk Şubeyi Ekle</button>
           </div>
         }
       </div>
@@ -101,15 +102,12 @@ import {
                 <label>Adres</label>
                 <textarea [(ngModel)]="storeForm.address" name="address" rows="2"></textarea>
               </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Enlem (Lat) *</label>
-                  <input type="number" step="any" [(ngModel)]="storeForm.lat" name="lat" required />
-                </div>
-                <div class="form-group">
-                  <label>Boylam (Lng) *</label>
-                  <input type="number" step="any" [(ngModel)]="storeForm.lng" name="lng" required />
-                </div>
+              <div class="form-group">
+                <label>Konum * <small style="color: var(--text-secondary, #888); font-weight: 400;">(Haritaya tıklayarak seçin)</small></label>
+                <div id="storeMap" class="store-map"></div>
+                @if (storeForm.lat !== 0 || storeForm.lng !== 0) {
+                  <p class="coords-display">📍 {{ storeForm.lat.toFixed(6) }}, {{ storeForm.lng.toFixed(6) }}</p>
+                }
               </div>
               <div class="form-group">
                 <label>Telefon</label>
@@ -454,7 +452,9 @@ import {
       border-radius: 12px;
       padding: 24px;
       width: 100%;
-      max-width: 480px;
+      max-width: 560px;
+      max-height: 90vh;
+      overflow-y: auto;
       border: 1px solid var(--border-color, #333);
     }
 
@@ -535,6 +535,21 @@ import {
       cursor: pointer;
     }
 
+    /* Map */
+    .store-map {
+      width: 100%;
+      height: 300px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color, #333);
+      background: var(--bg-tertiary, #252542);
+    }
+
+    .coords-display {
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: var(--accent-primary, #6366f1);
+    }
+
     /* Geo Test Section */
     .geo-test-section {
       margin-top: 32px;
@@ -585,11 +600,16 @@ import {
     }
   `]
 })
-export class StoresComponent implements OnInit {
+export class StoresComponent implements OnInit, OnDestroy {
   private storeService = inject(StoreService);
+  private ngZone = inject(NgZone);
 
   stores = signal<StoreDto[]>([]);
   loading = signal(false);
+
+  // Google Maps
+  private map: any = null;
+  private marker: any = null;
 
   // Store form
   showAddStore = false;
@@ -611,6 +631,95 @@ export class StoresComponent implements OnInit {
     this.loadStores();
   }
 
+  ngOnDestroy(): void {
+    this.destroyMap();
+  }
+
+  // ==================== GOOGLE MAPS ====================
+
+  private loadGoogleMaps(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if ((window as any).google?.maps) {
+        resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${environment.googleMapsApiKey}`;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error('Google Maps yüklenemedi'));
+      document.head.appendChild(script);
+    });
+  }
+
+  private async initMap(): Promise<void> {
+    try {
+      await this.loadGoogleMaps();
+    } catch {
+      console.error('Google Maps API yüklenemedi');
+      return;
+    }
+
+    const mapEl = document.getElementById('storeMap');
+    if (!mapEl) return;
+
+    const google = (window as any).google;
+    const lat = this.storeForm.lat || 41.0082;
+    const lng = this.storeForm.lng || 28.9784;
+    const center = { lat, lng };
+
+    this.map = new google.maps.Map(mapEl, {
+      center,
+      zoom: 13,
+      mapTypeId: 'roadmap',
+      streetViewControl: false,
+      mapTypeControl: false,
+    });
+
+    // Place marker if editing or has coordinates
+    if (this.storeForm.lat !== 0 || this.storeForm.lng !== 0) {
+      this.placeMarker(center);
+    }
+
+    // Click to place marker
+    this.map.addListener('click', (e: any) => {
+      const pos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+      this.ngZone.run(() => {
+        this.storeForm.lat = pos.lat;
+        this.storeForm.lng = pos.lng;
+      });
+      this.placeMarker(pos);
+    });
+  }
+
+  private placeMarker(position: { lat: number; lng: number }): void {
+    const google = (window as any).google;
+    if (this.marker) {
+      this.marker.setPosition(position);
+      return;
+    }
+    this.marker = new google.maps.Marker({
+      position,
+      map: this.map,
+      draggable: true,
+    });
+    this.marker.addListener('dragend', (e: any) => {
+      this.ngZone.run(() => {
+        this.storeForm.lat = e.latLng.lat();
+        this.storeForm.lng = e.latLng.lng();
+      });
+    });
+  }
+
+  private destroyMap(): void {
+    if (this.marker) {
+      this.marker.setMap(null);
+      this.marker = null;
+    }
+    this.map = null;
+  }
+
   loadStores(): void {
     this.loading.set(true);
     this.storeService.getStores(true).subscribe({
@@ -626,6 +735,11 @@ export class StoresComponent implements OnInit {
 
   // ==================== STORE CRUD ====================
 
+  openAddStoreModal(): void {
+    this.showAddStore = true;
+    setTimeout(() => this.initMap(), 50);
+  }
+
   editStore(store: StoreDto): void {
     this.editingStore.set(store);
     this.storeForm = {
@@ -636,9 +750,11 @@ export class StoresComponent implements OnInit {
       phone: store.phone || undefined,
       isActive: store.isActive,
     };
+    setTimeout(() => this.initMap(), 50);
   }
 
   closeStoreModal(): void {
+    this.destroyMap();
     this.showAddStore = false;
     this.editingStore.set(null);
     this.storeForm = { name: '', lat: 0, lng: 0, isActive: true };
