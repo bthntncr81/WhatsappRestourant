@@ -38,6 +38,10 @@ model Tenant {
   subscription        Subscription?
   storedCards         StoredCard[]
   billingTransactions BillingTransaction[]
+  orderPayments       OrderPayment[]
+
+  // WhatsApp config
+  whatsappConfig      WhatsAppConfig?
 
   @@map("tenants")
 }
@@ -216,12 +220,25 @@ enum ConversationStatus {
   CLOSED
 }
 
+enum ConversationPhase {
+  IDLE
+  ORDER_COLLECTING
+  ORDER_REVIEW
+  LOCATION_REQUEST
+  PAYMENT_METHOD_SELECTION
+  PAYMENT_PENDING
+  ORDER_CONFIRMED
+  AGENT_HANDOFF
+}
+
 model Conversation {
   id            String             @id @default(cuid())
   tenantId      String
   customerPhone String
   customerName  String?
   status        ConversationStatus @default(OPEN)
+  phase         ConversationPhase  @default(IDLE)
+  activeOrderId String?            // Current in-progress order
   lastMessageAt DateTime           @default(now())
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
@@ -233,18 +250,20 @@ model Conversation {
   nearestStoreId   String?
   geoCheckJson     Json?   // Full GeoCheckResult for reference
 
-  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  messages      Message[]
-  orders        Order[]
-  orderIntents  OrderIntent[]
-  assignments   ConversationAssignment[]
-  lock          ConversationLock?
-  internalNotes InternalNote[]
-  participants  ConversationParticipant[]
+  tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages       Message[]
+  orders         Order[]
+  orderIntents   OrderIntent[]
+  assignments    ConversationAssignment[]
+  lock           ConversationLock?
+  internalNotes  InternalNote[]
+  participants   ConversationParticipant[]
+  orderPayments  OrderPayment[]
 
   @@unique([tenantId, customerPhone])
   @@index([tenantId, status])
   @@index([tenantId, lastMessageAt])
+  @@index([tenantId, phase])
   @@map("conversations")
 }
 
@@ -312,11 +331,12 @@ model Order {
   updatedAt      DateTime    @updatedAt
   confirmedAt    DateTime?
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  items        OrderItem[]
-  printJobs    PrintJob[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation  Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  store         Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  items         OrderItem[]
+  printJobs     PrintJob[]
+  orderPayments OrderPayment[]
 
   @@index([tenantId, conversationId])
   @@index([tenantId, status])
@@ -611,6 +631,7 @@ enum TransactionType {
   SUBSCRIPTION_PAYMENT
   SUBSCRIPTION_UPGRADE
   SUBSCRIPTION_RENEWAL
+  ORDER_PAYMENT
   REFUND
 }
 
@@ -656,4 +677,81 @@ model BillingTransaction {
   @@index([tenantId, status])
   @@index([createdAt])
   @@map("billing_transactions")
+}
+
+// ==================== ORDER PAYMENTS ====================
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+}
+
+enum OrderPaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
+
+model OrderPayment {
+  id                    String             @id @default(cuid())
+  tenantId              String
+  orderId               String
+  conversationId        String
+
+  method                PaymentMethod
+  status                OrderPaymentStatus @default(PENDING)
+  amount                Decimal            @db.Decimal(10, 2)
+  currency              String             @default("TRY")
+
+  // iyzico checkout form fields
+  iyzicoToken           String?
+  iyzicoPaymentId       String?
+  iyzicoConversationId  String?
+  checkoutFormUrl       String?
+
+  errorCode             String?
+  errorMessage          String?
+
+  expiresAt             DateTime?
+  paidAt                DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  tenant                Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order                 Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  conversation          Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, orderId])
+  @@index([iyzicoToken])
+  @@index([tenantId, status])
+  @@map("order_payments")
+}
+
+// ==================== WHATSAPP CONFIG (Per-Tenant) ====================
+
+enum WhatsAppConnectionStatus {
+  DISCONNECTED
+  PENDING
+  CONNECTED
+  ERROR
+}
+
+model WhatsAppConfig {
+  id                    String                   @id @default(cuid())
+  tenantId              String                   @unique
+  phoneNumberId         String
+  wabaId                String
+  accessTokenEncrypted  String
+  appSecretEncrypted    String
+  webhookVerifyToken    String
+  connectionStatus      WhatsAppConnectionStatus @default(DISCONNECTED)
+  statusMessage         String?
+  lastVerifiedAt        DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  tenant                Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_configs")
 }

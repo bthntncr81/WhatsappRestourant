@@ -2,12 +2,24 @@
 
 export type ConversationStatus = 'OPEN' | 'PENDING_AGENT' | 'CLOSED';
 
+export type ConversationPhase =
+  | 'IDLE'
+  | 'ORDER_COLLECTING'
+  | 'ORDER_REVIEW'
+  | 'LOCATION_REQUEST'
+  | 'PAYMENT_METHOD_SELECTION'
+  | 'PAYMENT_PENDING'
+  | 'ORDER_CONFIRMED'
+  | 'AGENT_HANDOFF';
+
 export interface ConversationDto {
   id: string;
   tenantId: string;
   customerPhone: string;
   customerName: string | null;
   status: ConversationStatus;
+  phase: ConversationPhase;
+  activeOrderId: string | null;
   lastMessageAt: string;
   createdAt: string;
   lastMessage?: MessageDto;

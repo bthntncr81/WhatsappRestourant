@@ -8,7 +8,7 @@ const logger = createLogger();
 
 // Configuration
 const TOP_N_CANDIDATES = 10;
-const MIN_SIMILARITY_SCORE = 0.3;
+const MIN_SIMILARITY_SCORE = 0.15;
 
 /**
  * Interface for future embedding-based search
@@ -51,6 +51,19 @@ export class MenuCandidateService {
     const normalizedText = this.normalizeText(userText);
     const userWords = normalizedText.split(/\s+/).filter((w) => w.length > 1);
 
+    // Check if user mentions a category name (e.g. "içecek", "tatlı", "burger")
+    const matchedCategoryNames = new Set<string>();
+    for (const category of menu.categories) {
+      const normalizedCategory = this.normalizeText(category.name);
+      // Check singular/plural/stem forms of category
+      const categoryStems = this.getCategoryStems(normalizedCategory);
+      for (const stem of categoryStems) {
+        if (stem.length >= 3 && userWords.some((uw) => uw === stem || uw.includes(stem) || stem.includes(uw))) {
+          matchedCategoryNames.add(category.name);
+        }
+      }
+    }
+
     // Score each menu item
     const candidates: MenuCandidateDto[] = [];
 
@@ -64,6 +77,11 @@ export class MenuCandidateService {
           normalizedText,
           userWords
         );
+
+        // Boost score if item belongs to a matched category
+        if (matchedCategoryNames.has(category.name)) {
+          score.totalScore = Math.max(score.totalScore, 0.3);
+        }
 
         if (score.totalScore >= MIN_SIMILARITY_SCORE) {
           candidates.push({
@@ -111,56 +129,79 @@ export class MenuCandidateService {
     let totalScore = 0;
     const matchedSynonyms: string[] = [];
 
-    // 1. Direct name match (highest priority)
     const normalizedName = this.normalizeText(item.name);
+    const nameWords = normalizedName.split(/\s+/).filter((w) => w.length > 1);
+
+    // 1. Exact containment check (highest priority)
+    // If the full normalized name appears in user text, strong match
+    if (normalizedText.includes(normalizedName)) {
+      totalScore += 0.8;
+    } else {
+      // Check if any significant name word appears exactly in user text
+      const exactWordMatches = nameWords.filter((nw) =>
+        nw.length >= 3 && userWords.some((uw) => uw === nw)
+      );
+      if (exactWordMatches.length > 0) {
+        // Strong bonus for exact word containment (e.g. "doner" in "bir doner istiyorum")
+        totalScore += 0.5 * (exactWordMatches.length / nameWords.length);
+      }
+
+      // Fuzzy word matching for close matches (e.g. typos)
+      const fuzzyWordMatches = nameWords.filter((nw) =>
+        nw.length >= 3 && userWords.some(
+          (uw) => uw !== nw && stringSimilarity.compareTwoStrings(uw, nw) > 0.7
+        )
+      );
+      if (fuzzyWordMatches.length > 0) {
+        totalScore += 0.3 * (fuzzyWordMatches.length / nameWords.length);
+      }
+    }
+
+    // 2. Full-text similarity (lower weight - helps when text is short)
     const nameSimilarity = stringSimilarity.compareTwoStrings(
       normalizedText,
       normalizedName
     );
-    totalScore += nameSimilarity * 0.4;
+    totalScore += nameSimilarity * 0.2;
 
-    // Check if name words appear in user text
-    const nameWords = normalizedName.split(/\s+/);
-    const nameWordMatches = nameWords.filter((nw) =>
-      userWords.some(
-        (uw) => stringSimilarity.compareTwoStrings(uw, nw) > 0.7
-      )
-    );
-    totalScore += (nameWordMatches.length / nameWords.length) * 0.3;
-
-    // 2. Synonym matching
+    // 3. Synonym matching
     const itemSynonyms = synonyms.filter(
       (s) => s.mapsTo.type === 'item' && s.mapsTo.id === item.id
     );
 
     for (const synonym of itemSynonyms) {
       const normalizedPhrase = this.normalizeText(synonym.phrase);
-      
+
       // Check if phrase appears in text
       if (normalizedText.includes(normalizedPhrase)) {
         totalScore += 0.5 * synonym.weight;
         matchedSynonyms.push(synonym.phrase);
       } else {
-        // Fuzzy match on phrase
-        const phraseSimilarity = stringSimilarity.compareTwoStrings(
-          normalizedText,
-          normalizedPhrase
-        );
-        if (phraseSimilarity > 0.6) {
-          totalScore += phraseSimilarity * 0.3 * synonym.weight;
+        // Check individual synonym words
+        const synWords = normalizedPhrase.split(/\s+/).filter((w) => w.length >= 3);
+        const synExactMatches = synWords.filter((sw) => userWords.some((uw) => uw === sw));
+        if (synExactMatches.length > 0) {
+          totalScore += 0.4 * synonym.weight * (synExactMatches.length / synWords.length);
           matchedSynonyms.push(synonym.phrase);
+        } else {
+          const phraseSimilarity = stringSimilarity.compareTwoStrings(
+            normalizedText,
+            normalizedPhrase
+          );
+          if (phraseSimilarity > 0.5) {
+            totalScore += phraseSimilarity * 0.3 * synonym.weight;
+            matchedSynonyms.push(synonym.phrase);
+          }
         }
       }
     }
 
-    // 3. Description match (lower priority)
+    // 4. Description match (lowest priority)
     if (item.description) {
       const normalizedDesc = this.normalizeText(item.description);
-      const descWords = normalizedDesc.split(/\s+/).slice(0, 10);
+      const descWords = normalizedDesc.split(/\s+/).filter((w) => w.length >= 3).slice(0, 10);
       const descMatches = descWords.filter((dw) =>
-        userWords.some(
-          (uw) => stringSimilarity.compareTwoStrings(uw, dw) > 0.7
-        )
+        userWords.some((uw) => uw === dw || stringSimilarity.compareTwoStrings(uw, dw) > 0.7)
       );
       if (descMatches.length > 0) {
         totalScore += (descMatches.length / descWords.length) * 0.1;
@@ -171,6 +212,23 @@ export class MenuCandidateService {
     totalScore = Math.min(1, totalScore);
 
     return { totalScore, matchedSynonyms };
+  }
+
+  /**
+   * Get stem variations for category matching (Turkish plural/suffix removal)
+   * e.g. "icecekler" → ["icecekler", "icecek"], "tatlilar" → ["tatlilar", "tatli"]
+   */
+  private getCategoryStems(normalizedCategory: string): string[] {
+    const stems = [normalizedCategory];
+    // Turkish plural suffix removal: -ler, -lar
+    if (normalizedCategory.endsWith('ler') || normalizedCategory.endsWith('lar')) {
+      stems.push(normalizedCategory.slice(0, -3));
+    }
+    // Also try removing -lar/-ler + last vowel harmony suffix
+    if (normalizedCategory.endsWith('leri') || normalizedCategory.endsWith('lari')) {
+      stems.push(normalizedCategory.slice(0, -4));
+    }
+    return stems;
   }
 
   /**

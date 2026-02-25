@@ -8,8 +8,10 @@ import {
   OrderListQueryDto,
   PrintJobPayload,
 } from '@whatres/shared';
-import { Prisma, PrintJobType, PrintJobStatus as PrismaJobStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { chatbotService } from './chatbot.service';
+import { whatsappService } from './whatsapp.service';
+import { TEMPLATES } from './message-templates';
 
 const logger = createLogger();
 
@@ -91,14 +93,17 @@ export class OrderService {
     return order ? this.mapToDto(order) : null;
   }
 
-  // ==================== CONFIRM ====================
+  // ==================== PENDING CONFIRMATION ====================
 
-  async confirmOrder(
+  /**
+   * Move order to PENDING_CONFIRMATION status (customer submitted, awaiting restaurant approval).
+   * Called by conversation flow after payment is completed.
+   */
+  async setPendingConfirmation(
     tenantId: string,
     orderId: string,
-    dto: ConfirmOrderDto
+    dto: ConfirmOrderDto,
   ): Promise<OrderDto> {
-    // Get order
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
       include: {
@@ -111,21 +116,19 @@ export class OrderService {
       throw new AppError(404, 'ORDER_NOT_FOUND', 'Order not found');
     }
 
-    if (order.status !== 'DRAFT' && order.status !== 'PENDING_CONFIRMATION') {
-      throw new AppError(400, 'INVALID_STATUS', `Cannot confirm order with status ${order.status}`);
+    if (order.status !== 'DRAFT') {
+      throw new AppError(400, 'INVALID_STATUS', `Cannot set pending for order with status ${order.status}`);
     }
 
-    // Get next order number for tenant
+    // Get next order number
     const orderNumber = await this.getNextOrderNumber(tenantId);
 
-    // Determine storeId if not already set
+    // Determine storeId
     let storeId = order.storeId;
     if (!storeId) {
-      // Try to get from conversation's nearestStoreId
       if (order.conversation.nearestStoreId) {
         storeId = order.conversation.nearestStoreId;
       } else {
-        // Fallback to first active store
         const defaultStore = await prisma.store.findFirst({
           where: { tenantId, isActive: true },
           orderBy: { createdAt: 'asc' },
@@ -134,22 +137,72 @@ export class OrderService {
       }
     }
 
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'PENDING_CONFIRMATION',
+        orderNumber,
+        storeId,
+        paymentMethod: dto.paymentMethod || order.paymentMethod,
+        deliveryAddress: dto.deliveryAddress || order.deliveryAddress,
+        notes: dto.notes || order.notes,
+        customerPhone: order.conversation.customerPhone,
+        customerName: order.conversation.customerName,
+      },
+      include: {
+        items: true,
+        store: { select: { id: true, name: true } },
+      },
+    });
+
+    logger.info(
+      { tenantId, orderId, orderNumber, storeId },
+      'Order set to PENDING_CONFIRMATION',
+    );
+
+    return this.mapToDto(updatedOrder);
+  }
+
+  // ==================== CONFIRM (Restaurant Approval) ====================
+
+  /**
+   * Confirm order (called by restaurant/admin from panel).
+   * Only works on PENDING_CONFIRMATION orders.
+   * Sends WhatsApp notification to customer and creates print jobs.
+   */
+  async confirmOrder(
+    tenantId: string,
+    orderId: string,
+    dto: ConfirmOrderDto
+  ): Promise<OrderDto> {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: {
+        items: true,
+        conversation: true,
+      },
+    });
+
+    if (!order) {
+      throw new AppError(404, 'ORDER_NOT_FOUND', 'Order not found');
+    }
+
+    if (order.status !== 'PENDING_CONFIRMATION') {
+      throw new AppError(400, 'INVALID_STATUS', `Cannot confirm order with status ${order.status}. Order must be in PENDING_CONFIRMATION.`);
+    }
+
     // Update order
     const confirmedOrder = await prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id: orderId },
         data: {
           status: 'CONFIRMED',
-          orderNumber,
-          storeId, // Assign to store
           confirmedAt: new Date(),
           deliveryAddress: dto.deliveryAddress || order.deliveryAddress,
           paymentMethod: dto.paymentMethod || order.paymentMethod,
           notes: dto.notes || order.notes,
-          customerPhone: order.conversation.customerPhone,
-          customerName: order.conversation.customerName,
         },
-        include: { 
+        include: {
           items: true,
           store: { select: { id: true, name: true } },
         },
@@ -161,9 +214,20 @@ export class OrderService {
       return updated;
     });
 
+    // Send WhatsApp notification to customer
+    try {
+      await whatsappService.sendText(
+        tenantId,
+        order.conversationId,
+        TEMPLATES.restaurantApproved(confirmedOrder.orderNumber || 0),
+      );
+    } catch (error) {
+      logger.error({ error, tenantId, orderId }, 'Failed to send confirmation notification to customer');
+    }
+
     logger.info(
-      { tenantId, orderId, orderNumber, storeId },
-      'Order confirmed and print jobs created'
+      { tenantId, orderId, orderNumber: confirmedOrder.orderNumber },
+      'Order confirmed by restaurant and customer notified',
     );
 
     return this.mapToDto(confirmedOrder);
@@ -307,12 +371,13 @@ export class OrderService {
   // ==================== HELPERS ====================
 
   private async getNextOrderNumber(tenantId: string): Promise<number> {
-    const lastOrder = await prisma.order.findFirst({
-      where: { tenantId, orderNumber: { not: null } },
-      orderBy: { orderNumber: 'desc' },
-    });
-
-    return (lastOrder?.orderNumber || 0) + 1;
+    // Atomik siparis numarasi - race condition onleme
+    const result = await prisma.$queryRaw<Array<{ next_number: bigint }>>`
+      SELECT COALESCE(MAX("orderNumber"), 0) + 1 AS next_number
+      FROM orders
+      WHERE "tenantId" = ${tenantId}
+    `;
+    return Number(result[0]?.next_number) || 1;
   }
 
   private mapToDto(order: any): OrderDto {

@@ -7,6 +7,8 @@ export * from './lib/dto/inbox.dto';
 export * from './lib/dto/order.dto';
 export * from './lib/dto/store.dto';
 export * from './lib/dto/billing.dto';
+export * from './lib/dto/payment.dto';
+export * from './lib/dto/whatsapp-config.dto';
 
 // Types
 export * from './lib/types/common.types';

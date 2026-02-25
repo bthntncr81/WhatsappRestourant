@@ -14,6 +14,8 @@ import { printJobRouter } from './routes/print-job.routes';
 import { storeRouter } from './routes/store.routes';
 import { chatbotRouter } from './routes/chatbot.routes';
 import billingRouter from './routes/billing.routes';
+import { paymentRouter } from './routes/payment.routes';
+import { whatsappConfigRouter } from './routes/whatsapp-config.routes';
 import prisma from './db/prisma';
 import redis from './db/redis';
 
@@ -22,8 +24,17 @@ const logger = createLogger();
 
 const app = express();
 
-// Middleware
-app.use(express.json({ limit: '10mb' }));
+// Middleware - capture raw body for webhook signature verification
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req: express.Request, _res, buf) => {
+      if (req.url?.includes('/whatsapp/webhook')) {
+        (req as any).rawBody = buf;
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger(logger));
 
@@ -51,6 +62,8 @@ app.use(`${config.server.apiPrefix}/print-jobs`, printJobRouter);
 app.use(`${config.server.apiPrefix}/stores`, storeRouter);
 app.use(`${config.server.apiPrefix}/chatbot`, chatbotRouter);
 app.use(`${config.server.apiPrefix}/billing`, billingRouter);
+app.use(`${config.server.apiPrefix}/payments`, paymentRouter);
+app.use(`${config.server.apiPrefix}/whatsapp-config`, whatsappConfigRouter);
 
 // 404 Handler
 app.use((req, res) => {

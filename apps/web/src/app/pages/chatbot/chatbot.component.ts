@@ -5,10 +5,16 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../services/auth.service';
 
+interface ChatButton {
+  id: string;
+  title: string;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  buttons?: ChatButton[];
 }
 
 @Component({
@@ -18,8 +24,13 @@ interface ChatMessage {
   template: `
     <div class="chatbot-container">
       <div class="chat-header">
-        <h2>🤖 AI Chatbot Test</h2>
-        <p class="subtitle">Menü siparişlerinizi test edin</p>
+        <div class="header-row">
+          <div>
+            <h2>🤖 AI Chatbot Test</h2>
+            <p class="subtitle">Menü siparişlerinizi test edin</p>
+          </div>
+          <button class="reset-btn" (click)="resetSession()" [disabled]="isLoading()" title="Sohbeti sıfırla">🔄 Sıfırla</button>
+        </div>
       </div>
 
       <div class="chat-messages" #messagesContainer>
@@ -36,6 +47,13 @@ interface ChatMessage {
             </div>
             <div class="message-content">
               <p>{{ msg.content }}</p>
+              @if (msg.buttons && msg.buttons.length > 0) {
+                <div class="inline-buttons">
+                  @for (btn of msg.buttons; track btn.id) {
+                    <button class="inline-btn" (click)="sendQuickMessage(btn.title)" [disabled]="isLoading()">{{ btn.title }}</button>
+                  }
+                </div>
+              }
               <span class="timestamp">{{ msg.timestamp | date:'HH:mm' }}</span>
             </div>
           </div>
@@ -57,7 +75,11 @@ interface ChatMessage {
           <button class="quick-btn" (click)="sendQuickMessage('Menüyü göster')">📋 Menü</button>
           <button class="quick-btn" (click)="sendQuickMessage('1 adet Adana Kebap istiyorum')">🍖 Kebap</button>
           <button class="quick-btn" (click)="sendQuickMessage('2 lahmacun ve 1 ayran')">🌮 Lahmacun</button>
-          <button class="quick-btn" (click)="sendQuickMessage('Siparişimi onayla')">✅ Onayla</button>
+          <button class="quick-btn" (click)="sendQuickMessage('evet')">✅ Onayla</button>
+          <button class="quick-btn location-btn" (click)="sendLocation()" [disabled]="isLoading()">📍 Konum</button>
+          <button class="quick-btn cash-btn" (click)="sendQuickMessage('nakit')">💵 Nakit</button>
+          <button class="quick-btn card-btn" (click)="sendQuickMessage('kart')">💳 Kart</button>
+          <button class="quick-btn pay-sim-btn" (click)="simulatePayment()" [disabled]="isLoading()">✅ Ödeme Simüle</button>
         </div>
         <form (ngSubmit)="sendMessage()" class="input-form">
           <input
@@ -81,11 +103,13 @@ interface ChatMessage {
       <div class="info-panel">
         <h4>📝 Test Senaryoları</h4>
         <ul>
-          <li>✅ "1 adet Adana Kebap istiyorum"</li>
-          <li>✅ "2 lahmacun yanında ayran olsun"</li>
-          <li>✅ "Menüde ne var?"</li>
-          <li>✅ "Siparişimi iptal et"</li>
-          <li>✅ "Fiyatları göster"</li>
+          <li>✅ "bir döner bir ayran bir kola istiyorum"</li>
+          <li>✅ "bir de ayran ekle" — mevcut siparişe ekle</li>
+          <li>✅ "kolayı çıkar" — üründen sil</li>
+          <li>✅ "evet" — siparişi onayla</li>
+          <li>✅ 📍 Konum Gönder — teslimat adresi için</li>
+          <li>✅ "nakit" veya "kart" — ödeme yöntemi</li>
+          <li>✅ Ödeme Simüle — iyzico callback simülasyonu</li>
         </ul>
       </div>
     </div>
@@ -109,6 +133,12 @@ interface ChatMessage {
       color: white;
     }
 
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
     .chat-header h2 {
       margin: 0;
       font-size: 1.8rem;
@@ -118,6 +148,28 @@ interface ChatMessage {
       margin: var(--spacing-xs) 0 0;
       opacity: 0.9;
       font-size: 0.95rem;
+    }
+
+    .reset-btn {
+      padding: 8px 16px;
+      border-radius: var(--radius-md);
+      border: 2px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.15);
+      color: white;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .reset-btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.3);
+      border-color: white;
+    }
+
+    .reset-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .chat-messages {
@@ -215,6 +267,38 @@ interface ChatMessage {
       white-space: pre-wrap;
     }
 
+    .inline-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .inline-btn {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: 2px solid #667eea;
+      background: transparent;
+      color: #667eea;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .inline-btn:hover:not(:disabled) {
+      background: #667eea;
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .inline-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .message-content .timestamp {
       display: block;
       font-size: 0.7rem;
@@ -268,10 +352,49 @@ interface ChatMessage {
       transition: all 0.2s;
     }
 
-    .quick-btn:hover {
+    .quick-btn:hover:not(:disabled) {
       background: var(--color-accent-primary);
       border-color: var(--color-accent-primary);
       color: white;
+    }
+
+    .quick-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .quick-btn.location-btn {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      color: white;
+      border-color: #11998e;
+    }
+
+    .quick-btn.location-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #0d7a71 0%, #2bc968 100%);
+      border-color: #0d7a71;
+    }
+
+    .quick-btn.cash-btn {
+      background: #2d8a4e;
+      color: white;
+      border-color: #2d8a4e;
+    }
+
+    .quick-btn.card-btn {
+      background: #5469d4;
+      color: white;
+      border-color: #5469d4;
+    }
+
+    .quick-btn.pay-sim-btn {
+      background: #e6a817;
+      color: white;
+      border-color: #e6a817;
+    }
+
+    .quick-btn.pay-sim-btn:hover:not(:disabled) {
+      background: #c99115;
+      border-color: #c99115;
     }
 
     .input-form {
@@ -357,9 +480,64 @@ export class ChatbotComponent {
   isLoading = signal(false);
   userInput = '';
 
+  // Taksim civarı test koordinatları (Merkez Şube'ye yakın)
+  private testLocations = [
+    { lat: 41.0370, lng: 28.9850, name: 'Taksim Meydanı' },
+    { lat: 41.0082, lng: 28.9784, name: 'Sultanahmet' },
+    { lat: 41.0422, lng: 29.0090, name: 'Beşiktaş' },
+    { lat: 40.9923, lng: 29.0244, name: 'Kadıköy' },
+  ];
+
   sendQuickMessage(text: string): void {
     this.userInput = text;
     this.sendMessage();
+  }
+
+  sendLocation(): void {
+    if (this.isLoading()) return;
+
+    // Rastgele test konumu seç
+    const loc = this.testLocations[Math.floor(Math.random() * this.testLocations.length)];
+
+    // Kullanıcı mesajı olarak göster
+    this.messages.update(msgs => [...msgs, {
+      role: 'user',
+      content: `📍 Konum: ${loc.name} (${loc.lat}, ${loc.lng})`,
+      timestamp: new Date()
+    }]);
+
+    this.isLoading.set(true);
+    this.scrollToBottom();
+
+    this.http.post<{success: boolean; data: {reply: string; buttons?: ChatButton[]}}>(
+      `${environment.apiBaseUrl}/chatbot/location`,
+      { latitude: loc.lat, longitude: loc.lng },
+      { headers: this.authService.getAuthHeaders() }
+    ).subscribe({
+      next: (response) => {
+        if (response?.success && response.data) {
+          this.messages.update(msgs => [...msgs, {
+            role: 'assistant',
+            content: response.data.reply,
+            timestamp: new Date(),
+            buttons: response.data.buttons,
+          }]);
+        }
+        this.isLoading.set(false);
+        this.scrollToBottom();
+      },
+      error: (error: unknown) => {
+        console.error('Location error:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Konum gönderilemedi';
+        this.messages.update(msgs => [...msgs, {
+          role: 'assistant',
+          content: `❌ Hata: ${errorMessage}`,
+          timestamp: new Date()
+        }]);
+        this.isLoading.set(false);
+        this.scrollToBottom();
+      }
+    });
   }
 
   sendMessage(): void {
@@ -378,7 +556,7 @@ export class ChatbotComponent {
     this.scrollToBottom();
 
     // Call the chatbot API
-    this.http.post<{success: boolean; data: {reply: string; order?: unknown}}>(`${environment.apiBaseUrl}/chatbot/message`, 
+    this.http.post<{success: boolean; data: {reply: string; buttons?: ChatButton[]; order?: unknown}}>(`${environment.apiBaseUrl}/chatbot/message`,
       { message: text },
       { headers: this.authService.getAuthHeaders() }
     ).subscribe({
@@ -387,7 +565,8 @@ export class ChatbotComponent {
           this.messages.update(msgs => [...msgs, {
             role: 'assistant',
             content: response.data.reply,
-            timestamp: new Date()
+            timestamp: new Date(),
+            buttons: response.data.buttons,
           }]);
         }
         this.isLoading.set(false);
@@ -403,6 +582,78 @@ export class ChatbotComponent {
         }]);
         this.isLoading.set(false);
         this.scrollToBottom();
+      }
+    });
+  }
+
+  simulatePayment(): void {
+    if (this.isLoading()) return;
+
+    this.messages.update(msgs => [...msgs, {
+      role: 'user',
+      content: '💳 Ödeme simülasyonu (sandbox callback)',
+      timestamp: new Date()
+    }]);
+
+    this.isLoading.set(true);
+    this.scrollToBottom();
+
+    this.http.post<{success: boolean; data: {reply: string; buttons?: ChatButton[]}}>(
+      `${environment.apiBaseUrl}/chatbot/simulate-payment`,
+      { success: true },
+      { headers: this.authService.getAuthHeaders() }
+    ).subscribe({
+      next: (response) => {
+        if (response?.success && response.data) {
+          this.messages.update(msgs => [...msgs, {
+            role: 'assistant',
+            content: response.data.reply,
+            timestamp: new Date(),
+            buttons: response.data.buttons,
+          }]);
+        }
+        this.isLoading.set(false);
+        this.scrollToBottom();
+      },
+      error: (error: unknown) => {
+        console.error('Payment simulation error:', error);
+        this.messages.update(msgs => [...msgs, {
+          role: 'assistant',
+          content: '❌ Ödeme simülasyonu başarısız.',
+          timestamp: new Date()
+        }]);
+        this.isLoading.set(false);
+        this.scrollToBottom();
+      }
+    });
+  }
+
+  resetSession(): void {
+    if (this.isLoading()) return;
+
+    this.isLoading.set(true);
+
+    this.http.delete<{success: boolean}>(
+      `${environment.apiBaseUrl}/chatbot/history`,
+      { headers: this.authService.getAuthHeaders() }
+    ).subscribe({
+      next: () => {
+        this.messages.set([{
+          role: 'system',
+          content: '🔄 Sohbet sıfırlandı! Yeni sipariş vermek için yazabilirsiniz.',
+          timestamp: new Date()
+        }]);
+        this.userInput = '';
+        this.isLoading.set(false);
+      },
+      error: () => {
+        this.messages.set([{
+          role: 'system',
+          content: '🔄 Sohbet sıfırlandı!',
+          timestamp: new Date()
+        }]);
+        this.userInput = '';
+        this.isLoading.set(false);
       }
     });
   }

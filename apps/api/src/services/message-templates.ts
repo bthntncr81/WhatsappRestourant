@@ -1,0 +1,148 @@
+/**
+ * Centralized Turkish message templates for WhatsApp bot responses
+ */
+
+interface OrderSummaryItem {
+  name: string;
+  qty: number;
+  price: number;
+  options?: string[];
+  notes?: string | null;
+}
+
+export const TEMPLATES = {
+  // ==================== GREETING ====================
+  greeting:
+    'Merhaba! Hosgeldiniz 🍽️\nSiparis vermek icin istediginiz urunleri yazabilirsiniz.\nMenumuzu gormek icin "menu" yazin.',
+
+  // ==================== ORDER ====================
+  orderSummary(items: OrderSummaryItem[], total: number, deliveryFee?: number): string {
+    let msg = 'Siparisiniz:\n\n';
+    items.forEach((i) => {
+      let line = `  ${i.qty}x ${i.name}`;
+      if (i.options && i.options.length > 0) {
+        line += ` (${i.options.join(', ')})`;
+      }
+      line += ` - ${(i.qty * i.price).toFixed(2)} TL`;
+      if (i.notes) {
+        line += `\n    Not: ${i.notes}`;
+      }
+      msg += line + '\n';
+    });
+    msg += `\nAra Toplam: ${total.toFixed(2)} TL`;
+    if (deliveryFee != null && deliveryFee > 0) {
+      msg += `\nTeslimat Ucreti: ${deliveryFee.toFixed(2)} TL`;
+      msg += `\nGenel Toplam: ${(total + deliveryFee).toFixed(2)} TL`;
+    }
+    msg += '\n\nOnaylamak icin "evet", degistirmek icin yeni urun yazin, iptal icin "iptal" yazin.';
+    return msg;
+  },
+
+  orderEmpty: 'Sepetiniz bos. Siparis vermek icin urun adini yazin.',
+
+  orderItemAdded(itemName: string, qty: number): string {
+    return `✅ ${qty}x ${itemName} sepete eklendi.`;
+  },
+
+  // ==================== LOCATION ====================
+  locationRequest:
+    '📍 Teslimat icin konumunuzu gonderin.\nAsagidaki butona tiklayarak konum paylasabilirsiniz.',
+
+  locationOutOfService(message: string): string {
+    return `❌ ${message}\n\nLutfen farkli bir konum gonderin veya *"iptal"* yazin.`;
+  },
+
+  locationConfirmed(storeName: string, deliveryFee: number, distance: number): string {
+    return (
+      `✅ *${storeName}* subemizden teslimat yapilacak.\n` +
+      `📏 Mesafe: ${distance.toFixed(1)} km\n` +
+      `🚚 Teslimat ucreti: ${deliveryFee.toFixed(2)} TL`
+    );
+  },
+
+  locationMinBasketNotMet(minBasket: number, currentTotal: number): string {
+    return (
+      `⚠️ Minimum sepet tutari ${minBasket.toFixed(2)} TL.\n` +
+      `Mevcut sepetiniz: ${currentTotal.toFixed(2)} TL\n\n` +
+      `Lutfen daha fazla urun ekleyin veya *"iptal"* yazin.`
+    );
+  },
+
+  reminderSendLocation:
+    '📍 Lutfen konum pininizi gonderin.\nKonum gondermek icin WhatsApp\'ta 📎 > Konum secenegini kullanin.',
+
+  // ==================== PAYMENT ====================
+  paymentMethodButtons: {
+    body: 'Odeme yontemini secin:',
+    buttons: [
+      { id: 'pay_cash', title: 'Nakit' },
+      { id: 'pay_card', title: 'Kredi Karti' },
+    ],
+  },
+
+  paymentLinkSent(url: string): string {
+    return (
+      `💳 Kredi karti ile odeme icin asagidaki linke tiklayiniz:\n\n` +
+      `${url}\n\n` +
+      `⏰ Link 30 dakika gecerlidir.\n` +
+      `Nakit odemeye gecmek icin *"nakit"* yazabilirsiniz.`
+    );
+  },
+
+  paymentSuccess(orderNumber: number): string {
+    return (
+      `✅ *Odemeniz basariyla alindi!*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `⏳ Restoran onayiniz bekleniyor...`
+    );
+  },
+
+  paymentFailed:
+    '❌ Odeme basarisiz oldu.\nTekrar denemek icin *"kart"*, nakit odemek icin *"nakit"* yazin.',
+
+  cashConfirmed(orderNumber: number): string {
+    return (
+      `✅ *Siparisinia alindi!*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `💵 Odeme: Kapida nakit\n` +
+      `⏳ Restoran onayiniz bekleniyor...`
+    );
+  },
+
+  reminderPayment(url: string): string {
+    return (
+      `⏳ Odeme bekleniyor.\n\n` +
+      `💳 Odeme linkiniz: ${url}\n\n` +
+      `Nakit odemek icin *"nakit"* yazabilirsiniz.`
+    );
+  },
+
+  pendingConfirmation(orderNumber: number): string {
+    return (
+      `📦 Siparis No: #${orderNumber}\n` +
+      `⏳ Siparisinia restoran tarafindan onay bekliyor.\n` +
+      `Onaylaninca size bildirim gonderecegiz.`
+    );
+  },
+
+  restaurantApproved(orderNumber: number): string {
+    return (
+      `✅ *Siparisinia onaylandi!*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `🎉 Siparisinia hazirlaniyor!\n` +
+      `⏱️ Tahmini hazirlık suresi: 25-30 dakika`
+    );
+  },
+
+  // ==================== GENERAL ====================
+  orderCancelled: '🚫 Siparisinia iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
+
+  orderConfirmedNewOrder:
+    'Siparisinia isleniyor! ⏳\nYeni siparis vermek icin urun yazabilirsiniz.',
+
+  clarificationFallback:
+    'Anlayamadim. Siparis vermek icin urun adini yazin veya "menu" yazarak menuyu gorun.',
+
+  agentHandoff:
+    '👤 Sizi bir temsilciye yonlendiriyorum. Lutfen bekleyin...',
+};

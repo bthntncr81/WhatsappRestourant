@@ -56,6 +56,13 @@ export function getConfig(): AppConfig {
       orgId: env.OPENAI_ORG_ID,
       model: env.OPENAI_MODEL,
     },
+    encryption: {
+      key: env.ENCRYPTION_KEY,
+    },
+    whatsapp: {
+      apiBaseUrl: env.WHATSAPP_API_BASE_URL,
+      appBaseUrl: env.APP_BASE_URL,
+    },
   };
 
   return cachedConfig;

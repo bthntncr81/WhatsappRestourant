@@ -7,6 +7,7 @@ import {
   MessageDto,
   InboxSummaryDto,
   ConversationStatus,
+  ConversationPhase,
   MessageDirection,
   MessageKind,
   GeoCheckResult,
@@ -257,6 +258,29 @@ export class InboxService {
     return this.createMessage(tenantId, conversationId, 'OUT', 'TEXT', text, undefined, senderUserId);
   }
 
+  // ==================== PHASE MANAGEMENT ====================
+
+  async updateConversationPhase(
+    tenantId: string,
+    conversationId: string,
+    phase: ConversationPhase,
+    activeOrderId?: string | null,
+  ): Promise<void> {
+    await prisma.conversation.update({
+      where: { id: conversationId, tenantId },
+      data: {
+        phase,
+        ...(activeOrderId !== undefined ? { activeOrderId } : {}),
+      },
+    });
+  }
+
+  async getConversationRaw(tenantId: string, conversationId: string) {
+    return prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+    });
+  }
+
   // ==================== GEO CHECK ====================
 
   async updateConversationGeoCheck(
@@ -312,11 +336,17 @@ export class InboxService {
       customerPhone: conversation.customerPhone,
       customerName: conversation.customerName,
       status: conversation.status as ConversationStatus,
+      phase: (conversation.phase as ConversationPhase) || 'IDLE',
+      activeOrderId: conversation.activeOrderId || null,
       lastMessageAt: conversation.lastMessageAt.toISOString(),
       createdAt: conversation.createdAt.toISOString(),
       lastMessage: conversation.messages?.[0]
         ? this.mapMessageToDto(conversation.messages[0])
         : undefined,
+      customerLat: conversation.customerLat,
+      customerLng: conversation.customerLng,
+      isWithinService: conversation.isWithinService,
+      nearestStoreId: conversation.nearestStoreId,
     };
   }
 

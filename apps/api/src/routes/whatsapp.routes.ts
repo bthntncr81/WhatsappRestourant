@@ -6,7 +6,9 @@ import {
   WhatsAppSendResponseDto,
 } from '@whatres/shared';
 import { whatsappService } from '../services/whatsapp.service';
-import { nluOrchestratorService } from '../services/nlu';
+import { whatsappProviderService } from '../services/whatsapp-provider.service';
+import { conversationFlowService } from '../services/conversation-flow.service';
+import { whatsappConfigService } from '../services/whatsapp-config.service';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error-handler';
 import { createLogger } from '../logger';
@@ -78,7 +80,7 @@ const sendMessageSchema = z.object({
 /**
  * POST /whatsapp/webhook
  * Receives incoming WhatsApp messages from provider
- * Tenant ID from x-tenant-id header (configured in provider webhook settings)
+ * Supports both direct payload format and Meta Cloud API format
  */
 router.post(
   '/webhook',
@@ -90,42 +92,45 @@ router.post(
         throw new AppError(400, 'MISSING_TENANT', 'x-tenant-id header is required');
       }
 
-      // Log incoming webhook
       logger.info(
         { tenantId, body: JSON.stringify(req.body).substring(0, 200) },
         'WhatsApp webhook received'
       );
 
-      // Validate payload
-      const validation = webhookPayloadSchema.safeParse(req.body);
-      if (!validation.success) {
-        logger.warn(
-          { errors: validation.error.flatten().fieldErrors },
-          'Invalid webhook payload'
-        );
-        throw new AppError(400, 'INVALID_PAYLOAD', 'Invalid webhook payload', {
-          errors: validation.error.flatten().fieldErrors,
-        });
+      // Try to parse as Meta Cloud API format first
+      let payload = whatsappProviderService.parseWebhookPayload(req.body);
+
+      if (!payload) {
+        // Fallback to direct payload format
+        const validation = webhookPayloadSchema.safeParse(req.body);
+        if (!validation.success) {
+          logger.warn(
+            { errors: validation.error.flatten().fieldErrors },
+            'Invalid webhook payload'
+          );
+          throw new AppError(400, 'INVALID_PAYLOAD', 'Invalid webhook payload', {
+            errors: validation.error.flatten().fieldErrors,
+          });
+        }
+        payload = validation.data;
       }
 
-      // Process incoming message
-      const message = await whatsappService.processIncomingMessage(tenantId, validation.data);
+      // Process incoming message (stores in DB + geo check side effect)
+      const message = await whatsappService.processIncomingMessage(tenantId, payload);
 
-      // Trigger NLU processing for TEXT messages (async, don't wait)
-      if (validation.data.type === 'text' && validation.data.text?.body) {
-        setImmediate(async () => {
-          try {
-            await nluOrchestratorService.processMessage(
-              tenantId,
-              message.conversationId,
-              message.id,
-              validation.data.text!.body
-            );
-          } catch (error) {
-            logger.error({ error, tenantId, messageId: message.id }, 'NLU processing failed');
-          }
-        });
-      }
+      // Route through conversation flow state machine (async, don't block webhook)
+      setImmediate(async () => {
+        try {
+          await conversationFlowService.handleIncomingMessage(
+            tenantId,
+            message.conversationId,
+            message,
+            payload!,
+          );
+        } catch (error) {
+          logger.error({ error, tenantId, messageId: message.id }, 'Conversation flow processing failed');
+        }
+      });
 
       res.status(200).json({
         success: true,
@@ -139,26 +144,125 @@ router.post(
 
 /**
  * GET /whatsapp/webhook
- * Webhook verification endpoint (for Meta/WhatsApp Cloud API)
+ * Webhook verification endpoint (for Meta Cloud API) - legacy/global
  */
 router.get('/webhook', (req: Request, res: Response) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+  const mode = req.query['hub.mode'] as string;
+  const token = req.query['hub.verify_token'] as string;
+  const challenge = req.query['hub.challenge'] as string;
 
-  // For now, accept any verification (stub)
-  // In production, verify token against configured secret
-  if (mode === 'subscribe') {
-    logger.info('WhatsApp webhook verification received');
-    res.status(200).send(challenge);
+  const result = whatsappProviderService.verifyWebhook(mode, token, challenge);
+  if (result !== null) {
+    res.status(200).send(result);
   } else {
     res.status(403).send('Forbidden');
   }
 });
 
+// ==================== PER-TENANT WEBHOOK ENDPOINTS ====================
+
+/**
+ * GET /whatsapp/webhook/:tenantId
+ * Per-tenant webhook verification (Meta sends GET to verify)
+ */
+router.get('/webhook/:tenantId', async (req: Request, res: Response) => {
+  const { tenantId } = req.params;
+  const mode = req.query['hub.mode'] as string;
+  const token = req.query['hub.verify_token'] as string;
+  const challenge = req.query['hub.challenge'] as string;
+
+  try {
+    const config = await whatsappConfigService.getDecryptedConfig(tenantId);
+    if (!config) {
+      logger.warn({ tenantId }, 'Webhook verify: no config found for tenant');
+      return res.status(403).send('Forbidden');
+    }
+
+    if (mode === 'subscribe' && token === config.webhookVerifyToken) {
+      logger.info({ tenantId }, 'Per-tenant webhook verified');
+      await whatsappConfigService.markVerified(tenantId);
+      return res.status(200).send(challenge);
+    }
+
+    logger.warn({ tenantId, mode, token }, 'Per-tenant webhook verification failed');
+    return res.status(403).send('Forbidden');
+  } catch (error) {
+    logger.error({ error, tenantId }, 'Webhook verification error');
+    return res.status(500).send('Internal Server Error');
+  }
+});
+
+/**
+ * POST /whatsapp/webhook/:tenantId
+ * Per-tenant webhook - receives messages from Meta for a specific tenant
+ */
+router.post(
+  '/webhook/:tenantId',
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { tenantId } = req.params;
+    try {
+      // Verify webhook signature if tenant has appSecret configured
+      const signature = req.headers['x-hub-signature-256'] as string;
+      if (signature && (req as any).rawBody) {
+        const config = await whatsappConfigService.getDecryptedConfig(tenantId);
+        if (config?.appSecret) {
+          const crypto = await import('crypto');
+          const expectedSig = crypto.default
+            .createHmac('sha256', config.appSecret)
+            .update((req as any).rawBody)
+            .digest('hex');
+          const providedHash = signature.replace('sha256=', '');
+          const isValid = crypto.default.timingSafeEqual(
+            Buffer.from(expectedSig, 'hex'),
+            Buffer.from(providedHash, 'hex'),
+          );
+          if (!isValid) {
+            logger.warn({ tenantId }, 'Invalid webhook signature');
+            return res.status(403).json({ success: false, error: 'Invalid signature' });
+          }
+        }
+      }
+
+      logger.info(
+        { tenantId, body: JSON.stringify(req.body).substring(0, 200) },
+        'Per-tenant webhook received'
+      );
+
+      // Parse Meta Cloud API format
+      let payload = whatsappProviderService.parseWebhookPayload(req.body);
+
+      if (!payload) {
+        // Could be a status update - just acknowledge
+        return res.status(200).json({ success: true, data: null });
+      }
+
+      // Process incoming message
+      const message = await whatsappService.processIncomingMessage(tenantId, payload);
+
+      // Route through conversation flow (async)
+      setImmediate(async () => {
+        try {
+          await conversationFlowService.handleIncomingMessage(
+            tenantId,
+            message.conversationId,
+            message,
+            payload!,
+          );
+        } catch (error) {
+          logger.error({ error, tenantId, messageId: message.id }, 'Conversation flow failed');
+        }
+      });
+
+      res.status(200).json({ success: true, data: message });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 /**
  * POST /whatsapp/send
- * Send message via WhatsApp (stub)
+ * Send message via WhatsApp
  * Requires authentication
  */
 router.post(
@@ -198,4 +302,3 @@ router.post(
 );
 
 export const whatsappRouter = router;
-

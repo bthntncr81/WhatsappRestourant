@@ -1,11 +1,12 @@
 import { inboxService } from './inbox.service';
 import { geoService } from './geo.service';
+import { whatsappProviderService } from './whatsapp-provider.service';
+import { whatsappConfigService } from './whatsapp-config.service';
 import { createLogger } from '../logger';
 import {
   WhatsAppWebhookPayload,
   MessageDto,
   MessageKind,
-  GeoCheckResult,
 } from '@whatres/shared';
 
 const logger = createLogger();
@@ -13,7 +14,8 @@ const logger = createLogger();
 export class WhatsAppService {
   /**
    * Process incoming WhatsApp webhook message
-   * Provider-agnostic: normalizes payload to our internal format
+   * Stores message in DB and performs geo check for location messages.
+   * Response logic is handled by conversation-flow.service.ts
    */
   async processIncomingMessage(
     tenantId: string,
@@ -94,124 +96,168 @@ export class WhatsAppService {
     );
 
     logger.info(
-      { tenantId, conversationId: conversation.id, messageId: message.id },
+      { tenantId, conversationId: conversation.id, messageId: message.id, kind },
       'Processed incoming WhatsApp message'
     );
 
-    // ==================== GEO CHECK HOOK ====================
-    // When customer sends location, check if within service area
+    // Store geo check result when customer sends location (side effect)
+    // Response messages are handled by conversation-flow.service.ts
     if (kind === 'LOCATION' && payload.location?.latitude && payload.location?.longitude) {
-      await this.handleLocationMessage(
-        tenantId,
-        conversation.id,
-        {
+      try {
+        const result = await geoService.checkServiceArea(tenantId, {
           lat: payload.location.latitude,
           lng: payload.location.longitude,
-        }
-      );
+        });
+        await inboxService.updateConversationGeoCheck(tenantId, conversation.id, result);
+        logger.info(
+          { tenantId, conversationId: conversation.id, isWithinServiceArea: result.isWithinServiceArea },
+          'Geo check stored for location message'
+        );
+      } catch (error) {
+        logger.error({ error, tenantId, conversationId: conversation.id }, 'Failed to process geo check');
+      }
     }
 
     return message;
   }
 
+  // ==================== SEND MESSAGES ====================
+
   /**
-   * Handle location message - check service area and respond
+   * Get per-tenant WhatsApp config (cached per request context)
    */
-  private async handleLocationMessage(
-    tenantId: string,
-    conversationId: string,
-    location: { lat: number; lng: number }
-  ): Promise<void> {
+  private async getTenantConfig(tenantId: string): Promise<{ phoneNumberId: string; accessToken: string } | null> {
     try {
-      const result = await geoService.checkServiceArea(tenantId, location);
-
-      // Store geo check result in conversation (for later use in order flow)
-      await inboxService.updateConversationGeoCheck(tenantId, conversationId, result);
-
-      // Send appropriate response based on service area check
-      if (result.isWithinServiceArea) {
-        // Customer is within service area
-        const deliveryInfo = result.deliveryRule
-          ? `\n\n📍 ${result.nearestStore?.name}\n🚗 Teslimat ücreti: ${result.deliveryRule.deliveryFee} TL\n🛒 Minimum sepet: ${result.deliveryRule.minBasket} TL`
-          : '';
-
-        await this.sendSystemMessage(
-          tenantId,
-          conversationId,
-          `✅ Harika! Konumunuza hizmet verebiliyoruz.${deliveryInfo}\n\nSiparişinizi almaya hazırız. Menümüzden seçim yapabilirsiniz.`
-        );
-      } else {
-        // Customer is outside service area
-        let message = '❌ ' + result.message;
-
-        if (result.alternativeStores.length > 0) {
-          message += '\n\nSize en yakın şubelerimiz:';
-          result.alternativeStores.forEach((alt, i) => {
-            message += `\n${i + 1}. ${alt.store.name} (${alt.distance.toFixed(1)} km)`;
-            if (alt.store.phone) {
-              message += ` - ${alt.store.phone}`;
-            }
-          });
-        }
-
-        await this.sendSystemMessage(tenantId, conversationId, message);
+      const config = await whatsappConfigService.getDecryptedConfig(tenantId);
+      if (config?.phoneNumberId && config?.accessToken) {
+        return { phoneNumberId: config.phoneNumberId, accessToken: config.accessToken };
       }
-
-      logger.info(
-        {
-          tenantId,
-          conversationId,
-          isWithinServiceArea: result.isWithinServiceArea,
-          nearestStore: result.nearestStore?.name,
-          distance: result.distance,
-        },
-        'Processed location message geo check'
-      );
     } catch (error) {
-      logger.error({ error, tenantId, conversationId }, 'Failed to process geo check');
-      // Don't fail the whole message processing if geo check fails
+      logger.warn({ error, tenantId }, 'Failed to get per-tenant WhatsApp config, falling back to global');
     }
+    return null;
   }
 
   /**
-   * Send a system/bot message to conversation
+   * Send a text message via WhatsApp provider
+   * Uses per-tenant DB config if available, falls back to global env config
    */
-  private async sendSystemMessage(
+  async sendText(
     tenantId: string,
     conversationId: string,
-    text: string
-  ): Promise<void> {
-    // Create outgoing message in DB
-    await inboxService.createMessage(
+    text: string,
+    senderUserId?: string,
+  ): Promise<{ messageId: string; externalId?: string }> {
+    const conversation = await inboxService.getConversation(tenantId, conversationId);
+
+    // Store message in DB
+    const message = await inboxService.createMessage(
       tenantId,
       conversationId,
       'OUT',
       'TEXT',
       text,
-      { isSystemMessage: true },
-      undefined // No sender user for system messages
+      senderUserId ? undefined : { isSystemMessage: true },
+      senderUserId,
     );
 
-    // Get conversation for logging
-    const conversation = await inboxService.getConversation(tenantId, conversationId);
-
-    // Log (in production, this would send via provider)
-    logger.info(
-      {
-        provider: 'STUB',
-        tenantId,
-        to: conversation.customerPhone,
-        text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-        isSystemMessage: true,
-      },
-      '📤 WhatsApp SYSTEM MESSAGE (stub)'
-    );
+    // Send via provider - try per-tenant config first, then global
+    try {
+      const tenantConfig = await this.getTenantConfig(tenantId);
+      let result;
+      if (tenantConfig) {
+        result = await whatsappProviderService.sendTextWithConfig(conversation.customerPhone, text, tenantConfig);
+      } else {
+        result = await whatsappProviderService.sendText(conversation.customerPhone, text);
+      }
+      return { messageId: message.id, externalId: result.messageId };
+    } catch (error) {
+      logger.error({ error, tenantId, conversationId }, 'Failed to send text message');
+      return { messageId: message.id };
+    }
   }
 
   /**
-   * Send message via WhatsApp
-   * Currently a stub - logs to console
-   * In production, this would call the actual WhatsApp provider API
+   * Send interactive button message (e.g., payment method selection)
+   * Uses per-tenant DB config if available, falls back to global env config
+   */
+  async sendInteractiveButtons(
+    tenantId: string,
+    conversationId: string,
+    body: string,
+    buttons: Array<{ id: string; title: string }>,
+    header?: string,
+  ): Promise<{ messageId: string; externalId?: string }> {
+    const conversation = await inboxService.getConversation(tenantId, conversationId);
+
+    // Store in DB as system message with payload
+    const message = await inboxService.createMessage(
+      tenantId,
+      conversationId,
+      'OUT',
+      'TEXT',
+      body,
+      { isSystemMessage: true, interactive: { buttons } },
+    );
+
+    try {
+      const tenantConfig = await this.getTenantConfig(tenantId);
+      let result;
+      if (tenantConfig) {
+        result = await whatsappProviderService.sendInteractiveButtonsWithConfig(
+          conversation.customerPhone, body, buttons, tenantConfig, header,
+        );
+      } else {
+        result = await whatsappProviderService.sendInteractiveButtons(
+          conversation.customerPhone, body, buttons, header,
+        );
+      }
+      return { messageId: message.id, externalId: result.messageId };
+    } catch (error) {
+      logger.error({ error, tenantId, conversationId }, 'Failed to send interactive buttons');
+      return { messageId: message.id };
+    }
+  }
+
+  /**
+   * Send location request message
+   * Uses per-tenant DB config if available, falls back to global env config
+   */
+  async sendLocationRequest(
+    tenantId: string,
+    conversationId: string,
+    bodyText: string,
+  ): Promise<{ messageId: string; externalId?: string }> {
+    const conversation = await inboxService.getConversation(tenantId, conversationId);
+
+    const message = await inboxService.createMessage(
+      tenantId,
+      conversationId,
+      'OUT',
+      'TEXT',
+      bodyText,
+      { isSystemMessage: true, type: 'location_request' },
+    );
+
+    try {
+      const tenantConfig = await this.getTenantConfig(tenantId);
+      let result;
+      if (tenantConfig) {
+        result = await whatsappProviderService.sendLocationRequestWithConfig(
+          conversation.customerPhone, bodyText, tenantConfig,
+        );
+      } else {
+        result = await whatsappProviderService.sendLocationRequest(conversation.customerPhone, bodyText);
+      }
+      return { messageId: message.id, externalId: result.messageId };
+    } catch (error) {
+      logger.error({ error, tenantId, conversationId }, 'Failed to send location request');
+      return { messageId: message.id };
+    }
+  }
+
+  /**
+   * Send message (agent/admin sending from inbox)
    */
   async sendMessage(
     tenantId: string,
@@ -219,49 +265,10 @@ export class WhatsAppService {
     text: string,
     senderUserId: string
   ): Promise<{ messageId: string; externalId?: string }> {
-    // Get conversation to get customer phone
-    const conversation = await inboxService.getConversation(tenantId, conversationId);
-
-    // Create outgoing message in DB
-    const message = await inboxService.createMessage(
-      tenantId,
-      conversationId,
-      'OUT',
-      'TEXT',
-      text,
-      undefined,
-      senderUserId
-    );
-
-    // ============================================
-    // PROVIDER STUB - Replace with actual provider
-    // ============================================
-    logger.info(
-      {
-        provider: 'STUB',
-        tenantId,
-        to: conversation.customerPhone,
-        messageId: message.id,
-        text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-      },
-      '📤 WhatsApp SEND (stub) - Message would be sent to provider'
-    );
-
-    // Simulate external ID from provider
-    const externalId = `ext_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // In production, you would:
-    // 1. Call provider API (e.g., Twilio, MessageBird, Meta Cloud API)
-    // 2. Get the external message ID from response
-    // 3. Update message record with external ID
-    // 4. Handle errors and retries
-    // ============================================
-
-    return {
-      messageId: message.id,
-      externalId,
-    };
+    return this.sendText(tenantId, conversationId, text, senderUserId);
   }
+
+  // ==================== HELPERS ====================
 
   /**
    * Map webhook payload type to our MessageKind enum
@@ -282,16 +289,11 @@ export class WhatsAppService {
   }
 
   /**
-   * Verify webhook signature (placeholder)
-   * In production, implement actual signature verification
+   * Verify webhook signature
    */
-  verifyWebhookSignature(signature: string, body: string, secret: string): boolean {
-    // TODO: Implement actual signature verification based on provider
-    // For now, return true (stub)
-    logger.debug({ signature: signature.substring(0, 20) + '...' }, 'Webhook signature verification (stub)');
-    return true;
+  verifyWebhookSignature(signature: string, rawBody: Buffer): boolean {
+    return whatsappProviderService.verifySignature(signature, rawBody);
   }
 }
 
 export const whatsappService = new WhatsAppService();
-

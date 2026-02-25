@@ -1,7 +1,7 @@
 import redis from '../db/redis';
 import { CanonicalMenuExport } from '@whatres/shared';
 
-const MENU_CACHE_TTL = 60 * 60 * 24; // 24 hours
+const MENU_CACHE_TTL = 60 * 60; // 1 hour
 
 export class CacheService {
   private getMenuKey(tenantId: string): string {

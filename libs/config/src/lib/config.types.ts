@@ -34,6 +34,15 @@ export interface OpenAIConfig {
   model: string;
 }
 
+export interface EncryptionConfig {
+  key: string | undefined;
+}
+
+export interface WhatsAppGlobalConfig {
+  apiBaseUrl: string;
+  appBaseUrl: string;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   database: DatabaseConfig;
@@ -41,5 +50,7 @@ export interface AppConfig {
   log: LogConfig;
   jwt: JwtConfig;
   openai: OpenAIConfig;
+  encryption: EncryptionConfig;
+  whatsapp: WhatsAppGlobalConfig;
 }
 

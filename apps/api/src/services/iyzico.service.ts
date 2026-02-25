@@ -471,6 +471,141 @@ export class IyzicoService {
     return { success: false, error: result.error };
   }
 
+  // ==================== CHECKOUT FORM (Order Payments) ====================
+
+  /**
+   * Initialize checkout form for one-time order payment
+   */
+  async initializeCheckoutForm(params: {
+    price: string;
+    paidPrice: string;
+    basketId: string;
+    conversationId: string;
+    callbackUrl: string;
+    buyer: {
+      id: string;
+      name: string;
+      surname: string;
+      gsmNumber: string;
+      email: string;
+      identityNumber: string;
+      ip: string;
+      city: string;
+      country: string;
+      address: string;
+      zipCode: string;
+    };
+    basketItems: Array<{
+      id: string;
+      name: string;
+      category1: string;
+      itemType: 'PHYSICAL' | 'VIRTUAL';
+      price: string;
+    }>;
+  }): Promise<{
+    success: boolean;
+    token?: string;
+    paymentPageUrl?: string;
+    error?: string;
+  }> {
+    const body = {
+      locale: 'tr',
+      conversationId: params.conversationId,
+      price: params.price,
+      paidPrice: params.paidPrice,
+      currency: 'TRY',
+      basketId: params.basketId,
+      paymentGroup: 'PRODUCT',
+      callbackUrl: params.callbackUrl,
+      enabledInstallments: [1],
+      buyer: {
+        id: params.buyer.id,
+        name: sanitizeForIyzico(params.buyer.name),
+        surname: sanitizeForIyzico(params.buyer.surname),
+        gsmNumber: formatGsmNumber(params.buyer.gsmNumber),
+        email: params.buyer.email,
+        identityNumber: params.buyer.identityNumber,
+        registrationAddress: sanitizeForIyzico(params.buyer.address),
+        ip: getValidIp(params.buyer.ip),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        zipCode: params.buyer.zipCode,
+      },
+      shippingAddress: {
+        contactName: sanitizeForIyzico(`${params.buyer.name} ${params.buyer.surname}`),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        address: sanitizeForIyzico(params.buyer.address),
+        zipCode: params.buyer.zipCode,
+      },
+      billingAddress: {
+        contactName: sanitizeForIyzico(`${params.buyer.name} ${params.buyer.surname}`),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        address: sanitizeForIyzico(params.buyer.address),
+        zipCode: params.buyer.zipCode,
+      },
+      basketItems: params.basketItems.map((item) => ({
+        id: item.id,
+        name: sanitizeForIyzico(item.name),
+        category1: sanitizeForIyzico(item.category1),
+        itemType: item.itemType,
+        price: item.price,
+      })),
+    };
+
+    const result = await this.request<{
+      token: string;
+      checkoutFormContent: string;
+      paymentPageUrl: string;
+      tokenExpireTime: number;
+    }>('POST', '/payment/iyzi-pos/checkoutform/initialize/auth/ecom', body);
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        token: result.data.token,
+        paymentPageUrl: result.data.paymentPageUrl,
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
+  /**
+   * Retrieve checkout form payment result
+   */
+  async retrieveCheckoutFormResult(token: string): Promise<{
+    success: boolean;
+    paymentStatus?: string;
+    paymentId?: string;
+    error?: string;
+  }> {
+    const body = {
+      locale: 'tr',
+      conversationId: generateConversationId(),
+      token,
+    };
+
+    const result = await this.request<{
+      paymentStatus: string;
+      paymentId: string;
+      price: number;
+      paidPrice: number;
+      errorMessage?: string;
+    }>('POST', '/payment/iyzi-pos/checkoutform/auth/ecom/detail', body);
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        paymentStatus: result.data.paymentStatus,
+        paymentId: result.data.paymentId,
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
   // ==================== CARD STORAGE API ====================
 
   /**

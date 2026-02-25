@@ -106,6 +106,7 @@ export interface ExtractedOrderItem {
   optionSelections: { groupName: string; optionName: string }[];
   extras: { name: string; qty: number }[];
   notes: string | null;
+  action?: 'add' | 'remove' | 'keep';
 }
 
 // ==================== MENU CANDIDATE ====================
@@ -138,6 +139,7 @@ export interface LlmExtractedItem {
   optionSelections: { groupName: string; optionName: string }[];
   extras: { name: string; qty: number }[];
   notes: string | null;
+  action: 'add' | 'remove' | 'keep';
 }
 
 /**
@@ -178,8 +180,13 @@ export const LLM_EXTRACTION_SCHEMA = {
             },
           },
           notes: { type: ['string', 'null'], description: 'Special instructions' },
+          action: {
+            type: 'string',
+            enum: ['add', 'remove', 'keep'],
+            description: 'Action: add = new item or increase qty, remove = remove item, keep = no change (existing item)',
+          },
         },
-        required: ['menuItemId', 'qty', 'optionSelections', 'extras', 'notes'],
+        required: ['menuItemId', 'qty', 'optionSelections', 'extras', 'notes', 'action'],
         additionalProperties: false,
       },
     },

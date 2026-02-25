@@ -33,13 +33,27 @@ export const envSchema = z.object({
   // OpenAI
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_ORG_ID: z.string().optional(),
-  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+  OPENAI_MODEL: z.string().default('gpt-5.2'),
 
   // iyzico Payment
   IYZICO_API_KEY: z.string().default('sandbox-ifkcjkaPdtshoWkt36gjOwpZ9Z5XsUZM'),
   IYZICO_SECRET_KEY: z.string().default('sandbox-0PfKYCdPshA2ZhqfdGq6JxfB5dXQWeqa'),
   IYZICO_BASE_URL: z.string().default('https://sandbox-api.iyzipay.com'),
   IYZICO_PRODUCT_REF_CODE: z.string().default('4703db20-26dc-45e9-968b-aa0f0ee93b60'),
+
+  // Encryption (for per-tenant WhatsApp credential storage)
+  ENCRYPTION_KEY: z.string().optional(), // 32-byte hex key for AES-256-GCM
+
+  // WhatsApp Meta Cloud API (fallback / global defaults)
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().default('whatres-verify-token'),
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  WHATSAPP_API_VERSION: z.string().default('v21.0'),
+  WHATSAPP_API_BASE_URL: z.string().default('https://graph.facebook.com/v21.0'),
+
+  // App
+  APP_BASE_URL: z.string().default('http://localhost:3000'),
 });
 
 export type EnvSchema = z.infer<typeof envSchema>;
