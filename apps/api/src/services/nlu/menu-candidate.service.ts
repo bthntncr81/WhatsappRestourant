@@ -302,6 +302,7 @@ export class MenuCandidateService {
           description: string | null;
           basePrice: number;
           isActive: boolean;
+          isReadyFood: boolean;
           optionGroupIds: string[];
         }>;
       }
@@ -317,6 +318,7 @@ export class MenuCandidateService {
         description: item.description,
         basePrice: Number(item.basePrice),
         isActive: item.isActive,
+        isReadyFood: item.isReadyFood,
         optionGroupIds: item.optionGroups.map((og) => og.groupId),
       });
     }

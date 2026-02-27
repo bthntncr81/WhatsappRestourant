@@ -155,6 +155,37 @@ router.post(
   }
 );
 
+/**
+ * POST /orders/:id/reject
+ * Reject a pending order with reason
+ */
+const rejectOrderSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+router.post(
+  '/:id/reject',
+  async (req: Request, res: Response<ApiResponse<OrderDto>>, next: NextFunction) => {
+    try {
+      const validation = rejectOrderSchema.safeParse(req.body);
+      if (!validation.success) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'Invalid request', {
+          errors: validation.error.flatten().fieldErrors,
+        });
+      }
+
+      const order = await orderService.rejectOrder(
+        req.tenantId!,
+        req.params.id,
+        validation.data.reason
+      );
+      res.json({ success: true, data: order });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 export const orderRouter = router;
 
 

@@ -115,6 +115,7 @@ model MenuItem {
   basePrice   Decimal @db.Decimal(10, 2)
   category    String
   isActive    Boolean @default(true)
+  isReadyFood Boolean @default(false)
   sortOrder   Int     @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -222,9 +223,11 @@ enum ConversationStatus {
 
 enum ConversationPhase {
   IDLE
+  ADDITION_PROMPT
   ORDER_COLLECTING
   ORDER_REVIEW
   LOCATION_REQUEST
+  ADDRESS_COLLECTION
   PAYMENT_METHOD_SELECTION
   PAYMENT_PENDING
   ORDER_CONFIRMED
@@ -326,14 +329,18 @@ model Order {
   customerPhone  String?
   customerName   String?
   deliveryAddress String?
-  paymentMethod  String?     // CASH, CARD, ONLINE
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  confirmedAt    DateTime?
+  paymentMethod   String?     // CASH, CARD, ONLINE
+  parentOrderId   String?     // Self-relation for addition orders
+  rejectionReason String?     // Reason text when restaurant rejects
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  confirmedAt     DateTime?
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation  Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   store         Store?         @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  parentOrder   Order?         @relation("OrderAdditions", fields: [parentOrderId], references: [id], onDelete: SetNull)
+  childOrders   Order[]        @relation("OrderAdditions")
   items         OrderItem[]
   printJobs     PrintJob[]
   orderPayments OrderPayment[]
@@ -342,6 +349,7 @@ model Order {
   @@index([tenantId, status])
   @@index([tenantId, orderNumber])
   @@index([tenantId, storeId])
+  @@index([tenantId, parentOrderId])
   @@map("orders")
 }
 
@@ -691,6 +699,7 @@ enum OrderPaymentStatus {
   SUCCESS
   FAILED
   EXPIRED
+  REFUNDED
 }
 
 model OrderPayment {

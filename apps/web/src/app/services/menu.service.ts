@@ -24,6 +24,7 @@ export interface MenuItemDto {
   basePrice: number;
   category: string;
   isActive: boolean;
+  isReadyFood: boolean;
   sortOrder: number;
   optionGroups?: MenuOptionGroupDto[];
 }
@@ -34,6 +35,7 @@ export interface CreateMenuItemDto {
   basePrice: number;
   category: string;
   isActive?: boolean;
+  isReadyFood?: boolean;
   sortOrder?: number;
   optionGroupIds?: string[];
 }

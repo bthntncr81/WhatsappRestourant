@@ -71,6 +71,24 @@ export const TEMPLATES = {
   reminderSendLocation:
     '📍 Lutfen konum pininizi gonderin.\nKonum gondermek icin WhatsApp\'ta 📎 > Konum secenegini kullanin.',
 
+  // ==================== ADDRESS COLLECTION ====================
+  addressRequest:
+    '📝 Lutfen teslimat adresinizi yazin.\n' +
+    'Ornek: _Ataturk Mah. Cumhuriyet Cad. No:12 Daire:5_',
+
+  addressConfirmation(address: string): string {
+    return (
+      `📍 Teslimat adresiniz:\n\n` +
+      `*${address}*\n\n` +
+      `Bu adres dogru mu?\n` +
+      `✅ _"evet"_ - Onayla\n` +
+      `✏️ _"hayir"_ - Tekrar yaz`
+    );
+  },
+
+  addressRetry:
+    '📝 Lutfen teslimat adresinizi tekrar yazin.',
+
   // ==================== PAYMENT ====================
   paymentMethodButtons: {
     body: 'Odeme yontemini secin:',
@@ -131,6 +149,102 @@ export const TEMPLATES = {
       `📦 Siparis No: #${orderNumber}\n` +
       `🎉 Siparisinia hazirlaniyor!\n` +
       `⏱️ Tahmini hazirlık suresi: 25-30 dakika`
+    );
+  },
+
+  // ==================== ORDER STATUS UPDATES ====================
+  orderPreparing(orderNumber: number): string {
+    return (
+      `👨‍🍳 *Siparisinia hazirlaniyor!*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `⏱️ Tahmini sure: 25-30 dakika`
+    );
+  },
+
+  orderReady(orderNumber: number): string {
+    return (
+      `🎉 *Siparisinia hazir!*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `🚀 Kurye yola cikmak uzere!`
+    );
+  },
+
+  orderDelivered(orderNumber: number): string {
+    return (
+      `✅ *Siparisinia teslim edildi!*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `🍽️ Afiyet olsun!\n` +
+      `Tekrar siparis icin urun yazabilirsiniz.`
+    );
+  },
+
+  orderCancelledNotification(orderNumber: number): string {
+    return (
+      `❌ *Siparisinia iptal edildi.*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `Yeni siparis icin urun yazabilirsiniz.`
+    );
+  },
+
+  // ==================== ORDER ADDITION ====================
+  additionPrompt(orderNumber: number): string {
+    return `Mevcut siparisinia (#${orderNumber}) var. Ekleme mi yapmak istiyorsunuz, yoksa yeni siparis mi vermek istiyorsunuz?`;
+  },
+
+  additionStarted(parentOrderNumber: number): string {
+    return (
+      `➕ Siparis #${parentOrderNumber}'e ekleme yapiyorsunuz.\n` +
+      `Eklemek istediginiz urunleri yazin.`
+    );
+  },
+
+  newOrderPrompt: 'Yeni siparis icin urunlerinizi yazabilirsiniz.',
+
+  additionNotAllowed(orderNumber: number): string {
+    return (
+      `❌ Siparis #${orderNumber} teslim edilmis veya iptal edilmis.\n` +
+      `Yeni siparis vermek icin urun adini yazin.`
+    );
+  },
+
+  additionReadyFoodOnly(nonReadyItemNames: string): string {
+    return (
+      `⚠️ Siparisinia hazir durumunda oldugu icin sadece hazir urunler eklenebilir.\n` +
+      `Su urunler eklenemez: *${nonReadyItemNames}*\n\n` +
+      `Lutfen sadece hazir urunler secin veya *"iptal"* yazin.`
+    );
+  },
+
+  additionApproved(orderNumber: number): string {
+    return (
+      `✅ *Eklemeniz onaylandi!*\n\n` +
+      `📦 Siparis #${orderNumber}\n` +
+      `Ek urunleriniz hazirlaniyor.`
+    );
+  },
+
+  additionRejected(orderNumber: number, reason: string): string {
+    return (
+      `❌ *Eklemeniz reddedildi.*\n\n` +
+      `📦 Siparis #${orderNumber}\n` +
+      `Neden: *${reason}*\n\n` +
+      `Yeni siparis vermek icin urun adini yazabilirsiniz.`
+    );
+  },
+
+  orderRejected(orderNumber: number, reason: string): string {
+    return (
+      `❌ *Siparisinia reddedildi.*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `Neden: *${reason}*\n\n` +
+      `Yeni siparis vermek icin urun adini yazabilirsiniz.`
+    );
+  },
+
+  refundInitiated(orderNumber: number): string {
+    return (
+      `💳 Siparis #${orderNumber} icin odeme iadesi baslatildi.\n` +
+      `Iadeniz 3-5 is gunu icerisinde kartiniza yansiyacaktir.`
     );
   },
 

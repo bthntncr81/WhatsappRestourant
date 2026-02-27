@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import { chatbotService } from './chatbot.service';
 import { whatsappService } from './whatsapp.service';
 import { TEMPLATES } from './message-templates';
+import { orderPaymentService } from './order-payment.service';
 
 const logger = createLogger();
 
@@ -216,11 +217,11 @@ export class OrderService {
 
     // Send WhatsApp notification to customer
     try {
-      await whatsappService.sendText(
-        tenantId,
-        order.conversationId,
-        TEMPLATES.restaurantApproved(confirmedOrder.orderNumber || 0),
-      );
+      const isAddition = !!confirmedOrder.parentOrderId;
+      const message = isAddition
+        ? TEMPLATES.additionApproved(confirmedOrder.orderNumber || 0)
+        : TEMPLATES.restaurantApproved(confirmedOrder.orderNumber || 0);
+      await whatsappService.sendText(tenantId, order.conversationId, message);
     } catch (error) {
       logger.error({ error, tenantId, orderId }, 'Failed to send confirmation notification to customer');
     }
@@ -243,14 +244,33 @@ export class OrderService {
     const order = await prisma.order.update({
       where: { id: orderId, tenantId },
       data: { status },
-      include: { 
+      include: {
         items: true,
         store: { select: { id: true, name: true } },
       },
     });
 
-    // Send notification for status change
+    // Send notification for status change (system message in DB)
     await chatbotService.sendOrderStatusNotification(tenantId, orderId, status);
+
+    // Send real WhatsApp message to customer
+    if (order.conversationId && order.orderNumber) {
+      const messageMap: Partial<Record<OrderStatus, string>> = {
+        PREPARING: TEMPLATES.orderPreparing(order.orderNumber),
+        READY: TEMPLATES.orderReady(order.orderNumber),
+        DELIVERED: TEMPLATES.orderDelivered(order.orderNumber),
+        CANCELLED: TEMPLATES.orderCancelledNotification(order.orderNumber),
+      };
+
+      const whatsappMessage = messageMap[status];
+      if (whatsappMessage) {
+        try {
+          await whatsappService.sendText(tenantId, order.conversationId, whatsappMessage);
+        } catch (error) {
+          logger.error({ error, tenantId, orderId, status }, 'Failed to send status update WhatsApp message');
+        }
+      }
+    }
 
     logger.info({ tenantId, orderId, status }, 'Order status updated');
     return this.mapToDto(order);
@@ -368,6 +388,119 @@ export class OrderService {
     logger.info({ tenantId, orderId, type }, 'Reprint job created');
   }
 
+  // ==================== ORDER ADDITIONS & REJECTION ====================
+
+  async findActiveOrderForConversation(
+    tenantId: string,
+    conversationId: string,
+  ): Promise<OrderDto | null> {
+    const order = await prisma.order.findFirst({
+      where: {
+        tenantId,
+        conversationId,
+        status: { in: ['CONFIRMED', 'PREPARING', 'READY'] },
+        parentOrderId: null,
+      },
+      include: { items: true, store: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return order ? this.mapToDto(order) : null;
+  }
+
+  async createAdditionDraft(
+    tenantId: string,
+    conversationId: string,
+    parentOrderId: string,
+  ): Promise<OrderDto> {
+    const parentOrder = await prisma.order.findFirst({
+      where: { id: parentOrderId, tenantId },
+    });
+    if (!parentOrder) {
+      throw new AppError(404, 'ORDER_NOT_FOUND', 'Parent order not found');
+    }
+
+    const draft = await prisma.order.create({
+      data: {
+        tenantId,
+        conversationId,
+        parentOrderId,
+        status: 'DRAFT',
+        totalPrice: 0,
+        storeId: parentOrder.storeId,
+        customerPhone: parentOrder.customerPhone,
+        customerName: parentOrder.customerName,
+        deliveryAddress: parentOrder.deliveryAddress,
+      },
+      include: { items: true, store: { select: { id: true, name: true } } },
+    });
+
+    logger.info({ tenantId, parentOrderId, childOrderId: draft.id }, 'Addition draft created');
+    return this.mapToDto(draft);
+  }
+
+  async rejectOrder(
+    tenantId: string,
+    orderId: string,
+    reason: string,
+  ): Promise<OrderDto> {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { items: true, conversation: true, orderPayments: true },
+    });
+
+    if (!order) {
+      throw new AppError(404, 'ORDER_NOT_FOUND', 'Order not found');
+    }
+
+    if (order.status !== 'PENDING_CONFIRMATION') {
+      throw new AppError(400, 'INVALID_STATUS', `Cannot reject order with status ${order.status}`);
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'CANCELLED',
+        rejectionReason: reason,
+      },
+      include: { items: true, store: { select: { id: true, name: true } } },
+    });
+
+    // Send WhatsApp notification
+    try {
+      const orderNumber = updated.orderNumber || 0;
+      const isAddition = !!updated.parentOrderId;
+      const message = isAddition
+        ? TEMPLATES.additionRejected(orderNumber, reason)
+        : TEMPLATES.orderRejected(orderNumber, reason);
+      await whatsappService.sendText(tenantId, order.conversationId, message);
+    } catch (error) {
+      logger.error({ error, tenantId, orderId }, 'Failed to send rejection notification');
+    }
+
+    // Initiate refund for card payment
+    const successfulCardPayment = (order.orderPayments as any[]).find(
+      (p) => p.method === 'CREDIT_CARD' && p.status === 'SUCCESS'
+    );
+    if (successfulCardPayment) {
+      try {
+        await orderPaymentService.initiateRefund(tenantId, successfulCardPayment.id);
+        // Notify customer about refund
+        try {
+          await whatsappService.sendText(
+            tenantId,
+            order.conversationId,
+            TEMPLATES.refundInitiated(updated.orderNumber || 0),
+          );
+        } catch (_) { /* ignore */ }
+      } catch (error) {
+        logger.error({ error, tenantId, orderId, paymentId: successfulCardPayment.id }, 'Failed to initiate refund');
+      }
+    }
+
+    logger.info({ tenantId, orderId, reason }, 'Order rejected');
+    return this.mapToDto(updated);
+  }
+
   // ==================== HELPERS ====================
 
   private async getNextOrderNumber(tenantId: string): Promise<number> {
@@ -406,6 +539,8 @@ export class OrderService {
         extrasJson: item.extrasJson,
         notes: item.notes,
       })),
+      parentOrderId: order.parentOrderId || null,
+      rejectionReason: order.rejectionReason || null,
       createdAt: order.createdAt.toISOString(),
       updatedAt: order.updatedAt.toISOString(),
       confirmedAt: order.confirmedAt?.toISOString() || null,

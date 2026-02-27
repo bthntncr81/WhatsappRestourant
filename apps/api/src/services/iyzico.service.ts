@@ -805,6 +805,30 @@ export class IyzicoService {
     const result = await this.request('POST', '/v2/subscription/operation/retry', body);
     return { success: result.success, error: result.error };
   }
+
+  /**
+   * Cancel/refund a payment by paymentId
+   */
+  async cancelPayment(paymentId: string, ip: string = '85.34.78.112'): Promise<{ success: boolean; error?: string }> {
+    try {
+      const body = {
+        locale: 'tr',
+        conversationId: `cancel-${Date.now()}`,
+        paymentId,
+        ip,
+      };
+
+      const result = await this.request('POST', '/payment/cancel', body);
+
+      if (result.success) {
+        return { success: true };
+      }
+      return { success: false, error: result.error || 'Cancel failed' };
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      return { success: false, error: errMsg };
+    }
+  }
 }
 
 export const iyzicoService = new IyzicoService();

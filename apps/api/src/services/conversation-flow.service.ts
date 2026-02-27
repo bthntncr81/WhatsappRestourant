@@ -95,6 +95,9 @@ export class ConversationFlowService {
         case 'IDLE':
           nextPhase = await this.handleIdle(ctx);
           break;
+        case 'ADDITION_PROMPT':
+          nextPhase = await this.handleAdditionPrompt(ctx);
+          break;
         case 'ORDER_COLLECTING':
           nextPhase = await this.handleOrderCollecting(ctx);
           break;
@@ -103,6 +106,9 @@ export class ConversationFlowService {
           break;
         case 'LOCATION_REQUEST':
           nextPhase = await this.handleLocationRequest(ctx);
+          break;
+        case 'ADDRESS_COLLECTION':
+          nextPhase = await this.handleAddressCollection(ctx);
           break;
         case 'PAYMENT_METHOD_SELECTION':
           nextPhase = await this.handlePaymentMethodSelection(ctx);
@@ -198,6 +204,28 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
+    // Check for active (non-draft) orders before NLU
+    const activeParentOrder = await orderService.findActiveOrderForConversation(
+      tenantId, conversationId
+    );
+
+    if (activeParentOrder && ['CONFIRMED', 'PREPARING', 'READY'].includes(activeParentOrder.status)) {
+      // Ask if they want to add to existing or start new
+      await whatsappService.sendInteractiveButtons(
+        tenantId,
+        conversationId,
+        TEMPLATES.additionPrompt(activeParentOrder.orderNumber || 0),
+        [
+          { id: 'add_to_order', title: 'Ekleme Yap' },
+          { id: 'new_order', title: 'Yeni Siparis' },
+        ],
+      );
+      await inboxService.updateConversationPhase(
+        tenantId, conversationId, 'ADDITION_PROMPT', activeParentOrder.id
+      );
+      return 'ADDITION_PROMPT';
+    }
+
     // Try NLU extraction
     const result = await nluOrchestratorService.processMessage(
       tenantId, conversationId, message.id, text,
@@ -232,6 +260,69 @@ export class ConversationFlowService {
     }
 
     return 'IDLE';
+  }
+
+  // ==================== ADDITION PROMPT ====================
+
+  private async handleAdditionPrompt(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, message, payload, conversation } = ctx;
+    const text = normalizeTr(message.text || '');
+    const buttonId = payload.interactive?.buttonReply?.id;
+
+    // Cancel
+    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+      await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
+      return 'IDLE';
+    }
+
+    // "Ekleme Yap" button or keyword
+    const ADDITION_KEYWORDS = ['ekleme', 'ekle', 'evet'];
+    if (buttonId === 'add_to_order' || ADDITION_KEYWORDS.some(k => text.includes(k))) {
+      const parentOrderId = conversation.activeOrderId;
+      if (!parentOrderId) {
+        await this.sendText(ctx, TEMPLATES.orderEmpty);
+        return 'IDLE';
+      }
+
+      // Create child draft order linked to parent
+      const childDraft = await orderService.createAdditionDraft(
+        tenantId, conversationId, parentOrderId
+      );
+
+      // Get parent order number for the message
+      const parentOrder = await orderService.getOrder(tenantId, parentOrderId);
+
+      await inboxService.updateConversationPhase(
+        tenantId, conversationId, 'ORDER_COLLECTING', childDraft.id
+      );
+
+      await this.sendText(ctx, TEMPLATES.additionStarted(parentOrder.orderNumber || 0));
+      return 'ORDER_COLLECTING';
+    }
+
+    // "Yeni Siparis" button or keyword
+    const NEW_ORDER_KEYWORDS = ['yeni', 'hayir'];
+    if (buttonId === 'new_order' || NEW_ORDER_KEYWORDS.some(k => text.includes(k))) {
+      await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
+      await this.sendText(ctx, TEMPLATES.newOrderPrompt);
+      return 'IDLE';
+    }
+
+    // Unrecognized - resend buttons
+    const parentOrderId = conversation.activeOrderId;
+    if (parentOrderId) {
+      const parentOrder = await orderService.getOrder(tenantId, parentOrderId);
+      await whatsappService.sendInteractiveButtons(
+        tenantId,
+        conversationId,
+        TEMPLATES.additionPrompt(parentOrder.orderNumber || 0),
+        [
+          { id: 'add_to_order', title: 'Ekleme Yap' },
+          { id: 'new_order', title: 'Yeni Siparis' },
+        ],
+      );
+    }
+    return 'ADDITION_PROMPT';
   }
 
   /**
@@ -321,6 +412,20 @@ export class ConversationFlowService {
 
     // Confirm -> ask for location
     if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+      // Check if this is an addition order - skip location/address
+      const order = await this.getActiveOrder(ctx);
+      if (order?.parentOrderId) {
+        // Validate items for addition
+        const validationError = await this.validateAdditionItems(ctx, order);
+        if (validationError) {
+          await this.sendText(ctx, validationError);
+          return 'ORDER_COLLECTING';
+        }
+        // Skip location & address -> go straight to payment
+        await this.sendPaymentButtons(ctx);
+        return 'PAYMENT_METHOD_SELECTION';
+      }
+
       await whatsappService.sendLocationRequest(
         tenantId,
         conversationId,
@@ -553,6 +658,71 @@ export class ConversationFlowService {
     return 'PAYMENT_METHOD_SELECTION';
   }
 
+  // ==================== ADDRESS COLLECTION (Adim 4b) ====================
+
+  /**
+   * ADDRESS_COLLECTION: Customer types their delivery address, then confirms.
+   * Sub-state: if Order.deliveryAddress is null → waiting for address text,
+   *            if set → waiting for confirmation (evet/hayir).
+   */
+  private async handleAddressCollection(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, message } = ctx;
+    const text = normalizeTr(message.text || '');
+
+    // Only accept TEXT messages
+    if (message.kind !== 'TEXT' || !text) {
+      await this.sendText(ctx, 'Lutfen teslimat adresinizi metin olarak yazin.');
+      return 'ADDRESS_COLLECTION';
+    }
+
+    // Cancel at any point
+    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+      await this.cancelActiveOrder(ctx);
+      await this.sendText(ctx, TEMPLATES.orderCancelled);
+      return 'IDLE';
+    }
+
+    const order = await this.getActiveOrder(ctx);
+    if (!order) {
+      await this.sendText(ctx, TEMPLATES.orderEmpty);
+      return 'IDLE';
+    }
+
+    if (!order.deliveryAddress) {
+      // --- Sub-state: waiting for address text ---
+      const address = (message.text || '').trim();
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { deliveryAddress: address },
+      });
+
+      // Ask for confirmation
+      await this.sendText(ctx, TEMPLATES.addressConfirmation(address));
+      return 'ADDRESS_COLLECTION';
+    } else {
+      // --- Sub-state: waiting for confirmation ---
+      if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+        // Address confirmed → proceed to payment
+        await this.sendPaymentButtons(ctx);
+        return 'PAYMENT_METHOD_SELECTION';
+      }
+
+      if (this.matchesKeyword(text, EDIT_KEYWORDS)) {
+        // User wants to re-enter address
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { deliveryAddress: null },
+        });
+        await this.sendText(ctx, TEMPLATES.addressRetry);
+        return 'ADDRESS_COLLECTION';
+      }
+
+      // Unrecognized → remind
+      await this.sendText(ctx, 'Lutfen *"evet"* ile onaylayin veya *"hayir"* yazarak adresinizi tekrar girin.');
+      return 'ADDRESS_COLLECTION';
+    }
+  }
+
   // ==================== GEO HELPERS ====================
 
   private async processGeoResult(
@@ -584,9 +754,51 @@ export class ConversationFlowService {
     const distance = geoCheck.distance || 0;
 
     await this.sendText(ctx, TEMPLATES.locationConfirmed(storeName, deliveryFee, distance));
-    await this.sendPaymentButtons(ctx);
+    // Ask for open text address before payment
+    await this.sendText(ctx, TEMPLATES.addressRequest);
 
-    return 'PAYMENT_METHOD_SELECTION';
+    return 'ADDRESS_COLLECTION';
+  }
+
+  // ==================== ADDITION VALIDATION ====================
+
+  private async validateAdditionItems(
+    ctx: FlowContext,
+    draftOrder: any,
+  ): Promise<string | null> {
+    if (!draftOrder.parentOrderId) return null;
+
+    const parentOrder = await prisma.order.findFirst({
+      where: { id: draftOrder.parentOrderId, tenantId: ctx.tenantId },
+      select: { status: true, orderNumber: true },
+    });
+
+    if (!parentOrder) return 'Ana siparis bulunamadi. Lutfen yeni siparis verin.';
+
+    // DELIVERED or CANCELLED -> cannot add
+    if (parentOrder.status === 'DELIVERED' || parentOrder.status === 'CANCELLED') {
+      return TEMPLATES.additionNotAllowed(parentOrder.orderNumber || 0);
+    }
+
+    // READY -> only isReadyFood items allowed
+    if (parentOrder.status === 'READY') {
+      const itemMenuIds = draftOrder.items.map((i: any) => i.menuItemId);
+      if (itemMenuIds.length === 0) return null;
+
+      const menuItems = await prisma.menuItem.findMany({
+        where: { id: { in: itemMenuIds }, tenantId: ctx.tenantId },
+        select: { id: true, name: true, isReadyFood: true },
+      });
+
+      const nonReadyItems = menuItems.filter((mi) => !mi.isReadyFood);
+      if (nonReadyItems.length > 0) {
+        const names = nonReadyItems.map((i) => i.name).join(', ');
+        return TEMPLATES.additionReadyFoodOnly(names);
+      }
+    }
+
+    // CONFIRMED or PREPARING -> all items allowed
+    return null;
   }
 
   // ==================== SMART FALLBACK (Adim 8) ====================

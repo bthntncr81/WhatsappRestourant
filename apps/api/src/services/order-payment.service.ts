@@ -248,6 +248,41 @@ export class OrderPaymentService {
     return payment ? this.mapToDto(payment) : null;
   }
 
+  /**
+   * Initiate a refund for a credit card payment via iyzico
+   */
+  async initiateRefund(tenantId: string, paymentId: string): Promise<void> {
+    const payment = await prisma.orderPayment.findFirst({
+      where: { id: paymentId, tenantId, method: 'CREDIT_CARD', status: 'SUCCESS' },
+    });
+
+    if (!payment) {
+      throw new Error('Payment not found or not eligible for refund');
+    }
+
+    if (!payment.iyzicoPaymentId) {
+      logger.warn({ tenantId, paymentId }, 'No iyzico payment ID for refund - marking as refunded');
+      await prisma.orderPayment.update({
+        where: { id: paymentId },
+        data: { status: 'REFUNDED' },
+      });
+      return;
+    }
+
+    const result = await iyzicoService.cancelPayment(payment.iyzicoPaymentId);
+
+    if (result.success) {
+      await prisma.orderPayment.update({
+        where: { id: paymentId },
+        data: { status: 'REFUNDED' },
+      });
+      logger.info({ tenantId, paymentId }, 'Refund completed successfully');
+    } else {
+      logger.error({ tenantId, paymentId, error: result.error }, 'Refund failed');
+      throw new Error(result.error || 'Refund failed');
+    }
+  }
+
   // ==================== HELPERS ====================
 
   private mapToDto(payment: any): OrderPaymentDto {

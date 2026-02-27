@@ -23,6 +23,8 @@ export interface OrderDto {
   customerName: string | null;
   deliveryAddress: string | null;
   paymentMethod: string | null;
+  parentOrderId: string | null;
+  rejectionReason: string | null;
   items: OrderItemDto[];
   createdAt: string;
   updatedAt: string;
@@ -67,6 +69,10 @@ export interface ConfirmOrderDto {
   deliveryAddress?: string;
   paymentMethod?: string;
   notes?: string;
+}
+
+export interface RejectOrderDto {
+  reason: string;
 }
 
 export interface CreateOrderItemDto {

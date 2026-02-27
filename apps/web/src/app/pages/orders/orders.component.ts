@@ -62,7 +62,12 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
           @for (order of orders(); track order.id) {
             <div class="order-card" [class]="'status-' + order.status.toLowerCase()">
               <div class="order-header">
-                <div class="order-number">#{{ order.orderNumber || '---' }}</div>
+                <div class="order-number">
+                  #{{ order.orderNumber || '---' }}
+                  @if (order.parentOrderId) {
+                    <span class="addition-badge">+ Ekleme</span>
+                  }
+                </div>
                 <span class="status-badge" [class]="order.status.toLowerCase()">
                   {{ getStatusLabel(order.status) }}
                 </span>
@@ -88,6 +93,13 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
                 }
               </div>
 
+              @if (order.rejectionReason) {
+                <div class="rejection-reason">
+                  <span class="rejection-label">Ret Sebebi:</span>
+                  {{ order.rejectionReason }}
+                </div>
+              }
+
               <div class="order-footer">
                 <span class="order-total">{{ order.totalPrice | number:'1.2-2' }} TL</span>
                 <span class="order-time">{{ formatTime(order.createdAt) }}</span>
@@ -97,6 +109,9 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
                 @if (order.status === 'DRAFT' || order.status === 'PENDING_CONFIRMATION') {
                   <button class="action-btn confirm" (click)="confirmOrder(order)">
                     ✓ Onayla
+                  </button>
+                  <button class="action-btn reject" (click)="openRejectModal(order)">
+                    ✗ Reddet
                   </button>
                 }
                 @if (order.status === 'CONFIRMED') {
@@ -130,6 +145,43 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
               </div>
             </div>
           }
+        </div>
+      }
+
+      <!-- Reject Modal -->
+      @if (showRejectModal()) {
+        <div class="modal-overlay" (click)="closeRejectModal()">
+          <div class="reject-modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h3>Siparişi Reddet</h3>
+              <button class="close-btn" (click)="closeRejectModal()">✕</button>
+            </div>
+            <div class="modal-body">
+              <p class="modal-info">
+                Sipariş <strong>#{{ rejectingOrder()?.orderNumber }}</strong> reddedilecek.
+                @if (rejectingOrder()?.parentOrderId) {
+                  <span class="addition-badge">+ Ekleme</span>
+                }
+              </p>
+              <label class="modal-label">Ret Sebebi:</label>
+              <textarea
+                class="reject-textarea"
+                [(ngModel)]="rejectReason"
+                placeholder="Ret sebebini yazın..."
+                rows="3"
+              ></textarea>
+            </div>
+            <div class="modal-actions">
+              <button class="action-btn" (click)="closeRejectModal()">İptal</button>
+              <button
+                class="action-btn reject"
+                [disabled]="!rejectReason.trim()"
+                (click)="submitReject()"
+              >
+                Reddet
+              </button>
+            </div>
+          </div>
         </div>
       }
     </div>
@@ -441,6 +493,138 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
       background: #ef4444;
       color: white;
     }
+
+    .action-btn.reject {
+      background: transparent;
+      border: 1px solid #f59e0b;
+      color: #f59e0b;
+    }
+
+    .action-btn.reject:hover {
+      background: #f59e0b;
+      color: white;
+    }
+
+    .action-btn.reject:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .addition-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      background: #8b5cf6;
+      color: white;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .rejection-reason {
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 6px;
+      border-left: 3px solid #ef4444;
+      font-size: 0.85rem;
+      color: #fca5a5;
+    }
+
+    .rejection-label {
+      font-weight: 600;
+      color: #ef4444;
+      margin-right: 4px;
+    }
+
+    /* Reject Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 24px;
+    }
+
+    .reject-modal {
+      background: var(--bg-secondary, #1a1a2e);
+      border: 1px solid var(--border-color, #333);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 440px;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color, #333);
+    }
+
+    .modal-header h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary, #888);
+      font-size: 1.2rem;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-info {
+      margin-bottom: 16px;
+      color: var(--text-secondary, #888);
+      font-size: 0.9rem;
+    }
+
+    .modal-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: var(--text-primary, #fff);
+    }
+
+    .reject-textarea {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color, #333);
+      background: var(--bg-tertiary, #252542);
+      color: var(--text-primary, #fff);
+      font-size: 0.9rem;
+      resize: vertical;
+      min-height: 80px;
+      font-family: inherit;
+    }
+
+    .reject-textarea:focus {
+      outline: none;
+      border-color: #f59e0b;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border-color, #333);
+    }
   `]
 })
 export class OrdersComponent implements OnInit {
@@ -449,6 +633,11 @@ export class OrdersComponent implements OnInit {
   orders = signal<OrderDto[]>([]);
   loading = signal(false);
   statusFilter: OrderStatus | null = null;
+
+  // Reject modal state
+  showRejectModal = signal(false);
+  rejectingOrder = signal<OrderDto | null>(null);
+  rejectReason = '';
 
   stats = computed(() => {
     const all = this.orders();
@@ -509,6 +698,34 @@ export class OrdersComponent implements OnInit {
     this.orderService.updateOrderStatus(order.id, status).subscribe({
       next: () => this.loadOrders(),
       error: (err) => console.error('Update failed:', err),
+    });
+  }
+
+  openRejectModal(order: OrderDto): void {
+    this.rejectingOrder.set(order);
+    this.rejectReason = '';
+    this.showRejectModal.set(true);
+  }
+
+  closeRejectModal(): void {
+    this.showRejectModal.set(false);
+    this.rejectingOrder.set(null);
+    this.rejectReason = '';
+  }
+
+  submitReject(): void {
+    const order = this.rejectingOrder();
+    if (!order || !this.rejectReason.trim()) return;
+
+    this.orderService.rejectOrder(order.id, this.rejectReason.trim()).subscribe({
+      next: () => {
+        this.closeRejectModal();
+        this.loadOrders();
+      },
+      error: (err) => {
+        console.error('Reject failed:', err);
+        alert(err.error?.error?.message || 'Ret işlemi başarısız oldu');
+      },
     });
   }
 

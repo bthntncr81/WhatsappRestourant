@@ -175,6 +175,7 @@ export class MenuService {
         basePrice: dto.basePrice,
         category: dto.category,
         isActive: dto.isActive ?? true,
+        isReadyFood: dto.isReadyFood ?? false,
         sortOrder: dto.sortOrder ?? 0,
         optionGroups: dto.optionGroupIds
           ? {
@@ -242,6 +243,7 @@ export class MenuService {
         basePrice: dto.basePrice,
         category: dto.category,
         isActive: dto.isActive,
+        isReadyFood: dto.isReadyFood,
         sortOrder: dto.sortOrder,
       },
       include: {
@@ -604,6 +606,7 @@ export class MenuService {
         description: item.description,
         basePrice: Number(item.basePrice),
         isActive: item.isActive,
+        isReadyFood: item.isReadyFood,
         optionGroupIds: item.optionGroups.map((og) => og.groupId),
       });
     }
@@ -808,6 +811,7 @@ export class MenuService {
       basePrice: Number(item.basePrice),
       category: item.category,
       isActive: item.isActive,
+      isReadyFood: item.isReadyFood,
       sortOrder: item.sortOrder,
       optionGroups: item.optionGroups?.map((og: any) => this.mapOptionGroupToDto(og.group)),
     };

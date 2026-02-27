@@ -28,6 +28,7 @@ export interface MenuItemDto {
   basePrice: number;
   category: string;
   isActive: boolean;
+  isReadyFood: boolean;
   sortOrder: number;
   optionGroups?: MenuOptionGroupDto[];
 }
@@ -38,6 +39,7 @@ export interface CreateMenuItemDto {
   basePrice: number;
   category: string;
   isActive?: boolean;
+  isReadyFood?: boolean;
   sortOrder?: number;
   optionGroupIds?: string[];
 }
@@ -48,6 +50,7 @@ export interface UpdateMenuItemDto {
   basePrice?: number;
   category?: string;
   isActive?: boolean;
+  isReadyFood?: boolean;
   sortOrder?: number;
   optionGroupIds?: string[];
 }
@@ -172,6 +175,7 @@ export interface CanonicalMenuItem {
   description: string | null;
   basePrice: number;
   isActive: boolean;
+  isReadyFood: boolean;
   optionGroupIds: string[];
 }
 

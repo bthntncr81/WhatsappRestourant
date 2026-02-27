@@ -51,6 +51,8 @@ export interface OrderDto {
   customerName: string | null;
   deliveryAddress: string | null;
   paymentMethod: string | null;
+  parentOrderId: string | null;
+  rejectionReason: string | null;
   items: OrderItemDto[];
   createdAt: string;
   updatedAt: string;
@@ -141,6 +143,14 @@ export class OrderService {
     return this.http.patch<ApiResponse<OrderDto>>(
       `${environment.apiBaseUrl}/orders/${id}/status`,
       { status },
+      this.headers
+    );
+  }
+
+  rejectOrder(id: string, reason: string): Observable<ApiResponse<OrderDto>> {
+    return this.http.post<ApiResponse<OrderDto>>(
+      `${environment.apiBaseUrl}/orders/${id}/reject`,
+      { reason },
       this.headers
     );
   }

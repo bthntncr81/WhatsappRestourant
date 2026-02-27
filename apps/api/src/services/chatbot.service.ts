@@ -272,13 +272,13 @@ export class ChatbotService {
   getStatusMessage(status: string, orderNumber?: number): string {
     const orderText = orderNumber ? `#${orderNumber}` : '';
     const messages: Record<string, string> = {
-      'PENDING_CONFIRMATION': `⏳ Siparisiniaz ${orderText} restoran onayı bekliyor...`,
-      'CONFIRMED': `✅ Siparisiniaz ${orderText} onaylandi! Hazirlaniyor...`,
-      'PREPARING': `👨‍🍳 Siparisiniaz ${orderText} hazirlaniyor!`,
-      'READY': `🎉 Siparisiniaz ${orderText} hazir! Kurye yola cikmak uzere.`,
-      'OUT_FOR_DELIVERY': `🚀 Siparisiniaz ${orderText} yola cikti!`,
-      'DELIVERED': `✅ Siparisiniaz ${orderText} teslim edildi! Afiyet olsun!`,
-      'CANCELLED': `❌ Siparisiniaz ${orderText} iptal edildi.`,
+      'PENDING_CONFIRMATION': `⏳ Siparisiniz ${orderText} restoran onayı bekliyor...`,
+      'CONFIRMED': `✅ Siparisiniz ${orderText} onaylandi! Hazirlaniyor...`,
+      'PREPARING': `👨‍🍳 Siparisiniz ${orderText} hazirlaniyor!`,
+      'READY': `🎉 Siparisiniz ${orderText} hazir! Kurye yola cikmak uzere.`,
+      'OUT_FOR_DELIVERY': `🚀 Siparisiniz ${orderText} yola cikti!`,
+      'DELIVERED': `✅ Siparisiniz ${orderText} teslim edildi! Afiyet olsun!`,
+      'CANCELLED': `❌ Siparisiniz ${orderText} iptal edildi.`,
     };
     return messages[status] || `📦 Siparis durumu: ${status}`;
   }

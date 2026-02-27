@@ -4,9 +4,11 @@ export type ConversationStatus = 'OPEN' | 'PENDING_AGENT' | 'CLOSED';
 
 export type ConversationPhase =
   | 'IDLE'
+  | 'ADDITION_PROMPT'
   | 'ORDER_COLLECTING'
   | 'ORDER_REVIEW'
   | 'LOCATION_REQUEST'
+  | 'ADDRESS_COLLECTION'
   | 'PAYMENT_METHOD_SELECTION'
   | 'PAYMENT_PENDING'
   | 'ORDER_CONFIRMED'

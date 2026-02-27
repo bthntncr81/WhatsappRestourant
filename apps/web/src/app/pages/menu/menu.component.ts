@@ -168,7 +168,12 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                         @for (item of category.items; track item.id) {
                           <div class="item-card" [class.inactive]="!item.isActive">
                             <div class="item-header">
-                              <span class="item-name">{{ item.name }}</span>
+                              <span class="item-name">
+                                {{ item.name }}
+                                @if (item.isReadyFood) {
+                                  <span class="ready-food-badge">Hazır Gıda</span>
+                                }
+                              </span>
                               <span class="item-price">{{ item.basePrice | currency }}</span>
                             </div>
                             @if (item.description) {
@@ -222,6 +227,13 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                       <input type="checkbox" [(ngModel)]="itemForm.isActive" name="isActive" />
                       Active
                     </label>
+                  </div>
+                  <div class="form-group">
+                    <label class="checkbox-label">
+                      <input type="checkbox" [(ngModel)]="itemForm.isReadyFood" name="isReadyFood" />
+                      Hazır Gıda
+                    </label>
+                    <span class="hint-text">Sipariş hazır durumundayken ekleme yapılabilecek ürünler</span>
                   </div>
                   <div class="modal-actions">
                     <button type="button" class="btn-secondary" (click)="closeItemForm()">Cancel</button>
@@ -713,6 +725,27 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
 
       .item-name {
         font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-xs);
+        flex-wrap: wrap;
+      }
+
+      .ready-food-badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: var(--radius-sm);
+        font-size: 0.625rem;
+        font-weight: 600;
+        background: #10b981;
+        color: white;
+        text-transform: uppercase;
+      }
+
+      .hint-text {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        margin-top: 2px;
       }
 
       .item-price {
@@ -1065,7 +1098,7 @@ export class MenuComponent implements OnInit {
   editingItem = signal<MenuItemDto | null>(null);
   editingGroupId = signal<string | null>(null);
 
-  itemForm = { name: '', description: '', basePrice: 0, category: '', isActive: true };
+  itemForm = { name: '', description: '', basePrice: 0, category: '', isActive: true, isReadyFood: false };
   optionGroupForm = { name: '', type: 'SINGLE' as const, required: false };
   optionForm = { name: '', priceDelta: 0, isDefault: false };
   synonymForm = { phrase: '', mapsToItemId: undefined as string | undefined, weight: 1 };
@@ -1186,6 +1219,7 @@ export class MenuComponent implements OnInit {
       basePrice: item.basePrice,
       category: item.category,
       isActive: item.isActive,
+      isReadyFood: item.isReadyFood,
     };
     this.showItemForm.set(true);
   }
@@ -1193,7 +1227,7 @@ export class MenuComponent implements OnInit {
   closeItemForm(): void {
     this.showItemForm.set(false);
     this.editingItem.set(null);
-    this.itemForm = { name: '', description: '', basePrice: 0, category: '', isActive: true };
+    this.itemForm = { name: '', description: '', basePrice: 0, category: '', isActive: true, isReadyFood: false };
   }
 
   saveItem(): void {
