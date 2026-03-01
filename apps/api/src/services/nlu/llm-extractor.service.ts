@@ -28,9 +28,9 @@ TURKCE MIKTAR KELIMELERI:
 - Miktar belirtilmemisse 1 kabul et
 
 OLUMSUZLUK / OZEL ISTEK:
-- "olmadan", "haris", "-siz", "-suz", "-siz", "-suz" = istenmeyen malzeme
-  Ornek: "sosusuz", "aci olmadan", "sogansiz"
-  → notes alanina yaz (orn: "Sos olmadan"), optionSelections'a EKLEME
+- "olmadan", "olmasin", "koyma", "koymayin", "haris", "-siz", "-suz", "-siz", "-suz" = istenmeyen malzeme
+  Ornek: "sosusuz", "aci olmadan", "sogansiz", "sogan olmasin", "sos koymayin"
+  → notes alanina yaz (orn: "Sogan olmasin"), optionSelections'a EKLEME
 - "ekstra", "fazla", "bol" = ekstra istek
   Ornek: "ekstra sos", "bol sogan"
   → extras alanina yaz
@@ -46,6 +46,9 @@ DEGISIKLIK KOMUTLARI (action alani):
 - "cikar", "kaldir", "istemiyorum", "iptal" → action: "remove"
 - Mevcut sipariste degisiklik yoksa → action: "keep"
 - Yeni siparis (mevcut siparis yoksa) → tum itemler action: "add"
+- ONEMLI: Mevcut bir urune not/ozellik eklenmek isteniyorsa (orn: "tavuk burgerde sogan olmasin")
+  → O urun icin action: "keep" kullan AMA notes alanini doldur (orn: "Sogan olmasin")
+  → Miktari (qty) mevcut siparisinla ayni tut, artirma
 
 SELAMLAMA vs SIPARIS:
 - "merhaba", "selam", "iyi gunler", "nasilsiniz" gibi selamlasmalar:

@@ -515,7 +515,23 @@ export class NluOrchestratorService {
           }
         }
       }
-      // action === 'keep' → do nothing, item stays as is
+      // action === 'keep' → preserve item, but apply notes/extras if LLM provided them
+      if (action === 'keep') {
+        // Find the existing item to update notes/extras (e.g. "sogansiz" on existing burger)
+        const existingByKey = existingItemsMap.get(key);
+        const existingItem = existingByKey ||
+          [...existingItemsMap.values()].find((v) => v.menuItemId === item.menuItemId);
+        if (existingItem) {
+          if (item.notes) {
+            existingItem.notes = existingItem.notes
+              ? `${existingItem.notes}, ${item.notes}`
+              : item.notes;
+          }
+          if (extrasJson) {
+            existingItem.extrasJson = extrasJson;
+          }
+        }
+      }
     }
 
     // Build final order items array
