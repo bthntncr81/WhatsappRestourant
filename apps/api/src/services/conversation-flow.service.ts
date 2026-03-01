@@ -407,8 +407,9 @@ export class ConversationFlowService {
       return 'ORDER_COLLECTING';
     }
 
-    // Cancel
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // Cancel — only full order cancel if text is purely a cancel keyword
+    // "salata iptal" gibi urun+iptal ifadelerini NLU'ya gonder (urun cikarma)
+    if (this.isFullCancelIntent(text)) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
@@ -471,9 +472,29 @@ export class ConversationFlowService {
       return 'ORDER_REVIEW';
     }
 
-    // Cancel
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // Cancel — only full order cancel; "X iptal" goes to NLU for item removal
+    if (this.isFullCancelIntent(text)) {
       await this.cancelActiveOrder(ctx);
+      await this.sendText(ctx, TEMPLATES.orderCancelled);
+      return 'IDLE';
+    }
+
+    // "X iptal" gibi urun cikarma ifadelerini NLU'ya gonder
+    if (!this.isFullCancelIntent(text) && this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+      // Pass to NLU for item removal, then show updated summary
+      const result = await nluOrchestratorService.processMessage(
+        tenantId, conversationId, message.id, text,
+      );
+      if (result.confirmationMessage) {
+        await this.sendText(ctx, result.confirmationMessage);
+      }
+      const order = await this.getActiveOrder(ctx);
+      if (order && order.items.length > 0) {
+        const summary = this.buildOrderSummary(order);
+        await this.sendText(ctx, summary);
+        return 'ORDER_REVIEW';
+      }
+      // All items removed
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
     }
@@ -768,8 +789,21 @@ export class ConversationFlowService {
       return 'LOCATION_REQUEST';
     }
 
-    // Not a location message - remind user
-    await this.sendText(ctx, TEMPLATES.reminderSendLocation);
+    // Text message during LOCATION_REQUEST — give contextual help
+    // Check if previous geo check was out of service area
+    const prevGeoCheck = await inboxService.getConversationGeoCheck(tenantId, conversationId);
+    if (prevGeoCheck && !prevGeoCheck.isWithinServiceArea) {
+      // Customer was told they're out of service area, they might be typing a text address
+      await this.sendText(
+        ctx,
+        'Yazili adres kabul edemiyoruz, hizmet alanimizi kontrol etmemiz icin konum pininize ihtiyacimiz var.\n\n' +
+        'Farkli bir konumdan gondermek icin:\n' +
+        '📎 simgesine tiklayip > *Konum* secenegini kullanin.\n\n' +
+        'Siparisi iptal etmek icin "iptal" yazin.',
+      );
+    } else {
+      await this.sendText(ctx, TEMPLATES.reminderSendLocation);
+    }
     return 'LOCATION_REQUEST';
   }
 
@@ -1634,6 +1668,35 @@ export class ConversationFlowService {
 
   private matchesKeyword(text: string, keywords: string[]): boolean {
     return keywords.some((kw) => text.includes(kw));
+  }
+
+  /**
+   * Checks if user text is a FULL order cancellation intent vs item-level removal.
+   * "iptal", "siparis iptal", "siparisi iptal et", "vazgec" → full cancel
+   * "salata iptal", "kolayi sil", "1 ayrani cikar" → item removal (NOT full cancel)
+   */
+  private isFullCancelIntent(text: string): boolean {
+    const words = text.split(/\s+/).filter(Boolean);
+    // Pure cancel keywords (1-2 word phrases)
+    const fullCancelPhrases = [
+      'iptal', 'vazgec', 'istemiyorum', 'temizle',
+      'siparis iptal', 'siparisi iptal', 'siparisi iptal et',
+      'siparis sil', 'hepsini iptal', 'hepsini sil',
+      'tum siparisi iptal', 'her seyi iptal',
+    ];
+
+    // Check if text exactly matches or is very close to a full cancel phrase
+    if (fullCancelPhrases.includes(text)) return true;
+
+    // If there's only one word and it's a cancel keyword, it's full cancel
+    if (words.length === 1 && CANCEL_KEYWORDS.includes(words[0])) return true;
+
+    // If the text starts with "siparis" + cancel keyword, it's full cancel
+    if (words.length <= 3 && words[0] === 'siparis' && CANCEL_KEYWORDS.some(k => text.includes(k))) return true;
+    if (words.length <= 3 && words[0] === 'siparisi' && CANCEL_KEYWORDS.some(k => text.includes(k))) return true;
+
+    // Otherwise, likely item-level removal (e.g., "salata iptal", "1 kola sil")
+    return false;
   }
 }
 
