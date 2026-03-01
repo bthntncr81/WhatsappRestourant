@@ -323,7 +323,6 @@ export class LlmOrderExtractorService {
     if (orderNotes) {
       msg += `\n\nNot: ${orderNotes}`;
     }
-    msg += '\n\nBaska eklemek icin yazin, onaylamak icin "evet" yazin.';
     return msg;
   }
 }

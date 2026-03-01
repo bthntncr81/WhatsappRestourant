@@ -37,8 +37,14 @@ export const TEMPLATES = {
     if (orderNotes) {
       msg += `\n\nNot: ${orderNotes}`;
     }
-    msg += '\n\nOnaylamak icin "evet", degistirmek icin yeni urun yazin, iptal icin "iptal" yazin.';
     return msg;
+  },
+
+  orderConfirmButtons: {
+    buttons: [
+      { id: 'confirm_order', title: 'Onayla' },
+      { id: 'cancel_order', title: 'Iptal' },
+    ],
   },
 
   orderEmpty: 'Sepetiniz bos. Siparis vermek icin urun adini yazin.',
@@ -96,8 +102,9 @@ export const TEMPLATES = {
   paymentMethodButtons: {
     body: 'Odeme yontemini secin:',
     buttons: [
-      { id: 'pay_cash', title: 'Nakit' },
-      { id: 'pay_card', title: 'Kredi Karti' },
+      { id: 'pay_cash', title: 'Nakit (kapida)' },
+      { id: 'pay_card_door', title: 'Kart (kapida)' },
+      { id: 'pay_card_online', title: 'Online Kredi Karti' },
     ],
   },
 

@@ -409,10 +409,21 @@ export class ConversationFlowService {
   private async handleOrderCollecting(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message, conversation } = ctx;
     const text = normalizeTr(message.text || '');
+    const buttonId = ctx.payload.interactive?.buttonReply?.id;
+
+    // Handle confirm/cancel buttons from order summary
+    if (buttonId === 'confirm_order') {
+      return this.handleOrderConfirm(ctx);
+    }
+    if (buttonId === 'cancel_order') {
+      await this.cancelActiveOrder(ctx);
+      await this.sendText(ctx, TEMPLATES.orderCancelled);
+      return 'IDLE';
+    }
 
     // Adim 10: Faz-mesaj turu uyumsuzlugu
     if (message.kind === 'LOCATION') {
-      await this.sendText(ctx, 'Once siparisi onaylayin, sonra konum isteyecegiz. Onaylamak icin "evet" yazin.');
+      await this.sendText(ctx, 'Once siparisi onaylayin, sonra konum isteyecegiz.');
       return 'ORDER_COLLECTING';
     }
 
@@ -450,7 +461,7 @@ export class ConversationFlowService {
       const order = await this.getActiveOrder(ctx);
       if (order && order.items.length > 0) {
         const summary = this.buildOrderSummary(order);
-        await this.sendText(ctx, summary);
+        await this.sendOrderConfirmButtons(ctx, summary);
         return 'ORDER_REVIEW';
       }
       // No draft order → "evet" might be answer to a clarification question
@@ -470,11 +481,13 @@ export class ConversationFlowService {
     }
 
     if (result.confirmationMessage) {
-      await this.sendText(ctx, result.confirmationMessage);
+      // Send summary with confirm/cancel buttons
+      await this.sendOrderConfirmButtons(ctx, result.confirmationMessage);
       // Adim 9: Erken minimum sepet uyarisi
       if (result.draftOrderId) {
         await this.checkMinBasketWarning(ctx, result.draftOrderId);
       }
+      return 'ORDER_REVIEW';
     } else if (result.clarificationQuestion) {
       await this.sendText(ctx, result.clarificationQuestion);
     } else if (!result.itemsExtracted) {
@@ -486,7 +499,7 @@ export class ConversationFlowService {
   }
 
   /**
-   * ORDER_REVIEW: Order summary shown, waiting for customer yes/no/edit.
+   * ORDER_REVIEW: Order summary shown with buttons, waiting for confirm/cancel/edit.
    */
   private async handleOrderReview(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message, conversation, payload } = ctx;
@@ -496,6 +509,18 @@ export class ConversationFlowService {
     // Handle UPSELL_OFFERED sub-state
     if (conversation.flowSubState === 'UPSELL_OFFERED') {
       return this.handleUpsellResponse(ctx, text, buttonId);
+    }
+
+    // Handle confirm button
+    if (buttonId === 'confirm_order' || this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+      return this.handleOrderConfirm(ctx);
+    }
+
+    // Handle cancel button
+    if (buttonId === 'cancel_order') {
+      await this.cancelActiveOrder(ctx);
+      await this.sendText(ctx, TEMPLATES.orderCancelled);
+      return 'IDLE';
     }
 
     if (message.kind !== 'TEXT' || !text) {
@@ -521,72 +546,12 @@ export class ConversationFlowService {
       const order = await this.getActiveOrder(ctx);
       if (order && order.items.length > 0) {
         const summary = this.buildOrderSummary(order);
-        await this.sendText(ctx, summary);
+        await this.sendOrderConfirmButtons(ctx, summary);
         return 'ORDER_REVIEW';
       }
       // All items removed
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
-    }
-
-    // Confirm -> try upsell, then ask for location
-    if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
-      // Check if this is an addition order - skip location/address
-      const order = await this.getActiveOrder(ctx);
-      if (order?.parentOrderId) {
-        // Validate items for addition
-        const validationError = await this.validateAdditionItems(ctx, order);
-        if (validationError) {
-          await this.sendText(ctx, validationError);
-          return 'ORDER_COLLECTING';
-        }
-        // Skip location & address -> go straight to payment
-        await this.sendPaymentButtons(ctx);
-        return 'PAYMENT_METHOD_SELECTION';
-      }
-
-      // Try upsell before proceeding to address/location
-      if (order) {
-        try {
-          const suggestion = await upsellService.getSuggestion(
-            tenantId,
-            order.id,
-            conversation.customerPhone,
-            conversation.customerName,
-          );
-
-          if (suggestion) {
-            // Store suggestion in flowSubState metadata
-            await prisma.conversation.update({
-              where: { id: conversationId },
-              data: {
-                flowSubState: 'UPSELL_OFFERED',
-                flowMetadata: JSON.stringify({
-                  upsellItemId: suggestion.itemId,
-                  upsellItemName: suggestion.itemName,
-                  upsellPrice: suggestion.price,
-                  upsellSource: suggestion.source,
-                }),
-              },
-            });
-
-            // Send AI message + buttons
-            const tmpl = TEMPLATES.upsellButtons(suggestion.price);
-            await whatsappService.sendInteractiveButtons(
-              tenantId,
-              conversationId,
-              suggestion.message,
-              tmpl.buttons,
-            );
-            return 'ORDER_REVIEW';
-          }
-        } catch (err) {
-          logger.warn({ err }, 'Upsell check failed, continuing normal flow');
-        }
-      }
-
-      // No upsell -> proceed to address/location
-      return this.proceedToAddressFlow(ctx);
     }
 
     // Edit -> back to collecting
@@ -605,12 +570,79 @@ export class ConversationFlowService {
     const order = await this.getActiveOrder(ctx);
     if (order && order.items.length > 0) {
       const summary = this.buildOrderSummary(order);
-      await this.sendText(ctx, summary);
+      await this.sendOrderConfirmButtons(ctx, summary);
       return 'ORDER_REVIEW';
     }
-    // NLU couldn't parse it
-    await this.sendText(ctx, 'Onaylamak icin "evet", iptal icin "iptal" yazin.');
+    // NLU couldn't parse it — re-send confirm buttons
+    const existingOrder = await this.getActiveOrder(ctx);
+    if (existingOrder && existingOrder.items.length > 0) {
+      const summary = this.buildOrderSummary(existingOrder);
+      await this.sendOrderConfirmButtons(ctx, summary);
+    }
     return 'ORDER_REVIEW';
+  }
+
+  /**
+   * Handle order confirmation (from button or text)
+   */
+  private async handleOrderConfirm(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation } = ctx;
+
+    const order = await this.getActiveOrder(ctx);
+    if (!order || order.items.length === 0) {
+      await this.sendText(ctx, TEMPLATES.orderEmpty);
+      return 'IDLE';
+    }
+
+    // Check if this is an addition order - skip location/address
+    if (order.parentOrderId) {
+      const validationError = await this.validateAdditionItems(ctx, order);
+      if (validationError) {
+        await this.sendText(ctx, validationError);
+        return 'ORDER_COLLECTING';
+      }
+      await this.sendPaymentButtons(ctx);
+      return 'PAYMENT_METHOD_SELECTION';
+    }
+
+    // Try upsell before proceeding to address/location
+    try {
+      const suggestion = await upsellService.getSuggestion(
+        tenantId,
+        order.id,
+        conversation.customerPhone,
+        conversation.customerName,
+      );
+
+      if (suggestion) {
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: {
+            flowSubState: 'UPSELL_OFFERED',
+            flowMetadata: JSON.stringify({
+              upsellItemId: suggestion.itemId,
+              upsellItemName: suggestion.itemName,
+              upsellPrice: suggestion.price,
+              upsellSource: suggestion.source,
+            }),
+          },
+        });
+
+        const tmpl = TEMPLATES.upsellButtons(suggestion.price);
+        await whatsappService.sendInteractiveButtons(
+          tenantId,
+          conversationId,
+          suggestion.message,
+          tmpl.buttons,
+        );
+        return 'ORDER_REVIEW';
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Upsell check failed, continuing normal flow');
+    }
+
+    // No upsell -> proceed to address/location
+    return this.proceedToAddressFlow(ctx);
   }
 
   /**
@@ -676,7 +708,7 @@ export class ConversationFlowService {
       }
     } else {
       // Unrecognized response — remind
-      await this.sendText(ctx, 'Eklemek icin "evet", devam etmek icin "hayir" yazin.');
+      await this.sendText(ctx, 'Lutfen butonlardan birini secin.');
       return 'ORDER_REVIEW';
     }
 
@@ -864,7 +896,11 @@ export class ConversationFlowService {
       return this.handleCashPayment(ctx);
     }
 
-    if (buttonId === 'pay_card' || this.matchesKeyword(text, CARD_KEYWORDS)) {
+    if (buttonId === 'pay_card_door') {
+      return this.handleCardDoorPayment(ctx);
+    }
+
+    if (buttonId === 'pay_card_online' || buttonId === 'pay_card' || this.matchesKeyword(text, CARD_KEYWORDS)) {
       return this.handleCardPayment(ctx);
     }
 
@@ -1121,7 +1157,7 @@ export class ConversationFlowService {
     }
 
     // Unrecognized response — remind
-    await this.sendText(ctx, 'Kampanya bildirimlerini almak ister misiniz? "evet" veya "hayir" yazin.');
+    await this.sendText(ctx, 'Lutfen butonlardan birini secin.');
     return 'ORDER_CONFIRMED';
   }
 
@@ -1168,6 +1204,33 @@ export class ConversationFlowService {
     });
 
     await this.sendText(ctx, TEMPLATES.cashConfirmed(pendingOrder.orderNumber || 0));
+    await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
+    return 'ORDER_CONFIRMED';
+  }
+
+  private async handleCardDoorPayment(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation } = ctx;
+    const orderId = conversation.activeOrderId;
+
+    if (!orderId) {
+      await this.sendText(ctx, TEMPLATES.orderEmpty);
+      return 'IDLE';
+    }
+
+    // Record as cash-like payment (no online processing needed)
+    await orderPaymentService.recordCashPayment(tenantId, orderId, conversationId);
+
+    const pendingOrder = await orderService.setPendingConfirmation(tenantId, orderId, {
+      paymentMethod: 'CREDIT_CARD',
+    });
+
+    await this.sendText(
+      ctx,
+      `✅ *Siparisinia alindi!*\n\n` +
+      `📦 Siparis No: #${pendingOrder.orderNumber || 0}\n` +
+      `💳 Odeme: Kapida kredi karti\n` +
+      `⏳ Restoran onayiniz bekleniyor...`,
+    );
     await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
     return 'ORDER_CONFIRMED';
   }
@@ -1556,7 +1619,7 @@ export class ConversationFlowService {
     if (this.matchesKeyword(text, GREETING_KEYWORDS)) {
       const order = await this.getActiveOrder(ctx);
       if (order && order.items.length > 0) {
-        await this.sendText(ctx, 'Merhaba! Siparisininize devam edebilirsiniz. Onaylamak icin "evet", urun eklemek icin urun adini yazin.');
+        await this.sendText(ctx, 'Merhaba! Siparisininize devam edebilirsiniz. Urun eklemek icin urun adini yazin veya onay butonuna basin.');
       } else {
         await this.sendText(ctx, 'Merhaba! Siparis vermek icin urun adini yazabilirsiniz.');
       }
@@ -1567,7 +1630,7 @@ export class ConversationFlowService {
     if (this.matchesKeyword(text, THANKS_KEYWORDS)) {
       const order = await this.getActiveOrder(ctx);
       if (order && order.items.length > 0) {
-        await this.sendText(ctx, 'Rica ederim! Siparisi onaylamak icin "evet" yazin veya baska urun ekleyebilirsiniz.');
+        await this.sendText(ctx, 'Rica ederim! Baska urun ekleyebilir veya onay butonuna basabilirsiniz.');
       } else {
         await this.sendText(ctx, 'Rica ederim! Siparis vermek isterseniz urun adini yazabilirsiniz.');
       }
@@ -1581,7 +1644,7 @@ export class ConversationFlowService {
         'Siparis vermek icin:\n' +
         '1. Urun adini yazin (orn: "1 Et Doner", "2 Kola")\n' +
         '2. Birden fazla urun ekleyebilirsiniz\n' +
-        '3. Hazir olunca "evet" yazarak onaylayin\n' +
+        '3. Hazir olunca onay butonuna basin\n' +
         '4. Menuyu gormek icin "menu" yazin',
       );
       return;
@@ -1592,7 +1655,7 @@ export class ConversationFlowService {
     if (order && order.items.length > 0) {
       await this.sendText(
         ctx,
-        'Anlayamadim. Urun eklemek icin urun adini yazin (orn: "1 Kola"), siparisi onaylamak icin "evet" yazin.',
+        'Anlayamadim. Urun eklemek icin urun adini yazin (orn: "1 Kola") veya onay butonuna basin.',
       );
     } else {
       await this.sendText(
@@ -1655,6 +1718,16 @@ export class ConversationFlowService {
 
   private async sendText(ctx: FlowContext, text: string): Promise<void> {
     await whatsappService.sendText(ctx.tenantId, ctx.conversationId, text);
+  }
+
+  private async sendOrderConfirmButtons(ctx: FlowContext, summaryText: string): Promise<void> {
+    const tmpl = TEMPLATES.orderConfirmButtons;
+    await whatsappService.sendInteractiveButtons(
+      ctx.tenantId,
+      ctx.conversationId,
+      summaryText,
+      tmpl.buttons,
+    );
   }
 
   private async sendPaymentButtons(ctx: FlowContext): Promise<void> {
