@@ -211,6 +211,14 @@ export class WhatsAppProviderService {
             mimeType: msg.voice.mime_type,
           };
           break;
+        case 'audio':
+          // Meta Cloud API sends voice notes as 'audio' type
+          payload.type = 'voice'; // Normalize to 'voice' for internal handling
+          payload.voice = {
+            id: msg.audio.id,
+            mimeType: msg.audio.mime_type,
+          };
+          break;
         case 'interactive':
           if (msg.interactive.type === 'button_reply') {
             payload.type = 'interactive';
