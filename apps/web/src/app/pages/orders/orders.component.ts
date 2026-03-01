@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { OrderService, OrderDto, OrderStatus } from '../../services/order.service';
+import { OrderService, OrderDto, OrderStatus, CustomerDetailDto } from '../../services/order.service';
 import { NotificationService } from '../../services/notification.service';
 
 @Component({
@@ -64,7 +64,7 @@ import { NotificationService } from '../../services/notification.service';
       } @else {
         <div class="orders-grid">
           @for (order of orders(); track order.id) {
-            <div class="order-card" [class]="'status-' + order.status.toLowerCase()">
+            <div class="order-card" [class]="'status-' + order.status.toLowerCase()" (click)="openCustomerPanel(order)">
               <div class="order-header">
                 <div class="order-number">
                   #{{ order.orderNumber || '---' }}
@@ -111,38 +111,38 @@ import { NotificationService } from '../../services/notification.service';
 
               <div class="order-actions">
                 @if (order.status === 'DRAFT' || order.status === 'PENDING_CONFIRMATION') {
-                  <button class="action-btn confirm" (click)="confirmOrder(order)">
+                  <button class="action-btn confirm" (click)="$event.stopPropagation(); confirmOrder(order)">
                     ✓ Onayla
                   </button>
-                  <button class="action-btn reject" (click)="openRejectModal(order)">
+                  <button class="action-btn reject" (click)="$event.stopPropagation(); openRejectModal(order)">
                     ✗ Reddet
                   </button>
                 }
                 @if (order.status === 'CONFIRMED') {
-                  <button class="action-btn" (click)="updateStatus(order, 'PREPARING')">
+                  <button class="action-btn" (click)="$event.stopPropagation(); updateStatus(order, 'PREPARING')">
                     🍳 Hazırlanıyor
                   </button>
                 }
                 @if (order.status === 'PREPARING') {
-                  <button class="action-btn success" (click)="updateStatus(order, 'READY')">
+                  <button class="action-btn success" (click)="$event.stopPropagation(); updateStatus(order, 'READY')">
                     ✓ Hazır
                   </button>
                 }
                 @if (order.status === 'READY') {
-                  <button class="action-btn success" (click)="updateStatus(order, 'DELIVERED')">
+                  <button class="action-btn success" (click)="$event.stopPropagation(); updateStatus(order, 'DELIVERED')">
                     🚗 Teslim Edildi
                   </button>
                 }
                 @if (order.status !== 'CANCELLED' && order.status !== 'DELIVERED') {
-                  <button class="action-btn danger" (click)="updateStatus(order, 'CANCELLED')">
+                  <button class="action-btn danger" (click)="$event.stopPropagation(); updateStatus(order, 'CANCELLED')">
                     ✗ İptal
                   </button>
                 }
                 @if (order.orderNumber) {
-                  <button class="action-btn" (click)="reprintKitchen(order)">
+                  <button class="action-btn" (click)="$event.stopPropagation(); reprintKitchen(order)">
                     🍳 Mutfak Fişi
                   </button>
-                  <button class="action-btn" (click)="reprintCourier(order)">
+                  <button class="action-btn" (click)="$event.stopPropagation(); reprintCourier(order)">
                     🛵 Kurye Fişi
                   </button>
                 }
@@ -186,6 +186,126 @@ import { NotificationService } from '../../services/notification.service';
               </button>
             </div>
           </div>
+        </div>
+      }
+
+      <!-- Customer Detail Panel -->
+      @if (showCustomerPanel()) {
+        <div class="panel-overlay" (click)="closeCustomerPanel()"></div>
+        <div class="customer-panel" (click)="$event.stopPropagation()">
+          <div class="panel-header">
+            <h3>Musteri Detayi</h3>
+            <button class="close-btn" (click)="closeCustomerPanel()">✕</button>
+          </div>
+
+          @if (customerDetailLoading()) {
+            <div class="panel-loading">Yukleniyor...</div>
+          } @else if (customerDetail()) {
+            <div class="panel-content">
+              <!-- Customer Info -->
+              <div class="panel-section">
+                <div class="customer-info-header">
+                  <span class="customer-avatar">{{ (customerDetail()!.customerName || 'M')[0].toUpperCase() }}</span>
+                  <div>
+                    <div class="customer-detail-name">{{ customerDetail()!.customerName || 'Misafir' }}</div>
+                    <div class="customer-detail-phone">{{ customerDetail()!.customerPhone }}</div>
+                    @if (customerDetail()!.firstOrderDate) {
+                      <div class="customer-since">Ilk siparis: {{ formatDate(customerDetail()!.firstOrderDate!) }}</div>
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <!-- Stats -->
+              <div class="panel-section">
+                <h4 class="section-title">Istatistikler</h4>
+                <div class="stats-grid-panel">
+                  <div class="stat-card-panel">
+                    <span class="stat-card-value">{{ customerDetail()!.stats.totalOrders }}</span>
+                    <span class="stat-card-label-panel">Siparis</span>
+                  </div>
+                  <div class="stat-card-panel">
+                    <span class="stat-card-value">{{ customerDetail()!.stats.totalSpent | number:'1.0-0' }} TL</span>
+                    <span class="stat-card-label-panel">Toplam</span>
+                  </div>
+                  <div class="stat-card-panel">
+                    <span class="stat-card-value">{{ customerDetail()!.stats.averageOrderValue | number:'1.0-0' }} TL</span>
+                    <span class="stat-card-label-panel">Ortalama</span>
+                  </div>
+                  <div class="stat-card-panel">
+                    <span class="stat-card-value">{{ customerDetail()!.stats.cancelledOrders }}</span>
+                    <span class="stat-card-label-panel">Iptal</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Current Order Address -->
+              @if (selectedOrder()?.deliveryAddress) {
+                <div class="panel-section">
+                  <h4 class="section-title">Teslimat Adresi (Bu Siparis)</h4>
+                  <div class="address-card current">
+                    <span class="address-icon">📍</span>
+                    <span>{{ selectedOrder()!.deliveryAddress }}</span>
+                  </div>
+                </div>
+              }
+
+              <!-- Favorite Items -->
+              @if (customerDetail()!.favoriteItems.length > 0) {
+                <div class="panel-section">
+                  <h4 class="section-title">En Cok Siparis Edilen</h4>
+                  @for (item of customerDetail()!.favoriteItems; track item.menuItemName) {
+                    <div class="favorite-item">
+                      <span class="favorite-name">{{ item.menuItemName }}</span>
+                      <span class="favorite-count">{{ item.totalQty }}x ({{ item.orderCount }} siparis)</span>
+                    </div>
+                  }
+                </div>
+              }
+
+              <!-- Saved Addresses -->
+              @if (customerDetail()!.savedAddresses.length > 0) {
+                <div class="panel-section">
+                  <h4 class="section-title">Kayitli Adresler</h4>
+                  @for (addr of customerDetail()!.savedAddresses; track addr.id) {
+                    <div class="address-card">
+                      <div class="address-name-panel">{{ addr.name }}</div>
+                      <div class="address-text">{{ addr.address }}</div>
+                    </div>
+                  }
+                </div>
+              }
+
+              <!-- Order History -->
+              @if (customerDetail()!.recentOrders.length > 0) {
+                <div class="panel-section">
+                  <h4 class="section-title">Siparis Gecmisi</h4>
+                  @for (histOrder of customerDetail()!.recentOrders; track histOrder.id) {
+                    <div class="history-order">
+                      <div class="history-header">
+                        <span class="history-number">#{{ histOrder.orderNumber || '---' }}</span>
+                        <span class="status-badge small" [class]="histOrder.status.toLowerCase()">
+                          {{ getStatusLabel(histOrder.status) }}
+                        </span>
+                      </div>
+                      <div class="history-items">
+                        @for (hItem of histOrder.items.slice(0, 3); track hItem.menuItemName) {
+                          <span class="history-item">{{ hItem.qty }}x {{ hItem.menuItemName }}</span>
+                        }
+                        @if (histOrder.items.length > 3) {
+                          <span class="history-item more">+{{ histOrder.items.length - 3 }} urun daha</span>
+                        }
+                      </div>
+                      <div class="history-footer">
+                        <span class="history-total">{{ histOrder.totalPrice | number:'1.2-2' }} TL</span>
+                        <span class="history-date">{{ formatDate(histOrder.createdAt) }}</span>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
         </div>
       }
     </div>
@@ -653,6 +773,247 @@ import { NotificationService } from '../../services/notification.service';
       padding: 16px 20px;
       border-top: 1px solid var(--border-color, #333);
     }
+
+    /* Customer Detail Panel */
+    .order-card { cursor: pointer; }
+
+    .panel-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+    }
+
+    .customer-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 420px;
+      max-width: 90vw;
+      background: var(--bg-primary, #0f0f23);
+      border-left: 1px solid var(--border-color, #333);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      animation: slideIn 0.25s ease-out;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color, #333);
+      flex-shrink: 0;
+    }
+
+    .panel-header h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+    }
+
+    .panel-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px;
+      color: var(--text-secondary, #888);
+    }
+
+    .panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+    }
+
+    .panel-section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary, #888);
+      margin-bottom: 12px;
+    }
+
+    .customer-info-header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .customer-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--accent-primary, #6366f1);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .customer-detail-name {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+    }
+
+    .customer-detail-phone {
+      font-size: 0.9rem;
+      color: var(--text-secondary, #888);
+      font-family: var(--font-mono);
+    }
+
+    .customer-since {
+      font-size: 0.8rem;
+      color: var(--text-secondary, #888);
+      margin-top: 4px;
+    }
+
+    .stats-grid-panel {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .stat-card-panel {
+      background: var(--bg-secondary, #1a1a2e);
+      border: 1px solid var(--border-color, #333);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-card-value {
+      display: block;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-primary, #fff);
+    }
+
+    .stat-card-label-panel {
+      font-size: 0.75rem;
+      color: var(--text-secondary, #888);
+    }
+
+    .favorite-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--bg-secondary, #1a1a2e);
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+
+    .favorite-name {
+      font-size: 0.9rem;
+      color: var(--text-primary, #fff);
+      font-weight: 500;
+    }
+
+    .favorite-count {
+      font-size: 0.8rem;
+      color: var(--accent-primary, #6366f1);
+      font-weight: 600;
+    }
+
+    .address-card {
+      padding: 10px 12px;
+      background: var(--bg-secondary, #1a1a2e);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 0.85rem;
+      color: var(--text-primary, #fff);
+    }
+
+    .address-card.current {
+      border: 1px solid var(--accent-primary, #6366f1);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .address-name-panel {
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-bottom: 2px;
+    }
+
+    .address-text {
+      font-size: 0.8rem;
+      color: var(--text-secondary, #888);
+    }
+
+    .history-order {
+      padding: 12px;
+      background: var(--bg-secondary, #1a1a2e);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      border: 1px solid var(--border-color, #333);
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .history-number {
+      font-weight: 700;
+      color: var(--text-primary, #fff);
+    }
+
+    .status-badge.small {
+      font-size: 0.65rem;
+      padding: 2px 8px;
+    }
+
+    .history-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 8px;
+      margin-bottom: 8px;
+    }
+
+    .history-item {
+      font-size: 0.8rem;
+      color: var(--text-secondary, #888);
+    }
+
+    .history-item.more {
+      font-style: italic;
+    }
+
+    .history-footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+    }
+
+    .history-total {
+      font-weight: 600;
+      color: var(--accent-secondary, #10b981);
+    }
+
+    .history-date {
+      color: var(--text-secondary, #888);
+    }
   `]
 })
 export class OrdersComponent implements OnInit, OnDestroy {
@@ -675,6 +1036,12 @@ export class OrdersComponent implements OnInit, OnDestroy {
   showRejectModal = signal(false);
   rejectingOrder = signal<OrderDto | null>(null);
   rejectReason = '';
+
+  // Customer detail panel state
+  showCustomerPanel = signal(false);
+  customerDetail = signal<CustomerDetailDto | null>(null);
+  customerDetailLoading = signal(false);
+  selectedOrder = signal<OrderDto | null>(null);
 
   stats = computed(() => {
     const all = this.allOrders();
@@ -814,6 +1181,42 @@ export class OrdersComponent implements OnInit, OnDestroy {
         console.error('Reject failed:', err);
         alert(err.error?.error?.message || 'Ret işlemi başarısız oldu');
       },
+    });
+  }
+
+  openCustomerPanel(order: OrderDto): void {
+    if (!order.customerPhone) return;
+
+    this.selectedOrder.set(order);
+    this.showCustomerPanel.set(true);
+    this.customerDetailLoading.set(true);
+    this.customerDetail.set(null);
+
+    this.orderService.getCustomerDetails(order.customerPhone).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.customerDetail.set(res.data);
+        }
+        this.customerDetailLoading.set(false);
+      },
+      error: () => this.customerDetailLoading.set(false),
+    });
+  }
+
+  closeCustomerPanel(): void {
+    this.showCustomerPanel.set(false);
+    this.selectedOrder.set(null);
+    this.customerDetail.set(null);
+  }
+
+  formatDate(dateStr: string): string {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('tr-TR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   }
 

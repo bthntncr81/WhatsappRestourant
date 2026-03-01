@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { ApiResponse, OrderDto, PrintJobDto } from '@whatres/shared';
 import { orderService } from '../services/order.service';
+import { customerService, CustomerDetailDto } from '../services/customer.service';
 import { printJobService } from '../services/print-job.service';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error-handler';
@@ -64,6 +65,36 @@ router.get(
       next(error);
     }
   }
+);
+
+/**
+ * GET /orders/customer/:phone
+ * Get customer details aggregated by phone number
+ */
+const customerPhoneSchema = z.object({
+  phone: z.string().min(10).max(20),
+});
+
+router.get(
+  '/customer/:phone',
+  async (req: Request, res: Response<ApiResponse<CustomerDetailDto>>, next: NextFunction) => {
+    try {
+      const validation = customerPhoneSchema.safeParse(req.params);
+      if (!validation.success) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'Invalid phone number', {
+          errors: validation.error.flatten().fieldErrors,
+        });
+      }
+
+      const details = await customerService.getCustomerDetails(
+        req.tenantId!,
+        validation.data.phone,
+      );
+      res.json({ success: true, data: details });
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 
 /**

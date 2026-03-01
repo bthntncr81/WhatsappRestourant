@@ -89,6 +89,40 @@ export interface PrintJobDto {
   processedAt: string | null;
 }
 
+export interface CustomerDetailDto {
+  customerPhone: string;
+  customerName: string | null;
+  firstOrderDate: string | null;
+  stats: {
+    totalOrders: number;
+    totalSpent: number;
+    averageOrderValue: number;
+    cancelledOrders: number;
+  };
+  favoriteItems: {
+    menuItemName: string;
+    totalQty: number;
+    orderCount: number;
+  }[];
+  recentOrders: {
+    id: string;
+    orderNumber: number | null;
+    status: OrderStatus;
+    totalPrice: number;
+    deliveryAddress: string | null;
+    paymentMethod: string | null;
+    items: { menuItemName: string; qty: number; unitPrice: number }[];
+    createdAt: string;
+  }[];
+  savedAddresses: {
+    id: string;
+    name: string;
+    address: string;
+    lat: number;
+    lng: number;
+  }[];
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -160,6 +194,15 @@ export class OrderService {
       `${environment.apiBaseUrl}/orders/${id}/reprint`,
       { type },
       this.headers
+    );
+  }
+
+  // ==================== CUSTOMER DETAILS ====================
+
+  getCustomerDetails(phone: string): Observable<ApiResponse<CustomerDetailDto>> {
+    return this.http.get<ApiResponse<CustomerDetailDto>>(
+      `${environment.apiBaseUrl}/orders/customer/${encodeURIComponent(phone)}`,
+      this.headers,
     );
   }
 
