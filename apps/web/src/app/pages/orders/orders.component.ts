@@ -89,13 +89,30 @@ import { NotificationService } from '../../services/notification.service';
                 @for (item of order.items.slice(0, 3); track item.id) {
                   <div class="item-row">
                     <span class="item-qty">{{ item.qty }}x</span>
-                    <span class="item-name">{{ item.menuItemName }}</span>
+                    <span class="item-name">
+                      {{ item.menuItemName }}
+                      @if (item.optionsJson && item.optionsJson.length > 0) {
+                        <span class="item-options">({{ formatOptions(item.optionsJson) }})</span>
+                      }
+                    </span>
                   </div>
+                  @if (item.extrasJson && item.extrasJson.length > 0) {
+                    <div class="item-extras">+ {{ formatExtras(item.extrasJson) }}</div>
+                  }
+                  @if (item.notes) {
+                    <div class="item-note">📝 {{ item.notes }}</div>
+                  }
                 }
                 @if (order.items.length > 3) {
                   <div class="more-items">+{{ order.items.length - 3 }} ürün daha</div>
                 }
               </div>
+
+              @if (order.notes) {
+                <div class="order-note">
+                  <span class="order-note-label">Not:</span> {{ order.notes }}
+                </div>
+              }
 
               @if (order.rejectionReason) {
                 <div class="rejection-reason">
@@ -567,6 +584,40 @@ import { NotificationService } from '../../services/notification.service';
       color: var(--text-secondary, #888);
       font-style: italic;
       padding-top: 4px;
+    }
+
+    .item-options {
+      font-size: 0.8rem;
+      color: var(--text-secondary, #888);
+      font-weight: 400;
+    }
+
+    .item-extras {
+      font-size: 0.8rem;
+      color: #a78bfa;
+      padding-left: 40px;
+    }
+
+    .item-note {
+      font-size: 0.8rem;
+      color: #fbbf24;
+      padding-left: 40px;
+      font-style: italic;
+    }
+
+    .order-note {
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      background: rgba(251, 191, 36, 0.1);
+      border-radius: 6px;
+      border-left: 3px solid #fbbf24;
+      font-size: 0.85rem;
+      color: #fde68a;
+    }
+
+    .order-note-label {
+      font-weight: 600;
+      color: #fbbf24;
     }
 
     .order-footer {
@@ -1232,6 +1283,14 @@ export class OrdersComponent implements OnInit, OnDestroy {
       next: () => alert('Kurye fişi yazdırma kuyruğuna eklendi'),
       error: (err) => console.error('Reprint failed:', err),
     });
+  }
+
+  formatOptions(options: { groupName: string; optionName: string; priceDelta: number }[]): string {
+    return options.map(o => o.optionName).join(', ');
+  }
+
+  formatExtras(extras: { name: string; qty: number; price: number }[]): string {
+    return extras.map(e => e.qty > 1 ? `${e.qty}x ${e.name}` : e.name).join(', ');
   }
 }
 

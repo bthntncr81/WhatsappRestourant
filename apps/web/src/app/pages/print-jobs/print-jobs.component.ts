@@ -183,7 +183,12 @@ pnpm dev</pre>
                     <p><strong>Adres:</strong> {{ viewingJob()!.payloadJson.deliveryAddress }}</p>
                   }
                   <p><strong>Tarih:</strong> {{ viewingJob()!.payloadJson.timestamp }}</p>
-                  
+                  @if (viewingJob()!.payloadJson.notes) {
+                    <div class="order-note">
+                      <span class="order-note-label">Not:</span> {{ viewingJob()!.payloadJson.notes }}
+                    </div>
+                  }
+
                   <h5>🛒 Ürünler:</h5>
                   <table class="items-table">
                     <thead>
@@ -716,6 +721,21 @@ pnpm dev</pre>
       font-size: 0.8rem;
       color: #f59e0b;
       margin-top: 4px;
+    }
+
+    .order-note {
+      padding: 8px 12px;
+      margin: 8px 0;
+      background: rgba(251, 191, 36, 0.1);
+      border-radius: 6px;
+      border-left: 3px solid #fbbf24;
+      font-size: 0.85rem;
+      color: #fde68a;
+    }
+
+    .order-note-label {
+      font-weight: 600;
+      color: #fbbf24;
     }
 
     .modal-footer {
