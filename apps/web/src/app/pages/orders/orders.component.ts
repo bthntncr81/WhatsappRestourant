@@ -487,7 +487,7 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .order-card.status-preparing {
-      border-left: 4px solid #8b5cf6;
+      border-left: 4px solid #2980B9;
     }
 
     .order-card.status-ready {
@@ -522,8 +522,8 @@ import { NotificationService } from '../../services/notification.service';
 
     .status-badge.draft { background: rgba(156, 163, 175, 0.15); color: var(--color-text-secondary); }
     .status-badge.pending_confirmation { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
-    .status-badge.confirmed { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
-    .status-badge.preparing { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+    .status-badge.confirmed { background: rgba(27, 85, 131, 0.15); color: var(--color-primary); }
+    .status-badge.preparing { background: rgba(41, 128, 185, 0.15); color: #5DADE2; }
     .status-badge.ready { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
     .status-badge.delivered { background: rgba(34, 197, 94, 0.1); color: var(--color-success); }
     .status-badge.cancelled { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
@@ -594,7 +594,7 @@ import { NotificationService } from '../../services/notification.service';
 
     .item-extras {
       font-size: 0.8rem;
-      color: #a78bfa;
+      color: #5DADE2;
       padding-left: 40px;
     }
 
@@ -715,7 +715,7 @@ import { NotificationService } from '../../services/notification.service';
       border-radius: 4px;
       font-size: 0.7rem;
       font-weight: 600;
-      background: #8b5cf6;
+      background: #2980B9;
       color: white;
       margin-left: 8px;
       vertical-align: middle;

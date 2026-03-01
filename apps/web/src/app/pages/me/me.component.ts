@@ -272,12 +272,12 @@ import { AuthService, MeResponse } from '../../services/auth.service';
         letter-spacing: 0.02em;
 
         &[data-role='OWNER'] {
-          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          background: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
           color: white;
         }
 
         &[data-role='ADMIN'] {
-          background: rgba(99, 102, 241, 0.15);
+          background: rgba(27, 85, 131, 0.15);
           color: var(--color-accent-primary);
         }
 
@@ -315,7 +315,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
 
         &.current {
           border-color: var(--color-accent-primary);
-          background: rgba(99, 102, 241, 0.05);
+          background: rgba(27, 85, 131, 0.05);
         }
 
         &:hover {

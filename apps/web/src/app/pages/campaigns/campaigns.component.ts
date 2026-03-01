@@ -482,17 +482,17 @@ interface CampaignSendLog {
     }
 
     .badge-draft { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-    .badge-scheduled { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+    .badge-scheduled { background: rgba(27, 85, 131, 0.15); color: var(--color-primary); }
     .badge-sending { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
     .badge-completed { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
     .badge-cancelled { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
     .badge-pending_send { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-    .badge-sent { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+    .badge-sent { background: rgba(27, 85, 131, 0.15); color: var(--color-primary); }
     .badge-opened { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
     .badge-converted { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
     .badge-failed { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
     .badge-skipped { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-    .badge-segment { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+    .badge-segment { background: rgba(41, 128, 185, 0.15); color: #5DADE2; }
 
     .font-medium { font-weight: 500; }
     .font-mono { font-family: var(--font-mono); font-size: 0.75rem; }

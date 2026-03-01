@@ -240,7 +240,7 @@ import { environment } from '../../../environments/environment';
     }
 
     .add-btn:hover {
-      background: var(--color-primary-dark, #5558e3);
+      background: var(--color-accent-primary-hover);
     }
 
     .stores-grid {

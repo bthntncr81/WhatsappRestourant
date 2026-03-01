@@ -128,7 +128,7 @@ interface ChatMessage {
     .chat-header {
       text-align: center;
       padding: var(--spacing-md);
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
       border-radius: var(--radius-lg);
       color: white;
     }
@@ -230,7 +230,7 @@ interface ChatMessage {
     }
 
     .message.user .message-avatar {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
     }
 
     .message.assistant .message-avatar {
@@ -244,7 +244,7 @@ interface ChatMessage {
     }
 
     .message.user .message-content {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
       color: white;
     }
 
@@ -279,9 +279,9 @@ interface ChatMessage {
     .inline-btn {
       padding: 8px 16px;
       border-radius: 20px;
-      border: 2px solid #667eea;
+      border: 2px solid #1B5583;
       background: transparent;
-      color: #667eea;
+      color: #1B5583;
       cursor: pointer;
       font-size: 0.85rem;
       font-weight: 600;
@@ -289,7 +289,7 @@ interface ChatMessage {
     }
 
     .inline-btn:hover:not(:disabled) {
-      background: #667eea;
+      background: #1B5583;
       color: white;
       transform: scale(1.05);
     }
@@ -422,7 +422,7 @@ interface ChatMessage {
       padding: var(--spacing-md) var(--spacing-lg);
       border-radius: var(--radius-md);
       border: none;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
       color: white;
       font-size: 1.2rem;
       cursor: pointer;

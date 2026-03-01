@@ -401,7 +401,7 @@ pnpm dev</pre>
     }
 
     .type-badge.courier {
-      background: rgba(99, 102, 241, 0.15);
+      background: rgba(27, 85, 131, 0.15);
       color: var(--color-primary);
     }
 
@@ -418,7 +418,7 @@ pnpm dev</pre>
     }
 
     .status-badge.pending { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
-    .status-badge.processing { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+    .status-badge.processing { background: rgba(27, 85, 131, 0.15); color: var(--color-primary); }
     .status-badge.done { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
     .status-badge.failed { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
 
@@ -486,8 +486,8 @@ pnpm dev</pre>
     }
 
     .action-btn.retry:hover {
-      background: #6366f1;
-      border-color: #6366f1;
+      background: #1B5583;
+      border-color: #1B5583;
     }
 
     .action-btn.delete:hover {

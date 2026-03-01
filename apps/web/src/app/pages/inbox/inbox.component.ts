@@ -752,7 +752,7 @@ import { AuthService } from '../../services/auth.service';
         }
 
         &.take-over {
-          background: rgba(99, 102, 241, 0.1);
+          background: rgba(27, 85, 131, 0.1);
           border-color: var(--color-accent-primary);
           color: var(--color-accent-primary);
         }
@@ -780,7 +780,7 @@ import { AuthService } from '../../services/auth.service';
         gap: var(--spacing-sm);
         background-image: radial-gradient(
           circle at 100% 0%,
-          rgba(99, 102, 241, 0.03),
+          rgba(27, 85, 131, 0.03),
           transparent 50%
         );
       }

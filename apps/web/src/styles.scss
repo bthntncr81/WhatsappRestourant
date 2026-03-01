@@ -26,16 +26,16 @@
   --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  // Accent colors (shared between themes)
-  --color-accent-primary: #6366f1;
-  --color-accent-primary-hover: #818cf8;
+  // Accent colors (shared between themes) — RAL 5005 Signal Blue
+  --color-accent-primary: #1B5583;
+  --color-accent-primary-hover: #2574A9;
   --color-accent-secondary: #14b8a6;
   --color-accent-warning: #f59e0b;
   --color-accent-danger: #ef4444;
   --color-accent-success: #22c55e;
-  
+
   // Gradients
-  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-primary: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
 }
 
 // Dark Theme (default)
@@ -59,16 +59,16 @@
 
   --gradient-glow: radial-gradient(
     600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(99, 102, 241, 0.08),
+    rgba(27, 85, 131, 0.08),
     transparent 40%
   );
 }
 
-// Light Theme
+// Light Theme — RAL 9003 Signal White base
 :root[data-theme="light"] {
-  --color-bg-primary: #f8fafc;
+  --color-bg-primary: #F4F4F4;
   --color-bg-secondary: #ffffff;
-  --color-bg-tertiary: #f1f5f9;
+  --color-bg-tertiary: #EDF0F2;
   --color-bg-elevated: #ffffff;
 
   --color-border: rgba(0, 0, 0, 0.08);
@@ -84,7 +84,7 @@
 
   --gradient-glow: radial-gradient(
     600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(99, 102, 241, 0.05),
+    rgba(27, 85, 131, 0.05),
     transparent 40%
   );
 }

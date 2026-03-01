@@ -86,7 +86,7 @@ import { AuthService } from '../../services/auth.service';
         background: var(--color-bg-primary);
         background-image: radial-gradient(
           ellipse 80% 50% at 50% -20%,
-          rgba(99, 102, 241, 0.15),
+          rgba(27, 85, 131, 0.15),
           transparent
         );
       }
@@ -197,7 +197,7 @@ import { AuthService } from '../../services/auth.service';
         &:focus {
           outline: none;
           border-color: var(--color-accent-primary);
-          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+          box-shadow: 0 0 0 3px rgba(27, 85, 131, 0.15);
         }
 
         &:disabled {

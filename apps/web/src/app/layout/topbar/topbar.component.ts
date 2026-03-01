@@ -185,7 +185,7 @@ import { ThemeService } from '../../services/theme.service';
         align-items: center;
         gap: 8px;
         padding: 8px 16px;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        background: linear-gradient(135deg, #1B5583, #2980B9);
         border-radius: 8px;
         color: white;
         font-size: 0.875rem;
@@ -197,7 +197,7 @@ import { ThemeService } from '../../services/theme.service';
 
       .upgrade-btn:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        box-shadow: 0 4px 12px rgba(27, 85, 131, 0.4);
       }
 
       .upgrade-btn.trial {
@@ -205,8 +205,8 @@ import { ThemeService } from '../../services/theme.service';
       }
 
       @keyframes pulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
-        50% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0); }
+        0%, 100% { box-shadow: 0 0 0 0 rgba(27, 85, 131, 0.4); }
+        50% { box-shadow: 0 0 0 8px rgba(27, 85, 131, 0); }
       }
 
       .upgrade-icon {

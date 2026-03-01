@@ -477,7 +477,7 @@ import { AuthService } from '../../services/auth.service';
     .orb-1 {
       width: 600px;
       height: 600px;
-      background: radial-gradient(circle, #6366f1 0%, transparent 70%);
+      background: radial-gradient(circle, #1B5583 0%, transparent 70%);
       top: -200px;
       left: -100px;
       animation-delay: 0s;
@@ -486,7 +486,7 @@ import { AuthService } from '../../services/auth.service';
     .orb-2 {
       width: 500px;
       height: 500px;
-      background: radial-gradient(circle, #8b5cf6 0%, transparent 70%);
+      background: radial-gradient(circle, #2980B9 0%, transparent 70%);
       top: 50%;
       right: -150px;
       animation-delay: -7s;
@@ -556,7 +556,7 @@ import { AuthService } from '../../services/auth.service';
 
     .brand-icon {
       font-size: 1.5rem;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      background: linear-gradient(135deg, #1B5583, #2980B9);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -587,7 +587,7 @@ import { AuthService } from '../../services/auth.service';
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      background: linear-gradient(135deg, #1B5583, #2980B9);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -610,8 +610,8 @@ import { AuthService } from '../../services/auth.service';
       align-items: center;
       gap: 8px;
       padding: 8px 20px;
-      background: rgba(99, 102, 241, 0.12);
-      border: 1px solid rgba(99, 102, 241, 0.3);
+      background: rgba(27, 85, 131, 0.12);
+      border: 1px solid rgba(27, 85, 131, 0.3);
       border-radius: 100px;
       font-size: 0.9rem;
       color: var(--color-accent-primary-hover);
@@ -627,7 +627,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .gradient-text {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4);
+      background: linear-gradient(135deg, #1B5583, #2980B9, #06b6d4);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       animation: gradient-shift 5s ease infinite;
@@ -690,10 +690,10 @@ import { AuthService } from '../../services/auth.service';
       left: 6px;
       width: calc(50% - 6px);
       height: calc(100% - 12px);
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      background: linear-gradient(135deg, #1B5583, #2980B9);
       border-radius: 12px;
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+      box-shadow: 0 4px 20px rgba(27, 85, 131, 0.4);
     }
 
     .toggle-bg.annual {
@@ -731,14 +731,14 @@ import { AuthService } from '../../services/auth.service';
       position: absolute;
       inset: 0;
       border: 3px solid transparent;
-      border-top-color: #6366f1;
+      border-top-color: #1B5583;
       border-radius: 50%;
       animation: spin 1.2s linear infinite;
     }
 
     .spinner-ring:nth-child(2) {
       inset: 6px;
-      border-top-color: #8b5cf6;
+      border-top-color: #2980B9;
       animation-delay: -0.4s;
     }
 
@@ -781,13 +781,13 @@ import { AuthService } from '../../services/auth.service';
 
     .plan-card:hover {
       transform: translateY(-8px);
-      border-color: rgba(99, 102, 241, 0.3);
-      box-shadow: 0 20px 60px rgba(99, 102, 241, 0.15);
+      border-color: rgba(27, 85, 131, 0.3);
+      box-shadow: 0 20px 60px rgba(27, 85, 131, 0.15);
     }
 
     .plan-card.popular {
-      border: 2px solid #6366f1;
-      background: rgba(99, 102, 241, 0.05);
+      border: 2px solid #1B5583;
+      background: rgba(27, 85, 131, 0.05);
     }
 
     .plan-card.enterprise {
@@ -800,7 +800,7 @@ import { AuthService } from '../../services/auth.service';
       inset: 0;
       opacity: 0;
       transition: opacity 0.4s;
-      background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(99, 102, 241, 0.15), transparent 60%);
+      background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(27, 85, 131, 0.15), transparent 60%);
       pointer-events: none;
     }
 
@@ -813,13 +813,13 @@ import { AuthService } from '../../services/auth.service';
       top: -1px;
       left: 50%;
       transform: translateX(-50%);
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      background: linear-gradient(135deg, #1B5583, #2980B9);
       padding: 8px 24px;
       border-radius: 0 0 16px 16px;
       font-size: 0.85rem;
       font-weight: 600;
       color: white;
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+      box-shadow: 0 4px 20px rgba(27, 85, 131, 0.4);
     }
 
     .current-badge {
@@ -914,7 +914,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .feature-item.highlight {
-      color: #6366f1;
+      color: #1B5583;
       font-weight: 500;
     }
 
@@ -952,14 +952,14 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .btn-upgrade {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      background: linear-gradient(135deg, #1B5583, #2980B9);
       color: white;
-      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+      box-shadow: 0 4px 20px rgba(27, 85, 131, 0.3);
     }
 
     .btn-upgrade:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+      box-shadow: 0 8px 30px rgba(27, 85, 131, 0.4);
     }
 
     .btn-upgrade .btn-arrow {
@@ -1076,7 +1076,7 @@ import { AuthService } from '../../services/auth.service';
 
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #6366f1, #8b5cf6);
+      background: linear-gradient(90deg, #1B5583, #2980B9);
       border-radius: 10px;
       transition: width 0.5s ease;
     }
@@ -1214,7 +1214,7 @@ import { AuthService } from '../../services/auth.service';
     .modal-price {
       font-size: 2rem;
       font-weight: 800;
-      color: #6366f1;
+      color: #1B5583;
     }
 
     .modal-price span {
@@ -1262,8 +1262,8 @@ import { AuthService } from '../../services/auth.service';
 
     .form-group input:focus {
       outline: none;
-      border-color: #6366f1;
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+      border-color: #1B5583;
+      box-shadow: 0 0 0 3px rgba(27, 85, 131, 0.2);
     }
 
     .form-group input::placeholder {
@@ -1316,7 +1316,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .btn-submit {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      background: linear-gradient(135deg, #1B5583, #2980B9);
       color: white;
       display: flex;
       align-items: center;
@@ -1325,7 +1325,7 @@ import { AuthService } from '../../services/auth.service';
 
     .btn-submit:hover:not(:disabled) {
       transform: translateY(-2px);
-      box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+      box-shadow: 0 8px 30px rgba(27, 85, 131, 0.4);
     }
 
     .btn-submit:disabled {
@@ -1486,7 +1486,7 @@ export class BillingComponent implements OnInit, AfterViewInit, OnDestroy {
         position: absolute;
         width: ${Math.random() * 4 + 1}px;
         height: ${Math.random() * 4 + 1}px;
-        background: rgba(99, 102, 241, ${Math.random() * 0.5 + 0.1});
+        background: rgba(27, 85, 131, ${Math.random() * 0.5 + 0.1});
         border-radius: 50%;
         left: ${Math.random() * 100}%;
         top: ${Math.random() * 100}%;

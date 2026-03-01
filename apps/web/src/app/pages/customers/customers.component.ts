@@ -396,7 +396,7 @@ interface Stats {
       .stat-active .stat-value { color: var(--color-success); }
       .stat-sleeping .stat-value { color: var(--color-warning); }
       .stat-new .stat-value { color: var(--color-primary); }
-      .stat-optin .stat-value { color: #a78bfa; }
+      .stat-optin .stat-value { color: #5DADE2; }
 
       /* Filters */
       .filters-row {
@@ -583,13 +583,13 @@ interface Stats {
 
       .badge-active { background: rgba(34,197,94,0.15); color: var(--color-success); }
       .badge-sleeping { background: rgba(245,158,11,0.15); color: var(--color-warning); }
-      .badge-new { background: rgba(99,102,241,0.15); color: var(--color-primary); }
-      .badge-optin-opted_in { background: rgba(139,92,246,0.15); color: #a78bfa; }
+      .badge-new { background: rgba(27,85,131,0.15); color: var(--color-primary); }
+      .badge-optin-opted_in { background: rgba(41,128,185,0.15); color: #5DADE2; }
       .badge-optin-opted_out { background: rgba(239,68,68,0.15); color: var(--color-danger); }
       .badge-optin-pending { background: rgba(156,163,175,0.15); color: var(--color-text-muted); }
 
       .badge-status-delivered { background: rgba(34,197,94,0.15); color: var(--color-success); }
-      .badge-status-confirmed, .badge-status-preparing, .badge-status-ready { background: rgba(99,102,241,0.15); color: var(--color-primary); }
+      .badge-status-confirmed, .badge-status-preparing, .badge-status-ready { background: rgba(27,85,131,0.15); color: var(--color-primary); }
       .badge-status-cancelled { background: rgba(239,68,68,0.15); color: var(--color-danger); }
       .badge-status-pending_confirmation { background: rgba(245,158,11,0.15); color: var(--color-warning); }
       .badge-status-draft { background: rgba(156,163,175,0.15); color: var(--color-text-muted); }

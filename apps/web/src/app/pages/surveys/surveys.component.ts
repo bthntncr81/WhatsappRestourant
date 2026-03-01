@@ -239,7 +239,7 @@ interface ApiResponse<T> {
       transition: all 0.2s;
     }
     .complaint-card:hover { border-color: var(--color-primary, #3b82f6); }
-    .complaint-card.selected { border-color: var(--color-primary, #3b82f6); background: rgba(99, 102, 241, 0.08); }
+    .complaint-card.selected { border-color: var(--color-primary, #3b82f6); background: rgba(27, 85, 131, 0.08); }
 
     .complaint-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
     .rating-badge { font-size: 0.85rem; }
