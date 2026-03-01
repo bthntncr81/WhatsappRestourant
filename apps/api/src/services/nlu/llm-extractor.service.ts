@@ -72,12 +72,19 @@ BENZER ISIMLI URUNLER (COK ONEMLI):
 - Eger musteri spesifik isim soylerse (orn: "et doner", "tavuk burger", "cheese burger"):
   → Direkt eslestirebilirsin, soru sormana gerek yok
 
-CONFIDENCE SKORU:
+CONFIDENCE SKORU (genel):
 - 0.9-1.0: Siparis tamamen net, tum opsiyonlar secili
 - 0.7-0.9: Buyuk oranda net, kucuk varsayimlar var
 - 0.5-0.7: Belirsizlik var, onay gerekli
 - 0.0-0.5: Cok belirsiz, mutlaka soru sor
 - Selamlama/sohbet: 0.0-0.1
+
+URUN BAZINDA CONFIDENCE (itemConfidence):
+Her item icin ayri confidence skoru ver:
+- 0.9-1.0: Musteri urunu acikca soyledi (orn: "bir et doner")
+- 0.7-0.9: Urun belli ama miktar/opsiyon varsayimi var
+- 0.5-0.7: Urun tahmini, belirsizlik var
+- 0.0-0.5: Cok belirsiz, tahmin
 
 KURALLAR:
 - Sadece verilen menu adaylari (candidates) icinden secim yap
@@ -195,7 +202,8 @@ export class LlmOrderExtractorService {
       }>
     >,
     conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>,
-    existingOrderContext?: string
+    existingOrderContext?: string,
+    customerPreferencesContext?: string
   ): Promise<LlmExtractionResponse> {
     if (!this.client) {
       throw new Error('OpenAI client not configured');
@@ -203,11 +211,12 @@ export class LlmOrderExtractorService {
 
     const startTime = Date.now();
 
-    // Build system prompt with candidates and existing order context
+    // Build system prompt with candidates, existing order context, and customer preferences
     const systemPrompt =
       SYSTEM_PROMPT_PREFIX +
       buildCandidatesPrompt(candidates, optionGroups) +
-      buildExistingOrderContext(existingOrderContext);
+      buildExistingOrderContext(existingOrderContext) +
+      (customerPreferencesContext || '');
 
     // Build messages
     const messages: OpenAI.ChatCompletionMessageParam[] = [

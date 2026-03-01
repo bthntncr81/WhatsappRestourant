@@ -1,5 +1,6 @@
 import prisma from '../db/prisma';
 import { cacheService } from './cache.service';
+import { embeddingService } from './nlu/embedding.service';
 import { AppError } from '../middleware/error-handler';
 import {
   MenuVersionDto,
@@ -99,6 +100,9 @@ export class MenuService {
     // Update cache with canonical export
     const canonicalMenu = await this.exportVersion(tenantId, versionId);
     await cacheService.setPublishedMenu(tenantId, canonicalMenu);
+
+    // Build embedding index in background (non-blocking)
+    embeddingService.buildIndex(tenantId, canonicalMenu).catch(() => {});
 
     return {
       id: updated.id,
@@ -673,6 +677,9 @@ export class MenuService {
     // Export and cache
     const menu = await this.exportVersion(tenantId, latestPublished.id);
     await cacheService.setPublishedMenu(tenantId, menu);
+
+    // Build embedding index in background (non-blocking)
+    embeddingService.buildIndex(tenantId, menu).catch(() => {});
 
     return menu;
   }

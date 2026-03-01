@@ -276,6 +276,24 @@ export class OrderService {
             import('./broadcast.service').then(({ broadcastService }) => {
               broadcastService.trackConversion(tenantId, order.customerPhone || '').catch(() => {});
             }).catch(() => {});
+
+            // Learn customer preferences from delivered order (async, non-blocking)
+            if (order.customerPhone) {
+              import('./nlu/preferences.service').then(({ preferencesService }) => {
+                preferencesService.learnFromOrder(
+                  tenantId,
+                  order.customerPhone!,
+                  order.items.map((i: any) => ({
+                    menuItemId: i.menuItemId,
+                    menuItemName: i.menuItemName,
+                    qty: i.qty,
+                    optionsJson: i.optionsJson,
+                    notes: i.notes,
+                  })),
+                  order.notes
+                ).catch(() => {});
+              }).catch(() => {});
+            }
           }
         } catch (error) {
           logger.error({ error, tenantId, orderId, status }, 'Failed to send status update WhatsApp message');

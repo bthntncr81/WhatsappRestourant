@@ -1,6 +1,7 @@
 import prisma from '../../db/prisma';
 import { menuCandidateService } from './menu-candidate.service';
 import { llmExtractorService } from './llm-extractor.service';
+import { preferencesService } from './preferences.service';
 import { createLogger } from '../../logger';
 import {
   OrderIntentDto,
@@ -159,7 +160,28 @@ export class NluOrchestratorService {
         ? this.buildExistingOrderContext(existingDraft)
         : undefined;
 
-      // 5. Extract order using LLM (with existing order context)
+      // 4b. Get customer preferences context
+      let customerPreferencesContext: string | undefined;
+      try {
+        const conversation = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          select: { customerPhone: true },
+        });
+        if (conversation?.customerPhone) {
+          const prefs = await preferencesService.getPreferences(
+            tenantId,
+            conversation.customerPhone
+          );
+          if (prefs) {
+            customerPreferencesContext =
+              preferencesService.buildPreferencesPrompt(prefs);
+          }
+        }
+      } catch {
+        // Non-critical, continue without preferences
+      }
+
+      // 5. Extract order using LLM (with existing order context + preferences)
       let extraction: LlmExtractionResponse;
       try {
         extraction = await llmExtractorService.extractOrder(
@@ -167,7 +189,8 @@ export class NluOrchestratorService {
           candidates,
           optionGroups,
           history,
-          existingOrderContext
+          existingOrderContext,
+          customerPreferencesContext
         );
       } catch (error) {
         logger.error({ error, tenantId, conversationId }, 'LLM extraction failed');
@@ -191,10 +214,21 @@ export class NluOrchestratorService {
         itemsExtracted: extraction.items.length > 0,
       };
 
+      // Check for low-confidence items (per-item confidence)
+      const lowConfidenceItems = extraction.items.filter(
+        (i) => i.action === 'add' && i.itemConfidence < 0.5
+      );
+
       if (extraction.clarificationQuestion || extraction.confidence < CONFIDENCE_THRESHOLD) {
         result.clarificationQuestion =
           extraction.clarificationQuestion ||
           'Siparisinizi tam anlayamadim. Lutfen ne istediginizi biraz daha aciklar misiniz?';
+      } else if (lowConfidenceItems.length > 0 && !extraction.clarificationQuestion) {
+        // Some items have low per-item confidence — ask about those specifically
+        const itemNames = lowConfidenceItems
+          .map((i) => candidates.find((c) => c.menuItemId === i.menuItemId)?.name || i.menuItemId)
+          .join(', ');
+        result.clarificationQuestion = `${itemNames} icin emin olamadim. Tam olarak ne istediginizi belirtir misiniz?`;
       } else if (extraction.items.length > 0) {
         // High confidence - create/update draft order with smart merge
         const order = await this.createDraftOrder(

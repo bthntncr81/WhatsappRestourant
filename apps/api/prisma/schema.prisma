@@ -914,6 +914,7 @@ model CustomerProfile {
   lastOrderAt     DateTime?
   orderCount      Int                  @default(0)
   totalSpent      Decimal              @default(0) @db.Decimal(10, 2)
+  preferencesJson Json?                // {favoriteItems: [{menuItemId, name, count}], dislikedIngredients: [...], preferredOptions: {...}}
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 

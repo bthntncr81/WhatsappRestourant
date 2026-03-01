@@ -2,6 +2,7 @@ import prisma from '../db/prisma';
 import { inboxService } from './inbox.service';
 import { whatsappService } from './whatsapp.service';
 import { nluOrchestratorService } from './nlu/orchestrator.service';
+import { whisperService } from './nlu/whisper.service';
 import { geoService } from './geo.service';
 import { orderService } from './order.service';
 import { orderPaymentService } from './order-payment.service';
@@ -213,8 +214,24 @@ export class ConversationFlowService {
 
     // Adim 10: Faz-mesaj turu uyumsuzlugu - IDLE'da TEXT olmayan mesajlar
     if (message.kind !== 'TEXT' || !text) {
-      if (message.kind === 'IMAGE' || message.kind === 'VOICE') {
-        await this.sendText(ctx, 'Gorsel/sesli mesaj isleyemiyorum. Siparis vermek icin urun adini yazin.');
+      // Voice messages: try transcription with Whisper
+      if (message.kind === 'VOICE') {
+        const voiceId = (message.payloadJson as any)?.voiceId;
+        if (voiceId && whisperService.isAvailable()) {
+          const transcribed = await whisperService.transcribeVoiceMessage(tenantId, voiceId);
+          if (transcribed) {
+            // Re-process as text message with transcribed content
+            await this.sendText(ctx, `🎤 "${transcribed}"`);
+            const fakeTextMessage = { ...message, kind: 'TEXT' as const, text: transcribed };
+            const fakeCtx = { ...ctx, message: fakeTextMessage };
+            return this.handleIdle(fakeCtx);
+          }
+        }
+        await this.sendText(ctx, 'Sesli mesajinizi isleyemedim. Siparis vermek icin urun adini yazin.');
+        return 'IDLE';
+      }
+      if (message.kind === 'IMAGE') {
+        await this.sendText(ctx, 'Gorsel mesaj isleyemiyorum. Siparis vermek icin urun adini yazin.');
       } else if (message.kind === 'LOCATION') {
         await this.sendText(ctx, 'Once siparis verin, sonra konum isteyecegiz. Siparis icin urun adini yazin.');
       } else {
@@ -401,8 +418,23 @@ export class ConversationFlowService {
     }
 
     if (message.kind !== 'TEXT' || !text) {
-      if (message.kind === 'IMAGE' || message.kind === 'VOICE') {
-        await this.sendText(ctx, 'Gorsel/sesli mesaj isleyemiyorum. Urun adini yazarak siparis verebilirsiniz.');
+      // Voice messages: try transcription with Whisper
+      if (message.kind === 'VOICE') {
+        const voiceId = (message.payloadJson as any)?.voiceId;
+        if (voiceId && whisperService.isAvailable()) {
+          const transcribed = await whisperService.transcribeVoiceMessage(tenantId, voiceId);
+          if (transcribed) {
+            await this.sendText(ctx, `🎤 "${transcribed}"`);
+            const fakeTextMessage = { ...message, kind: 'TEXT' as const, text: transcribed };
+            const fakeCtx = { ...ctx, message: fakeTextMessage };
+            return this.handleOrderCollecting(fakeCtx);
+          }
+        }
+        await this.sendText(ctx, 'Sesli mesajinizi isleyemedim. Urun adini yazarak siparis verebilirsiniz.');
+        return 'ORDER_COLLECTING';
+      }
+      if (message.kind === 'IMAGE') {
+        await this.sendText(ctx, 'Gorsel mesaj isleyemiyorum. Urun adini yazarak siparis verebilirsiniz.');
       }
       return 'ORDER_COLLECTING';
     }

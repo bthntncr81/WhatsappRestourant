@@ -147,6 +147,7 @@ export interface LlmExtractedItem {
   extras: { name: string; qty: number }[];
   notes: string | null;
   action: 'add' | 'remove' | 'keep';
+  itemConfidence: number;
 }
 
 /**
@@ -192,8 +193,14 @@ export const LLM_EXTRACTION_SCHEMA = {
             enum: ['add', 'remove', 'keep'],
             description: 'Action: add = new item or increase qty, remove = remove item, keep = no change (existing item)',
           },
+          itemConfidence: {
+            type: 'number',
+            minimum: 0,
+            maximum: 1,
+            description: 'Confidence score for this specific item (0-1). High if customer clearly named the item, low if ambiguous or inferred.',
+          },
         },
-        required: ['menuItemId', 'qty', 'optionSelections', 'extras', 'notes', 'action'],
+        required: ['menuItemId', 'qty', 'optionSelections', 'extras', 'notes', 'action', 'itemConfidence'],
         additionalProperties: false,
       },
     },

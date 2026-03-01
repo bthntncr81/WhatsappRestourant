@@ -3,6 +3,8 @@ import prisma from '../../db/prisma';
 import { cacheService } from '../cache.service';
 import { MenuCandidateDto, CanonicalMenuExport } from '@whatres/shared';
 import { createLogger } from '../../logger';
+import { turkishNlpService } from './turkish-nlp.service';
+import { embeddingService } from './embedding.service';
 
 const logger = createLogger();
 
@@ -47,9 +49,16 @@ export class MenuCandidateService {
       return [];
     }
 
-    // Normalize user text
+    // Process user text with Turkish NLP (slang expansion + stemming)
+    const nlpResult = turkishNlpService.processForMenuMatch(userText);
     const normalizedText = this.normalizeText(userText);
-    const userWords = normalizedText.split(/\s+/).filter((w) => w.length > 1);
+    const userWords = [...new Set([
+      ...normalizedText.split(/\s+/).filter((w) => w.length > 1),
+      ...nlpResult.stemmedWords.filter((w) => w.length > 1),
+    ])];
+
+    // All expanded text variants for full-text matching
+    const expandedTexts = nlpResult.expandedTexts;
 
     // Check if user mentions a category name (e.g. "içecek", "tatlı", "burger")
     const matchedCategoryNames = new Set<string>();
@@ -75,7 +84,8 @@ export class MenuCandidateService {
           item,
           menu.synonyms,
           normalizedText,
-          userWords
+          userWords,
+          expandedTexts
         );
 
         // Boost score if item belongs to a matched category
@@ -93,6 +103,60 @@ export class MenuCandidateService {
             score: score.totalScore,
           });
         }
+      }
+    }
+
+    // Embedding-based boost: if embedding service is available, use it as extra signal
+    if (embeddingService.isAvailable()) {
+      try {
+        const queryEmbedding = await embeddingService.getEmbedding(userText);
+        const embeddingResults = await embeddingService.searchSimilar(
+          tenantId,
+          queryEmbedding,
+          TOP_N_CANDIDATES
+        );
+
+        // Boost existing candidates or add new ones from embedding search
+        const embeddingMap = new Map(
+          embeddingResults.map((r) => [r.itemId, r.score])
+        );
+
+        for (const candidate of candidates) {
+          const embScore = embeddingMap.get(candidate.menuItemId);
+          if (embScore && embScore > 0.3) {
+            // Blend: add up to 0.3 bonus from embedding similarity
+            candidate.score = Math.min(1, candidate.score + embScore * 0.3);
+          }
+        }
+
+        // Add items found by embeddings but missed by text search
+        for (const embResult of embeddingResults) {
+          if (
+            embResult.score > 0.5 &&
+            !candidates.some((c) => c.menuItemId === embResult.itemId)
+          ) {
+            // Look up item details from menu
+            for (const category of menu.categories) {
+              const item = category.items.find(
+                (i) => i.id === embResult.itemId && i.isActive
+              );
+              if (item) {
+                candidates.push({
+                  menuItemId: item.id,
+                  name: item.name,
+                  category: category.name,
+                  basePrice: item.basePrice,
+                  synonymsMatched: [],
+                  score: embResult.score * 0.4, // Lower weight for embedding-only matches
+                });
+                break;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Embedding search is optional, don't fail if it errors
+        logger.warn({ error, tenantId }, 'Embedding search failed, using text-only');
       }
     }
 
@@ -124,26 +188,50 @@ export class MenuCandidateService {
       weight: number;
     }>,
     normalizedText: string,
-    userWords: string[]
+    userWords: string[],
+    expandedTexts: string[] = []
   ): { totalScore: number; matchedSynonyms: string[] } {
     let totalScore = 0;
     const matchedSynonyms: string[] = [];
 
     const normalizedName = this.normalizeText(item.name);
     const nameWords = normalizedName.split(/\s+/).filter((w) => w.length > 1);
+    // Get stemmed variants of menu item name words for stem-level matching
+    const nameStemmedWords = nameWords.map((w) => turkishNlpService.stem(w));
 
     // 1. Exact containment check (highest priority)
-    // If the full normalized name appears in user text, strong match
-    if (normalizedText.includes(normalizedName)) {
-      totalScore += 0.8;
+    // Check against all expanded texts (slang expansions)
+    const allTexts = [normalizedText, ...expandedTexts];
+    let bestContainmentScore = 0;
+
+    for (const text of allTexts) {
+      if (text.includes(normalizedName)) {
+        bestContainmentScore = Math.max(bestContainmentScore, 0.8);
+        break;
+      }
+    }
+
+    if (bestContainmentScore > 0) {
+      totalScore += bestContainmentScore;
     } else {
-      // Check if any significant name word appears exactly in user text
+      // Check if any significant name word appears exactly in user text (including stemmed)
       const exactWordMatches = nameWords.filter((nw) =>
         nw.length >= 3 && userWords.some((uw) => uw === nw)
       );
-      if (exactWordMatches.length > 0) {
-        // Strong bonus for exact word containment (e.g. "doner" in "bir doner istiyorum")
-        totalScore += 0.5 * (exactWordMatches.length / nameWords.length);
+      // Also check stem-level matches
+      const stemMatches = nameStemmedWords.filter((nw) =>
+        nw.length >= 3 && userWords.some((uw) =>
+          uw !== nw && turkishNlpService.stem(uw) === nw
+        )
+      );
+
+      const totalWordMatches = new Set([
+        ...exactWordMatches,
+        ...stemMatches,
+      ]).size;
+
+      if (totalWordMatches > 0) {
+        totalScore += 0.5 * (totalWordMatches / nameWords.length);
       }
 
       // Fuzzy word matching for close matches (e.g. typos)
@@ -157,12 +245,16 @@ export class MenuCandidateService {
       }
     }
 
-    // 2. Full-text similarity (lower weight - helps when text is short)
-    const nameSimilarity = stringSimilarity.compareTwoStrings(
+    // 2. Full-text similarity (check against all expanded texts too)
+    let bestNameSimilarity = stringSimilarity.compareTwoStrings(
       normalizedText,
       normalizedName
     );
-    totalScore += nameSimilarity * 0.2;
+    for (const text of expandedTexts) {
+      const sim = stringSimilarity.compareTwoStrings(text, normalizedName);
+      bestNameSimilarity = Math.max(bestNameSimilarity, sim);
+    }
+    totalScore += bestNameSimilarity * 0.2;
 
     // 3. Synonym matching
     const itemSynonyms = synonyms.filter(
@@ -172,24 +264,43 @@ export class MenuCandidateService {
     for (const synonym of itemSynonyms) {
       const normalizedPhrase = this.normalizeText(synonym.phrase);
 
-      // Check if phrase appears in text
-      if (normalizedText.includes(normalizedPhrase)) {
-        totalScore += 0.5 * synonym.weight;
-        matchedSynonyms.push(synonym.phrase);
-      } else {
-        // Check individual synonym words
+      // Check if phrase appears in any expanded text variant
+      let synonymMatched = false;
+      for (const text of allTexts) {
+        if (text.includes(normalizedPhrase)) {
+          totalScore += 0.5 * synonym.weight;
+          matchedSynonyms.push(synonym.phrase);
+          synonymMatched = true;
+          break;
+        }
+      }
+
+      if (!synonymMatched) {
+        // Check individual synonym words (including stem matching)
         const synWords = normalizedPhrase.split(/\s+/).filter((w) => w.length >= 3);
         const synExactMatches = synWords.filter((sw) => userWords.some((uw) => uw === sw));
-        if (synExactMatches.length > 0) {
-          totalScore += 0.4 * synonym.weight * (synExactMatches.length / synWords.length);
+        const synStemMatches = synWords.filter((sw) =>
+          userWords.some((uw) => turkishNlpService.stem(uw) === turkishNlpService.stem(sw))
+        );
+        const totalSynMatches = new Set([...synExactMatches, ...synStemMatches]).size;
+
+        if (totalSynMatches > 0) {
+          totalScore += 0.4 * synonym.weight * (totalSynMatches / synWords.length);
           matchedSynonyms.push(synonym.phrase);
         } else {
-          const phraseSimilarity = stringSimilarity.compareTwoStrings(
+          // Full-text similarity against all expanded texts
+          let bestPhraseSim = stringSimilarity.compareTwoStrings(
             normalizedText,
             normalizedPhrase
           );
-          if (phraseSimilarity > 0.5) {
-            totalScore += phraseSimilarity * 0.3 * synonym.weight;
+          for (const text of expandedTexts) {
+            bestPhraseSim = Math.max(
+              bestPhraseSim,
+              stringSimilarity.compareTwoStrings(text, normalizedPhrase)
+            );
+          }
+          if (bestPhraseSim > 0.5) {
+            totalScore += bestPhraseSim * 0.3 * synonym.weight;
             matchedSynonyms.push(synonym.phrase);
           }
         }
@@ -219,16 +330,17 @@ export class MenuCandidateService {
    * e.g. "icecekler" → ["icecekler", "icecek"], "tatlilar" → ["tatlilar", "tatli"]
    */
   private getCategoryStems(normalizedCategory: string): string[] {
-    const stems = [normalizedCategory];
-    // Turkish plural suffix removal: -ler, -lar
+    const stems = new Set([normalizedCategory]);
+    // Use Turkish NLP stemmer for better suffix removal
+    stems.add(turkishNlpService.stem(normalizedCategory));
+    // Also add basic plural removal as fallback
     if (normalizedCategory.endsWith('ler') || normalizedCategory.endsWith('lar')) {
-      stems.push(normalizedCategory.slice(0, -3));
+      stems.add(normalizedCategory.slice(0, -3));
     }
-    // Also try removing -lar/-ler + last vowel harmony suffix
     if (normalizedCategory.endsWith('leri') || normalizedCategory.endsWith('lari')) {
-      stems.push(normalizedCategory.slice(0, -4));
+      stems.add(normalizedCategory.slice(0, -4));
     }
-    return stems;
+    return Array.from(stems);
   }
 
   /**
@@ -348,6 +460,9 @@ export class MenuCandidateService {
 
     // Cache for future use
     await cacheService.setPublishedMenu(tenantId, menu);
+
+    // Build embedding index in background if available
+    embeddingService.buildIndex(tenantId, menu).catch(() => {});
 
     return menu;
   }
