@@ -281,10 +281,10 @@ export class DashboardComponent implements OnInit {
   error: string | null = null;
 
   stats = [
-    { label: 'Total Users', value: '1,234', icon: '👥', color: 'var(--gradient-primary)' },
-    { label: 'Active Projects', value: '56', icon: '📁', color: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)' },
-    { label: 'Tasks Completed', value: '892', icon: '✓', color: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' },
-    { label: 'Pending Issues', value: '23', icon: '⚠', color: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' },
+    { label: 'Total Users', value: '1,234', icon: '👥', color: 'var(--color-accent-primary)' },
+    { label: 'Active Projects', value: '56', icon: '📁', color: '#14b8a6' },
+    { label: 'Tasks Completed', value: '892', icon: '✓', color: '#22c55e' },
+    { label: 'Pending Issues', value: '23', icon: '⚠', color: '#f59e0b' },
   ];
 
   ngOnInit(): void {

@@ -18,7 +18,7 @@ interface NavItem {
       <div class="sidebar-header">
         <div class="logo">
           <span class="logo-icon">◈</span>
-          <span class="logo-text">WhatRes</span>
+          <span class="logo-text">Otorder</span>
         </div>
         @if (authService.tenant(); as tenant) {
           <div class="tenant-badge">
@@ -90,10 +90,7 @@ interface NavItem {
 
       .logo-icon {
         font-size: 1.75rem;
-        background: var(--gradient-primary);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--color-accent-primary);
       }
 
       .logo-text {
@@ -191,7 +188,7 @@ interface NavItem {
         width: 36px;
         height: 36px;
         border-radius: 50%;
-        background: var(--gradient-primary);
+        background: var(--color-accent-primary);
         display: flex;
         align-items: center;
         justify-content: center;

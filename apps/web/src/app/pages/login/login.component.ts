@@ -14,7 +14,7 @@ import { AuthService } from '../../services/auth.service';
         <div class="auth-header">
           <div class="logo">
             <span class="logo-icon">◈</span>
-            <span class="logo-text">WhatRes</span>
+            <span class="logo-text">Otorder</span>
           </div>
           <h1 class="auth-title">Welcome back</h1>
           <p class="auth-subtitle text-muted">Sign in to your account</p>
@@ -127,10 +127,7 @@ import { AuthService } from '../../services/auth.service';
 
       .logo-icon {
         font-size: 2rem;
-        background: var(--gradient-primary);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        color: var(--color-accent-primary);
       }
 
       .logo-text {
@@ -208,7 +205,7 @@ import { AuthService } from '../../services/auth.service';
 
       .btn-primary {
         height: 44px;
-        background: var(--gradient-primary);
+        background: var(--color-accent-primary);
         border: none;
         border-radius: var(--radius-md);
         color: white;

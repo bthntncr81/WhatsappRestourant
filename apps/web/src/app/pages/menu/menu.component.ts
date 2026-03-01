@@ -893,7 +893,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
       }
 
       .btn-primary {
-        background: var(--gradient-primary);
+        background: var(--color-accent-primary);
         color: white;
         border: none;
 

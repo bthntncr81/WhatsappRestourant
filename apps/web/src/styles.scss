@@ -34,8 +34,8 @@
   --color-accent-danger: #ef4444;
   --color-accent-success: #22c55e;
 
-  // Gradients
-  --gradient-primary: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
+  // Flat primary (no gradient — modern uniform look)
+  --gradient-primary: #1B5583;
 }
 
 // Dark Theme (default)

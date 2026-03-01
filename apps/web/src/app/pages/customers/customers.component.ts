@@ -531,7 +531,7 @@ interface Stats {
         width: 32px;
         height: 32px;
         border-radius: 50%;
-        background: var(--gradient-primary);
+        background: var(--color-accent-primary);
         display: flex;
         align-items: center;
         justify-content: center;

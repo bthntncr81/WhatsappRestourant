@@ -185,7 +185,7 @@ import { ThemeService } from '../../services/theme.service';
         align-items: center;
         gap: 8px;
         padding: 8px 16px;
-        background: linear-gradient(135deg, #1B5583, #2980B9);
+        background: #1B5583;
         border-radius: 8px;
         color: white;
         font-size: 0.875rem;

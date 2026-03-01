@@ -272,7 +272,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
         letter-spacing: 0.02em;
 
         &[data-role='OWNER'] {
-          background: linear-gradient(135deg, #1B5583 0%, #2980B9 100%);
+          background: #1B5583;
           color: white;
         }
 

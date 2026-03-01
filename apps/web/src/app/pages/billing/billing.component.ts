@@ -36,7 +36,7 @@ import { AuthService } from '../../services/auth.service';
         </a>
         <div class="nav-brand">
           <span class="brand-icon">◈</span>
-          <span class="brand-text">WhatRes</span>
+          <span class="brand-text">Otorder</span>
         </div>
         <div class="nav-actions">
           <button class="theme-btn" (click)="themeService.toggleTheme()">
@@ -426,7 +426,7 @@ import { AuthService } from '../../services/auth.service';
         <div class="footer-content">
           <div class="footer-brand">
             <span class="brand-icon">◈</span>
-            <span>WhatRes</span>
+            <span>Otorder</span>
           </div>
           <div class="footer-links">
             <a href="#">Gizlilik Politikası</a>
@@ -486,7 +486,7 @@ import { AuthService } from '../../services/auth.service';
     .orb-2 {
       width: 500px;
       height: 500px;
-      background: radial-gradient(circle, #2980B9 0%, transparent 70%);
+      background: radial-gradient(circle, #1B5583 0%, transparent 70%);
       top: 50%;
       right: -150px;
       animation-delay: -7s;
@@ -556,9 +556,7 @@ import { AuthService } from '../../services/auth.service';
 
     .brand-icon {
       font-size: 1.5rem;
-      background: linear-gradient(135deg, #1B5583, #2980B9);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      color: #1B5583;
     }
 
     .nav-actions {
@@ -587,7 +585,7 @@ import { AuthService } from '../../services/auth.service';
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: linear-gradient(135deg, #1B5583, #2980B9);
+      background: #1B5583;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -627,16 +625,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .gradient-text {
-      background: linear-gradient(135deg, #1B5583, #2980B9, #06b6d4);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: gradient-shift 5s ease infinite;
-      background-size: 200% 200%;
-    }
-
-    @keyframes gradient-shift {
-      0%, 100% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
+      color: #1B5583;
     }
 
     .hero-subtitle {
@@ -690,7 +679,7 @@ import { AuthService } from '../../services/auth.service';
       left: 6px;
       width: calc(50% - 6px);
       height: calc(100% - 12px);
-      background: linear-gradient(135deg, #1B5583, #2980B9);
+      background: #1B5583;
       border-radius: 12px;
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       box-shadow: 0 4px 20px rgba(27, 85, 131, 0.4);
@@ -738,7 +727,7 @@ import { AuthService } from '../../services/auth.service';
 
     .spinner-ring:nth-child(2) {
       inset: 6px;
-      border-top-color: #2980B9;
+      border-top-color: #1B5583;
       animation-delay: -0.4s;
     }
 
@@ -813,7 +802,7 @@ import { AuthService } from '../../services/auth.service';
       top: -1px;
       left: 50%;
       transform: translateX(-50%);
-      background: linear-gradient(135deg, #1B5583, #2980B9);
+      background: #1B5583;
       padding: 8px 24px;
       border-radius: 0 0 16px 16px;
       font-size: 0.85rem;
@@ -952,7 +941,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .btn-upgrade {
-      background: linear-gradient(135deg, #1B5583, #2980B9);
+      background: #1B5583;
       color: white;
       box-shadow: 0 4px 20px rgba(27, 85, 131, 0.3);
     }
@@ -1076,7 +1065,7 @@ import { AuthService } from '../../services/auth.service';
 
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, #1B5583, #2980B9);
+      background: #1B5583;
       border-radius: 10px;
       transition: width 0.5s ease;
     }
@@ -1316,7 +1305,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .btn-submit {
-      background: linear-gradient(135deg, #1B5583, #2980B9);
+      background: #1B5583;
       color: white;
       display: flex;
       align-items: center;
@@ -1608,6 +1597,6 @@ export class BillingComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   contactSales(): void {
-    window.open('mailto:sales@whatres.com?subject=Enterprise Plan İletişim', '_blank');
+    window.open('mailto:sales@otorder.com?subject=Enterprise Plan İletişim', '_blank');
   }
 }

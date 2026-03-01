@@ -487,7 +487,7 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .order-card.status-preparing {
-      border-left: 4px solid #2980B9;
+      border-left: 4px solid #1B5583;
     }
 
     .order-card.status-ready {
@@ -715,7 +715,7 @@ import { NotificationService } from '../../services/notification.service';
       border-radius: 4px;
       font-size: 0.7rem;
       font-weight: 600;
-      background: #2980B9;
+      background: #1B5583;
       color: white;
       margin-left: 8px;
       vertical-align: middle;
