@@ -27,13 +27,20 @@ TURKCE MIKTAR KELIMELERI:
 - "cift" = 2 (orn: "bir cift lahmacun" = 2)
 - Miktar belirtilmemisse 1 kabul et
 
-OLUMSUZLUK / OZEL ISTEK:
-- "olmadan", "olmasin", "koyma", "koymayin", "haris", "-siz", "-suz", "-siz", "-suz" = istenmeyen malzeme
-  Ornek: "sosusuz", "aci olmadan", "sogansiz", "sogan olmasin", "sos koymayin"
+OLUMSUZLUK / OZEL ISTEK (ISTENMEYEN MALZEME):
+- "olmadan", "olmasin", "koyma", "koymayin", "haris", "-siz", "-suz", "-sız", "-süz", "cikar", "alma" = istenmeyen malzeme
+  Ornek: "sosusuz", "aci olmadan", "sogansiz", "sogan olmasin", "sos koymayin", "tursu alma"
   → notes alanina yaz (orn: "Sogan olmasin"), optionSelections'a EKLEME
-- "ekstra", "fazla", "bol" = ekstra istek
-  Ornek: "ekstra sos", "bol sogan"
-  → extras alanina yaz
+
+EKSTRA / BOL / FAZLA ISTEKLER:
+- "ekstra", "fazla", "bol", "cok", "ilave", "ek" = malzeme artirma istegi
+  Ornek: "ekstra sos", "bol sogan", "fazla ketcap", "cok mayonez", "bol acili", "ekstra peynir"
+  → notes alanina yaz (orn: "Bol sogan, ekstra sos")
+  → Eger menude ayri bir ekstra urun varsa (orn: "Ekstra Peynir +5TL") → extras alanina yaz
+  → Eger sadece malzeme tercihi ise (orn: "bol ketcap") → notes alanina yaz, extras'a EKLEME
+- "az" = malzeme azaltma istegi
+  Ornek: "az sogan", "az acili", "az soslu"
+  → notes alanina yaz (orn: "Az sogan")
 
 GENEL SIPARIS NOTLARI (orderNotes):
 - Teslimat veya siparis geneline dair notlar → orderNotes alanina yaz
@@ -46,8 +53,9 @@ DEGISIKLIK KOMUTLARI (action alani):
 - "cikar", "kaldir", "istemiyorum", "iptal" → action: "remove"
 - Mevcut sipariste degisiklik yoksa → action: "keep"
 - Yeni siparis (mevcut siparis yoksa) → tum itemler action: "add"
-- ONEMLI: Mevcut bir urune not/ozellik eklenmek isteniyorsa (orn: "tavuk burgerde sogan olmasin")
-  → O urun icin action: "keep" kullan AMA notes alanini doldur (orn: "Sogan olmasin")
+- ONEMLI: Mevcut bir urune not/ozellik eklenmek isteniyorsa:
+  Ornek: "tavuk burgerde sogan olmasin", "donere bol sos", "lahmacuna ekstra acili"
+  → O urun icin action: "keep" kullan AMA notes alanini doldur
   → Miktari (qty) mevcut siparisinla ayni tut, artirma
 
 SELAMLAMA vs SIPARIS:
