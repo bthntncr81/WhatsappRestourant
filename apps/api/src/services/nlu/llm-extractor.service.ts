@@ -35,6 +35,12 @@ OLUMSUZLUK / OZEL ISTEK:
   Ornek: "ekstra sos", "bol sogan"
   → extras alanina yaz
 
+GENEL SIPARIS NOTLARI (orderNotes):
+- Teslimat veya siparis geneline dair notlar → orderNotes alanina yaz
+  Ornek: "zile basmayin", "kapiya birakin", "aramadan gelin", "acele olsun", "catal kaşık koymayin"
+- Bu notlar belirli bir urune ait DEGiL, tum siparise ait
+- Urun-spesifik notlar (orn: "sogansiz") → item.notes alanina yaz (orderNotes'a DEGIL)
+
 DEGISIKLIK KOMUTLARI (action alani):
 - "ekle", "bir de ... istiyorum", "... da ekle" → action: "add"
 - "cikar", "kaldir", "istemiyorum", "iptal" → action: "remove"
@@ -274,8 +280,10 @@ export class LlmOrderExtractorService {
       qty: number;
       options: string[];
       price: number;
+      notes?: string | null;
     }>,
-    totalPrice: number
+    totalPrice: number,
+    orderNotes?: string | null,
   ): string {
     const itemLines = items
       .map((item) => {
@@ -284,11 +292,19 @@ export class LlmOrderExtractorService {
           line += ` (${item.options.join(', ')})`;
         }
         line += ` - ${item.price.toFixed(2)} TL`;
+        if (item.notes) {
+          line += `\n    Not: ${item.notes}`;
+        }
         return line;
       })
       .join('\n');
 
-    return `Siparisiniz:\n\n${itemLines}\n\nToplam: ${totalPrice.toFixed(2)} TL\n\nBaska eklemek icin yazin, onaylamak icin "evet" yazin.`;
+    let msg = `Siparisiniz:\n\n${itemLines}\n\nToplam: ${totalPrice.toFixed(2)} TL`;
+    if (orderNotes) {
+      msg += `\n\nNot: ${orderNotes}`;
+    }
+    msg += '\n\nBaska eklemek icin yazin, onaylamak icin "evet" yazin.';
+    return msg;
   }
 }
 

@@ -1676,7 +1676,7 @@ export class ConversationFlowService {
       };
     });
     const total = Number(order.totalPrice);
-    return TEMPLATES.orderSummary(items, total);
+    return TEMPLATES.orderSummary(items, total, undefined, order.notes);
   }
 
   private matchesKeyword(text: string, keywords: string[]): boolean {

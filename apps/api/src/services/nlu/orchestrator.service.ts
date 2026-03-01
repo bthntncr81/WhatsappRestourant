@@ -512,6 +512,7 @@ export class NluOrchestratorService {
         where: { id: existingDraft.id },
         data: {
           totalPrice,
+          ...(extraction.orderNotes ? { notes: extraction.orderNotes } : {}),
           items: {
             create: finalItems.map((item) => ({
               menuItemId: item.menuItemId,
@@ -538,6 +539,7 @@ export class NluOrchestratorService {
           conversationId,
           status: 'DRAFT',
           totalPrice,
+          notes: extraction.orderNotes || null,
           items: {
             create: finalItems.map((item) => ({
               menuItemId: item.menuItemId,
@@ -571,12 +573,13 @@ export class NluOrchestratorService {
         qty: item.qty,
         options,
         price: Number(item.unitPrice) * item.qty,
+        notes: item.notes || null,
       };
     });
 
     const totalPrice = Number(order.totalPrice);
 
-    return llmExtractorService.generateSimpleSummary(items, totalPrice);
+    return llmExtractorService.generateSimpleSummary(items, totalPrice, order.notes);
   }
 
   /**

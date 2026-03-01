@@ -137,6 +137,7 @@ export interface LlmExtractionResponse {
   missingFields: string[];
   clarificationQuestion: string | null;
   confidence: number;
+  orderNotes?: string | null;
 }
 
 export interface LlmExtractedItem {
@@ -211,8 +212,12 @@ export const LLM_EXTRACTION_SCHEMA = {
       maximum: 1,
       description: 'Confidence score between 0 and 1',
     },
+    orderNotes: {
+      type: ['string', 'null'],
+      description: 'General order/delivery notes not specific to any item (e.g., "zile basmayin", "kapiya birakin")',
+    },
   },
-  required: ['items', 'missingFields', 'clarificationQuestion', 'confidence'],
+  required: ['items', 'missingFields', 'clarificationQuestion', 'confidence', 'orderNotes'],
   additionalProperties: false,
 } as const;
 

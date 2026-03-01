@@ -16,7 +16,7 @@ export const TEMPLATES = {
     'Merhaba! Hosgeldiniz 🍽️\nSiparis vermek icin istediginiz urunleri yazabilirsiniz.\nMenumuzu gormek icin "menu" yazin.',
 
   // ==================== ORDER ====================
-  orderSummary(items: OrderSummaryItem[], total: number, deliveryFee?: number): string {
+  orderSummary(items: OrderSummaryItem[], total: number, deliveryFee?: number, orderNotes?: string | null): string {
     let msg = 'Siparisiniz:\n\n';
     items.forEach((i) => {
       let line = `  ${i.qty}x ${i.name}`;
@@ -33,6 +33,9 @@ export const TEMPLATES = {
     if (deliveryFee != null && deliveryFee > 0) {
       msg += `\nTeslimat Ucreti: ${deliveryFee.toFixed(2)} TL`;
       msg += `\nGenel Toplam: ${(total + deliveryFee).toFixed(2)} TL`;
+    }
+    if (orderNotes) {
+      msg += `\n\nNot: ${orderNotes}`;
     }
     msg += '\n\nOnaylamak icin "evet", degistirmek icin yeni urun yazin, iptal icin "iptal" yazin.';
     return msg;
