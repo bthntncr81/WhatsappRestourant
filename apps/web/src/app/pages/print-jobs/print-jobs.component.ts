@@ -264,7 +264,7 @@ pnpm dev</pre>
     .page-header h1 {
       font-size: 1.75rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .filters {
@@ -276,9 +276,9 @@ pnpm dev</pre>
     .filters select {
       padding: 8px 16px;
       border-radius: 8px;
-      border: 1px solid var(--border-color, #333);
-      background: var(--bg-secondary, #1a1a2e);
-      color: var(--text-primary, #fff);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
       font-size: 0.9rem;
       cursor: pointer;
     }
@@ -287,7 +287,7 @@ pnpm dev</pre>
       padding: 8px 16px;
       border-radius: 8px;
       border: none;
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       font-size: 0.9rem;
       cursor: pointer;
@@ -295,7 +295,7 @@ pnpm dev</pre>
     }
 
     .refresh-btn:hover {
-      background: var(--accent-primary-dark, #5558e3);
+      background: var(--color-primary-dark);
     }
 
     .stats-bar {
@@ -303,9 +303,9 @@ pnpm dev</pre>
       gap: 16px;
       margin-bottom: 24px;
       padding: 16px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
     }
 
     .stat {
@@ -318,14 +318,14 @@ pnpm dev</pre>
     }
 
     .stat:hover, .stat.active {
-      background: var(--bg-tertiary, #252542);
+      background: var(--color-bg-tertiary);
     }
 
     .stat-value {
       display: block;
       font-size: 1.5rem;
       font-weight: 700;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .stat-value.warning { color: #f59e0b; }
@@ -335,7 +335,7 @@ pnpm dev</pre>
 
     .stat-label {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .loading, .empty-state {
@@ -344,7 +344,7 @@ pnpm dev</pre>
       align-items: center;
       justify-content: center;
       padding: 64px;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .empty-icon {
@@ -353,9 +353,9 @@ pnpm dev</pre>
     }
 
     .jobs-table-container {
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
       overflow: hidden;
     }
 
@@ -367,8 +367,8 @@ pnpm dev</pre>
     .jobs-table th {
       text-align: left;
       padding: 12px 16px;
-      background: var(--bg-tertiary, #252542);
-      color: var(--text-secondary, #888);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-secondary);
       font-weight: 600;
       font-size: 0.85rem;
       text-transform: uppercase;
@@ -376,12 +376,12 @@ pnpm dev</pre>
 
     .jobs-table td {
       padding: 12px 16px;
-      border-top: 1px solid var(--border-color, #333);
-      color: var(--text-primary, #fff);
+      border-top: 1px solid var(--color-border);
+      color: var(--color-text-primary);
     }
 
     .jobs-table tr:hover {
-      background: var(--bg-tertiary, #252542);
+      background: var(--color-bg-tertiary);
     }
 
     .jobs-table tr.status-failed {
@@ -396,13 +396,13 @@ pnpm dev</pre>
     }
 
     .type-badge.kitchen {
-      background: #fef3c7;
-      color: #92400e;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--color-warning);
     }
 
     .type-badge.courier {
-      background: #dbeafe;
-      color: #1e40af;
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--color-primary);
     }
 
     .order-number {
@@ -417,14 +417,14 @@ pnpm dev</pre>
       font-weight: 600;
     }
 
-    .status-badge.pending { background: #fef3c7; color: #92400e; }
-    .status-badge.processing { background: #dbeafe; color: #1e40af; }
-    .status-badge.done { background: #d1fae5; color: #065f46; }
-    .status-badge.failed { background: #fee2e2; color: #991b1b; }
+    .status-badge.pending { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+    .status-badge.processing { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+    .status-badge.done { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
+    .status-badge.failed { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
 
     .time {
       font-size: 0.85rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       font-family: monospace;
     }
 
@@ -443,7 +443,7 @@ pnpm dev</pre>
     }
 
     .no-error {
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .actions {
@@ -460,8 +460,8 @@ pnpm dev</pre>
       width: 32px;
       height: 32px;
       border-radius: 6px;
-      border: 1px solid var(--border-color, #333);
-      background: var(--bg-tertiary, #252542);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-tertiary);
       color: white;
       font-size: 0.85rem;
       cursor: pointer;
@@ -498,36 +498,36 @@ pnpm dev</pre>
     .info-box {
       margin-top: 24px;
       padding: 20px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
     }
 
     .info-box h3 {
       margin-bottom: 12px;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .info-box p {
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       margin-bottom: 16px;
     }
 
     .info-box code {
-      background: var(--bg-tertiary, #252542);
+      background: var(--color-bg-tertiary);
       padding: 2px 6px;
       border-radius: 4px;
       font-family: monospace;
     }
 
     .info-box pre {
-      background: var(--bg-tertiary, #252542);
+      background: var(--color-bg-tertiary);
       padding: 16px;
       border-radius: 8px;
       font-family: monospace;
       font-size: 0.85rem;
       overflow-x: auto;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     /* Modal Styles */
@@ -546,9 +546,9 @@ pnpm dev</pre>
     }
 
     .modal-content {
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 16px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
       width: 90%;
       max-width: 700px;
       max-height: 85vh;
@@ -574,13 +574,13 @@ pnpm dev</pre>
       justify-content: space-between;
       align-items: center;
       padding: 20px 24px;
-      border-bottom: 1px solid var(--border-color, #333);
+      border-bottom: 1px solid var(--color-border);
     }
 
     .modal-header h2 {
       margin: 0;
       font-size: 1.25rem;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .close-btn {
@@ -588,8 +588,8 @@ pnpm dev</pre>
       height: 36px;
       border-radius: 50%;
       border: none;
-      background: var(--bg-tertiary, #252542);
-      color: var(--text-primary, #fff);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
       font-size: 1.2rem;
       cursor: pointer;
       transition: all 0.2s;
@@ -620,12 +620,12 @@ pnpm dev</pre>
 
     .detail-item label {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .detail-item span {
       font-size: 0.95rem;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .error-box {
@@ -652,29 +652,29 @@ pnpm dev</pre>
     }
 
     .payload-section {
-      background: var(--bg-tertiary, #252542);
+      background: var(--color-bg-tertiary);
       border-radius: 12px;
       padding: 20px;
     }
 
     .payload-section h4 {
       margin: 0 0 16px;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .order-details p {
       margin: 0 0 8px;
       font-size: 0.9rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .order-details p strong {
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .order-details h5 {
       margin: 16px 0 8px;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
       font-size: 0.95rem;
     }
 
@@ -687,19 +687,19 @@ pnpm dev</pre>
     .items-table th {
       text-align: left;
       padding: 8px;
-      border-bottom: 1px solid var(--border-color, #333);
-      color: var(--text-secondary, #888);
+      border-bottom: 1px solid var(--color-border);
+      color: var(--color-text-secondary);
     }
 
     .items-table td {
       padding: 8px;
-      border-bottom: 1px solid var(--border-color, #333);
-      color: var(--text-primary, #fff);
+      border-bottom: 1px solid var(--color-border);
+      color: var(--color-text-primary);
     }
 
     .items-table tfoot td {
       border-bottom: none;
-      border-top: 2px solid var(--border-color, #333);
+      border-top: 2px solid var(--color-border);
     }
 
     .item-options {
@@ -710,7 +710,7 @@ pnpm dev</pre>
     }
 
     .option-tag {
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       padding: 2px 8px;
       border-radius: 4px;
@@ -743,7 +743,7 @@ pnpm dev</pre>
       justify-content: flex-end;
       gap: 12px;
       padding: 16px 24px;
-      border-top: 1px solid var(--border-color, #333);
+      border-top: 1px solid var(--color-border);
     }
 
     .btn {
@@ -757,22 +757,22 @@ pnpm dev</pre>
     }
 
     .btn-primary {
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
     }
 
     .btn-primary:hover {
-      background: var(--accent-primary-dark, #5558e3);
+      background: var(--color-primary-dark);
     }
 
     .btn-secondary {
-      background: var(--bg-tertiary, #252542);
-      color: var(--text-primary, #fff);
-      border: 1px solid var(--border-color, #333);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
+      border: 1px solid var(--color-border);
     }
 
     .btn-secondary:hover {
-      background: var(--bg-primary, #0f0f1a);
+      background: var(--color-bg-primary);
     }
   `]
 })

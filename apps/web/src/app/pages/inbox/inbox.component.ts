@@ -848,7 +848,7 @@ import { AuthService } from '../../services/auth.service';
         padding: var(--spacing-sm) var(--spacing-md);
         border-radius: var(--radius-lg);
         border-bottom-left-radius: 4px;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 1px 2px var(--color-shadow);
       }
 
       .message-text {

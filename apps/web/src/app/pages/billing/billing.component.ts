@@ -18,7 +18,7 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   template: `
-    <div class="billing-standalone" [class.light]="!themeService.isDark()">
+    <div class="billing-standalone">
       <!-- Animated Background -->
       <div class="animated-bg">
         <div class="gradient-orb orb-1"></div>
@@ -451,15 +451,10 @@ import { AuthService } from '../../services/auth.service';
     .billing-standalone {
       min-height: 100vh;
       font-family: 'Inter', sans-serif;
-      background: #050508;
-      color: #ffffff;
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
       position: relative;
       overflow-x: hidden;
-    }
-
-    .billing-standalone.light {
-      background: #f8fafc;
-      color: #0f172a;
     }
 
     /* Animated Background */
@@ -506,10 +501,6 @@ import { AuthService } from '../../services/auth.service';
       animation-delay: -14s;
     }
 
-    .light .gradient-orb {
-      opacity: 0.3;
-    }
-
     @keyframes float {
       0%, 100% { transform: translate(0, 0) scale(1); }
       25% { transform: translate(50px, -50px) scale(1.1); }
@@ -520,16 +511,10 @@ import { AuthService } from '../../services/auth.service';
     .grid-lines {
       position: absolute;
       inset: 0;
-      background-image: 
-        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-image:
+        linear-gradient(var(--color-border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
       background-size: 60px 60px;
-    }
-
-    .light .grid-lines {
-      background-image: 
-        linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
     }
 
     /* Navigation */
@@ -541,37 +526,24 @@ import { AuthService } from '../../services/auth.service';
       align-items: center;
       justify-content: space-between;
       padding: 20px 40px;
-      background: rgba(5, 5, 8, 0.8);
+      background: color-mix(in srgb, var(--color-bg-primary) 85%, transparent);
       backdrop-filter: blur(20px);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .light .billing-nav {
-      background: rgba(248, 250, 252, 0.9);
-      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      border-bottom: 1px solid var(--color-border);
     }
 
     .back-link {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: rgba(255, 255, 255, 0.7);
+      color: var(--color-text-secondary);
       text-decoration: none;
       font-size: 0.9rem;
       transition: all 0.3s;
     }
 
     .back-link:hover {
-      color: white;
+      color: var(--color-text-primary);
       transform: translateX(-4px);
-    }
-
-    .light .back-link {
-      color: rgba(0, 0, 0, 0.6);
-    }
-
-    .light .back-link:hover {
-      color: #0f172a;
     }
 
     .nav-brand {
@@ -599,21 +571,16 @@ import { AuthService } from '../../services/auth.service';
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--color-bg-tertiary);
+      border: 1px solid var(--color-border);
       font-size: 1.2rem;
       cursor: pointer;
       transition: all 0.3s;
     }
 
     .theme-btn:hover {
-      background: rgba(255, 255, 255, 0.15);
+      background: var(--color-bg-elevated);
       transform: rotate(20deg);
-    }
-
-    .light .theme-btn {
-      background: rgba(0, 0, 0, 0.05);
-      border: 1px solid rgba(0, 0, 0, 0.1);
     }
 
     .user-avatar {
@@ -643,17 +610,12 @@ import { AuthService } from '../../services/auth.service';
       align-items: center;
       gap: 8px;
       padding: 8px 20px;
-      background: rgba(99, 102, 241, 0.15);
+      background: rgba(99, 102, 241, 0.12);
       border: 1px solid rgba(99, 102, 241, 0.3);
       border-radius: 100px;
       font-size: 0.9rem;
-      color: #a5b4fc;
+      color: var(--color-accent-primary-hover);
       margin-bottom: 24px;
-    }
-
-    .light .hero-badge {
-      background: rgba(99, 102, 241, 0.1);
-      color: #6366f1;
     }
 
     .hero-title {
@@ -679,13 +641,9 @@ import { AuthService } from '../../services/auth.service';
 
     .hero-subtitle {
       font-size: 1.2rem;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
       max-width: 500px;
       margin: 0 auto;
-    }
-
-    .light .hero-subtitle {
-      color: rgba(0, 0, 0, 0.5);
     }
 
     /* Billing Toggle */
@@ -701,14 +659,9 @@ import { AuthService } from '../../services/auth.service';
       position: relative;
       display: flex;
       padding: 6px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
       border-radius: 16px;
-    }
-
-    .light .billing-toggle {
-      background: rgba(0, 0, 0, 0.03);
-      border: 1px solid rgba(0, 0, 0, 0.1);
     }
 
     .billing-toggle button {
@@ -717,7 +670,7 @@ import { AuthService } from '../../services/auth.service';
       padding: 14px 32px;
       background: transparent;
       border: none;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
       font-size: 1rem;
       font-weight: 500;
       cursor: pointer;
@@ -728,14 +681,6 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .billing-toggle button.active {
-      color: white;
-    }
-
-    .light .billing-toggle button {
-      color: rgba(0, 0, 0, 0.5);
-    }
-
-    .light .billing-toggle button.active {
       color: white;
     }
 
@@ -826,18 +771,12 @@ import { AuthService } from '../../services/auth.service';
     /* Plan Card */
     .plan-card {
       position: relative;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
       border-radius: 24px;
       padding: 32px;
       transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       overflow: hidden;
-    }
-
-    .light .plan-card {
-      background: white;
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     }
 
     .plan-card:hover {
@@ -914,12 +853,8 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .plan-description {
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       font-size: 0.9rem;
-    }
-
-    .light .plan-description {
-      color: rgba(0, 0, 0, 0.5);
     }
 
     /* Pricing */
@@ -927,12 +862,8 @@ import { AuthService } from '../../services/auth.service';
       text-align: center;
       margin-bottom: 28px;
       padding: 20px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--color-bg-tertiary);
       border-radius: 16px;
-    }
-
-    .light .plan-pricing {
-      background: rgba(0, 0, 0, 0.02);
     }
 
     .price-regular, .price-free, .price-custom {
@@ -945,43 +876,24 @@ import { AuthService } from '../../services/auth.service';
     .currency {
       font-size: 1.5rem;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.5);
-    }
-
-    .light .currency {
-      color: rgba(0, 0, 0, 0.4);
+      color: var(--color-text-muted);
     }
 
     .price-amount {
       font-size: 3rem;
       font-weight: 800;
-      background: linear-gradient(135deg, #fff, rgba(255,255,255,0.8));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .light .price-amount {
-      background: linear-gradient(135deg, #0f172a, #334155);
-      -webkit-background-clip: text;
+      color: var(--color-text-primary);
     }
 
     .price-period {
-      color: rgba(255, 255, 255, 0.4);
+      color: var(--color-text-muted);
       font-size: 1rem;
-    }
-
-    .light .price-period {
-      color: rgba(0, 0, 0, 0.4);
     }
 
     .annual-total {
       margin-top: 8px;
       font-size: 0.85rem;
-      color: rgba(255, 255, 255, 0.4);
-    }
-
-    .light .annual-total {
-      color: rgba(0, 0, 0, 0.4);
+      color: var(--color-text-muted);
     }
 
     /* Feature List */
@@ -996,14 +908,9 @@ import { AuthService } from '../../services/auth.service';
       align-items: center;
       gap: 12px;
       padding: 12px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      color: rgba(255, 255, 255, 0.6);
+      border-bottom: 1px solid var(--color-border);
+      color: var(--color-text-secondary);
       font-size: 0.95rem;
-    }
-
-    .light .feature-item {
-      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-      color: rgba(0, 0, 0, 0.6);
     }
 
     .feature-item.highlight {
@@ -1012,11 +919,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .feature-item.available {
-      color: rgba(255, 255, 255, 0.9);
-    }
-
-    .light .feature-item.available {
-      color: rgba(0, 0, 0, 0.8);
+      color: var(--color-text-primary);
     }
 
     .feature-item:not(.available) .feature-icon {
@@ -1084,15 +987,9 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .btn-trial {
-      background: rgba(255, 255, 255, 0.05);
-      color: rgba(255, 255, 255, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .light .btn-trial {
-      background: rgba(0, 0, 0, 0.03);
-      color: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-muted);
+      border: 1px solid var(--color-border);
     }
 
     /* Animations */
@@ -1147,16 +1044,10 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .usage-card {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
       border-radius: 20px;
       padding: 24px;
-    }
-
-    .light .usage-card {
-      background: white;
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     }
 
     .usage-header {
@@ -1177,14 +1068,10 @@ import { AuthService } from '../../services/auth.service';
 
     .progress-bar {
       height: 10px;
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--color-bg-tertiary);
       border-radius: 10px;
       overflow: hidden;
       margin-bottom: 12px;
-    }
-
-    .light .progress-bar {
-      background: rgba(0, 0, 0, 0.05);
     }
 
     .progress-fill {
@@ -1200,11 +1087,7 @@ import { AuthService } from '../../services/auth.service';
 
     .progress-text {
       font-size: 0.9rem;
-      color: rgba(255, 255, 255, 0.6);
-    }
-
-    .light .progress-text {
-      color: rgba(0, 0, 0, 0.5);
+      color: var(--color-text-secondary);
     }
 
     .usage-stat {
@@ -1219,11 +1102,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .stat-max {
-      color: rgba(255, 255, 255, 0.4);
-    }
-
-    .light .stat-max {
-      color: rgba(0, 0, 0, 0.4);
+      color: var(--color-text-muted);
     }
 
     /* FAQ Section */
@@ -1242,16 +1121,10 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .faq-item {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
       border-radius: 16px;
       padding: 24px;
-    }
-
-    .light .faq-item {
-      background: white;
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     }
 
     .faq-item h4 {
@@ -1262,12 +1135,8 @@ import { AuthService } from '../../services/auth.service';
 
     .faq-item p {
       font-size: 0.9rem;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
       line-height: 1.6;
-    }
-
-    .light .faq-item p {
-      color: rgba(0, 0, 0, 0.6);
     }
 
     /* Modal */
@@ -1290,8 +1159,8 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .modal-container {
-      background: #12121a;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border-hover);
       border-radius: 24px;
       max-width: 560px;
       width: 100%;
@@ -1299,11 +1168,6 @@ import { AuthService } from '../../services/auth.service';
       overflow-y: auto;
       position: relative;
       animation: slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .light .modal-container {
-      background: white;
-      border: 1px solid rgba(0, 0, 0, 0.1);
     }
 
     @keyframes slide-up {
@@ -1318,31 +1182,22 @@ import { AuthService } from '../../services/auth.service';
       width: 40px;
       height: 40px;
       border-radius: 12px;
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--color-bg-tertiary);
       border: none;
-      color: white;
+      color: var(--color-text-primary);
       font-size: 24px;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .modal-close:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    .light .modal-close {
-      background: rgba(0, 0, 0, 0.05);
-      color: #0f172a;
+      background: var(--color-bg-elevated);
     }
 
     .modal-header {
       text-align: center;
       padding: 40px 32px 24px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .light .modal-header {
-      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      border-bottom: 1px solid var(--color-border);
     }
 
     .modal-icon {
@@ -1390,29 +1245,19 @@ import { AuthService } from '../../services/auth.service';
     .form-group label {
       display: block;
       font-size: 0.85rem;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
       margin-bottom: 8px;
-    }
-
-    .light .form-group label {
-      color: rgba(0, 0, 0, 0.6);
     }
 
     .form-group input {
       width: 100%;
       padding: 14px 16px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--color-bg-tertiary);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
-      color: white;
+      color: var(--color-text-primary);
       font-size: 1rem;
       transition: all 0.2s;
-    }
-
-    .light .form-group input {
-      background: rgba(0, 0, 0, 0.02);
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      color: #0f172a;
     }
 
     .form-group input:focus {
@@ -1422,11 +1267,7 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .form-group input::placeholder {
-      color: rgba(255, 255, 255, 0.3);
-    }
-
-    .light .form-group input::placeholder {
-      color: rgba(0, 0, 0, 0.3);
+      color: var(--color-text-muted);
     }
 
     .form-row-2 {
@@ -1470,13 +1311,8 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .btn-cancel {
-      background: rgba(255, 255, 255, 0.1);
-      color: white;
-    }
-
-    .light .btn-cancel {
-      background: rgba(0, 0, 0, 0.05);
-      color: #0f172a;
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
     }
 
     .btn-submit {
@@ -1510,12 +1346,8 @@ import { AuthService } from '../../services/auth.service';
     .billing-footer {
       position: relative;
       z-index: 1;
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      border-top: 1px solid var(--color-border);
       padding: 40px 20px;
-    }
-
-    .light .billing-footer {
-      border-top: 1px solid rgba(0, 0, 0, 0.06);
     }
 
     .footer-content {
@@ -1541,34 +1373,22 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .footer-links a {
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       text-decoration: none;
       font-size: 0.9rem;
       transition: color 0.2s;
     }
 
     .footer-links a:hover {
-      color: white;
-    }
-
-    .light .footer-links a {
-      color: rgba(0, 0, 0, 0.5);
-    }
-
-    .light .footer-links a:hover {
-      color: #0f172a;
+      color: var(--color-text-primary);
     }
 
     .footer-secure {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: rgba(255, 255, 255, 0.4);
+      color: var(--color-text-muted);
       font-size: 0.9rem;
-    }
-
-    .light .footer-secure {
-      color: rgba(0, 0, 0, 0.4);
     }
 
     /* Responsive */

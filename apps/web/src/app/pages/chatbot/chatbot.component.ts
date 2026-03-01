@@ -273,7 +273,7 @@ interface ChatMessage {
       gap: 8px;
       margin-top: 10px;
       padding-top: 10px;
-      border-top: 1px solid rgba(0,0,0,0.08);
+      border-top: 1px solid var(--color-border-light);
     }
 
     .inline-btn {

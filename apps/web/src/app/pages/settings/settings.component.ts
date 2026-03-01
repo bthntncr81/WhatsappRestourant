@@ -337,7 +337,7 @@ import {
       .toggle input { opacity: 0; width: 0; height: 0; }
       .toggle-slider {
         position: absolute; inset: 0; background: var(--color-bg-tertiary); border-radius: 26px; transition: var(--transition-fast);
-        &::before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: var(--transition-fast); }
+        &::before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: var(--color-bg-primary); border-radius: 50%; transition: var(--transition-fast); }
       }
       .toggle input:checked + .toggle-slider { background: var(--color-accent-primary); }
       .toggle input:checked + .toggle-slider::before { transform: translateX(22px); }

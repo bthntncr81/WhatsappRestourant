@@ -111,7 +111,7 @@ import { environment } from '../../../environments/environment';
                 <textarea [(ngModel)]="storeForm.address" name="address" rows="2"></textarea>
               </div>
               <div class="form-group">
-                <label>Konum * <small style="color: var(--text-secondary, #888); font-weight: 400;">(Haritaya tıklayarak seçin)</small></label>
+                <label>Konum * <small style="color: var(--color-text-secondary); font-weight: 400;">(Haritaya tıklayarak seçin)</small></label>
                 <div id="storeMap" class="store-map"></div>
                 @if (storeForm.lat !== 0 || storeForm.lng !== 0) {
                   <p class="coords-display">📍 {{ storeForm.lat.toFixed(6) }}, {{ storeForm.lng.toFixed(6) }}</p>
@@ -225,14 +225,14 @@ import { environment } from '../../../environments/environment';
     .page-header h1 {
       font-size: 1.75rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .add-btn {
       padding: 10px 20px;
       border-radius: 8px;
       border: none;
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       font-weight: 500;
       cursor: pointer;
@@ -240,7 +240,7 @@ import { environment } from '../../../environments/environment';
     }
 
     .add-btn:hover {
-      background: var(--accent-primary-dark, #5558e3);
+      background: var(--color-primary-dark, #5558e3);
     }
 
     .stores-grid {
@@ -250,15 +250,15 @@ import { environment } from '../../../environments/environment';
     }
 
     .store-card {
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
       padding: 20px;
       transition: all 0.2s;
     }
 
     .store-card:hover {
-      border-color: var(--accent-primary, #6366f1);
+      border-color: var(--color-primary);
     }
 
     .store-card.inactive {
@@ -275,7 +275,7 @@ import { environment } from '../../../environments/environment';
     .store-header h3 {
       font-size: 1.25rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .status-badge {
@@ -319,11 +319,11 @@ import { environment } from '../../../environments/environment';
     .store-info p {
       margin: 6px 0;
       font-size: 0.9rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .delivery-rules {
-      border-top: 1px solid var(--border-color, #333);
+      border-top: 1px solid var(--color-border);
       padding-top: 16px;
       margin-bottom: 16px;
     }
@@ -331,7 +331,7 @@ import { environment } from '../../../environments/environment';
     .delivery-rules h4 {
       font-size: 0.9rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
       margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
@@ -342,9 +342,9 @@ import { environment } from '../../../environments/environment';
       width: 24px;
       height: 24px;
       border-radius: 50%;
-      border: 1px solid var(--accent-primary, #6366f1);
+      border: 1px solid var(--color-primary);
       background: transparent;
-      color: var(--accent-primary, #6366f1);
+      color: var(--color-primary);
       font-size: 1rem;
       cursor: pointer;
       display: flex;
@@ -353,7 +353,7 @@ import { environment } from '../../../environments/environment';
     }
 
     .add-rule-btn:hover {
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
     }
 
@@ -362,7 +362,7 @@ import { environment } from '../../../environments/environment';
       justify-content: space-between;
       align-items: center;
       padding: 8px 12px;
-      background: var(--bg-tertiary, #252542);
+      background: var(--color-bg-tertiary);
       border-radius: 8px;
       margin-bottom: 8px;
     }
@@ -375,7 +375,7 @@ import { environment } from '../../../environments/environment';
       display: flex;
       gap: 12px;
       font-size: 0.85rem;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .rule-actions {
@@ -398,14 +398,14 @@ import { environment } from '../../../environments/environment';
 
     .no-rules {
       font-size: 0.85rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       font-style: italic;
     }
 
     .store-actions {
       display: flex;
       gap: 8px;
-      border-top: 1px solid var(--border-color, #333);
+      border-top: 1px solid var(--color-border);
       padding-top: 16px;
     }
 
@@ -420,8 +420,8 @@ import { environment } from '../../../environments/environment';
     }
 
     .edit-btn {
-      background: var(--bg-tertiary, #252542);
-      color: var(--text-primary, #fff);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
     }
 
     .open-toggle-btn {
@@ -456,9 +456,9 @@ import { environment } from '../../../environments/environment';
       align-items: center;
       justify-content: center;
       padding: 64px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px dashed var(--border-color, #333);
+      border: 1px dashed var(--color-border);
     }
 
     .empty-icon {
@@ -467,7 +467,7 @@ import { environment } from '../../../environments/environment';
     }
 
     .empty-state p {
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       margin-bottom: 16px;
     }
 
@@ -486,23 +486,23 @@ import { environment } from '../../../environments/environment';
     }
 
     .modal {
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
       padding: 24px;
       width: 100%;
       max-width: 560px;
       max-height: 90vh;
       overflow-y: auto;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
     }
 
     .modal h2 {
       margin-bottom: 8px;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .modal-subtitle {
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       margin-bottom: 20px;
     }
 
@@ -514,7 +514,7 @@ import { environment } from '../../../environments/environment';
       display: block;
       margin-bottom: 6px;
       font-size: 0.9rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .form-group input,
@@ -522,9 +522,9 @@ import { environment } from '../../../environments/environment';
       width: 100%;
       padding: 10px 12px;
       border-radius: 8px;
-      border: 1px solid var(--border-color, #333);
-      background: var(--bg-tertiary, #252542);
-      color: var(--text-primary, #fff);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
       font-size: 0.95rem;
     }
 
@@ -558,9 +558,9 @@ import { environment } from '../../../environments/environment';
     .cancel-btn {
       padding: 10px 20px;
       border-radius: 8px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
       background: transparent;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
       cursor: pointer;
     }
 
@@ -568,7 +568,7 @@ import { environment } from '../../../environments/environment';
       padding: 10px 20px;
       border-radius: 8px;
       border: none;
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       cursor: pointer;
     }
@@ -578,28 +578,28 @@ import { environment } from '../../../environments/environment';
       width: 100%;
       height: 300px;
       border-radius: 8px;
-      border: 1px solid var(--border-color, #333);
-      background: var(--bg-tertiary, #252542);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-tertiary);
     }
 
     .coords-display {
       margin-top: 8px;
       font-size: 0.85rem;
-      color: var(--accent-primary, #6366f1);
+      color: var(--color-primary);
     }
 
     /* Geo Test Section */
     .geo-test-section {
       margin-top: 32px;
       padding: 20px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
     }
 
     .geo-test-section h3 {
       margin-bottom: 16px;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .geo-test-form .form-row {
@@ -610,7 +610,7 @@ import { environment } from '../../../environments/environment';
       padding: 10px 20px;
       border-radius: 8px;
       border: none;
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       cursor: pointer;
       white-space: nowrap;
@@ -634,7 +634,7 @@ import { environment } from '../../../environments/environment';
 
     .geo-test-result p {
       margin: 4px 0;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
   `]
 })

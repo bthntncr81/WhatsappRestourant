@@ -349,7 +349,7 @@ import { NotificationService } from '../../services/notification.service';
     .page-header h1 {
       font-size: 1.75rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .filters {
@@ -361,9 +361,9 @@ import { NotificationService } from '../../services/notification.service';
     .filters select {
       padding: 8px 16px;
       border-radius: 8px;
-      border: 1px solid var(--border-color, #333);
-      background: var(--bg-secondary, #1a1a2e);
-      color: var(--text-primary, #fff);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
       font-size: 0.9rem;
       cursor: pointer;
     }
@@ -372,7 +372,7 @@ import { NotificationService } from '../../services/notification.service';
       padding: 8px 16px;
       border-radius: 8px;
       border: none;
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       font-size: 0.9rem;
       cursor: pointer;
@@ -380,22 +380,22 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .refresh-btn:hover {
-      background: var(--accent-primary-dark, #5558e3);
+      background: var(--color-primary-hover);
     }
 
     .sound-toggle-btn {
       padding: 8px 12px;
       border-radius: 8px;
-      border: 1px solid var(--border-color, #333);
-      background: var(--bg-secondary, #1a1a2e);
-      color: var(--text-primary, #fff);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
       font-size: 1rem;
       cursor: pointer;
       transition: all 0.2s;
     }
 
     .sound-toggle-btn:hover {
-      border-color: var(--accent-primary, #6366f1);
+      border-color: var(--color-primary);
     }
 
     .stat.pulse {
@@ -412,9 +412,9 @@ import { NotificationService } from '../../services/notification.service';
       gap: 16px;
       margin-bottom: 24px;
       padding: 16px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
     }
 
     .stat {
@@ -427,14 +427,14 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .stat:hover, .stat.active {
-      background: var(--bg-tertiary, #252542);
+      background: var(--color-bg-tertiary);
     }
 
     .stat-value {
       display: block;
       font-size: 1.5rem;
       font-weight: 700;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .stat-value.warning { color: #f59e0b; }
@@ -443,7 +443,7 @@ import { NotificationService } from '../../services/notification.service';
 
     .stat-label {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .loading, .empty-state {
@@ -452,7 +452,7 @@ import { NotificationService } from '../../services/notification.service';
       align-items: center;
       justify-content: center;
       padding: 64px;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .empty-icon {
@@ -467,15 +467,15 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .order-card {
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 12px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
       padding: 16px;
       transition: all 0.2s;
     }
 
     .order-card:hover {
-      border-color: var(--accent-primary, #6366f1);
+      border-color: var(--color-primary);
     }
 
     .order-card.status-pending_confirmation {
@@ -509,7 +509,7 @@ import { NotificationService } from '../../services/notification.service';
     .order-number {
       font-size: 1.25rem;
       font-weight: 700;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .status-badge {
@@ -520,13 +520,13 @@ import { NotificationService } from '../../services/notification.service';
       text-transform: uppercase;
     }
 
-    .status-badge.draft { background: #374151; color: #9ca3af; }
-    .status-badge.pending_confirmation { background: #fef3c7; color: #92400e; }
-    .status-badge.confirmed { background: #dbeafe; color: #1e40af; }
-    .status-badge.preparing { background: #ede9fe; color: #5b21b6; }
-    .status-badge.ready { background: #d1fae5; color: #065f46; }
-    .status-badge.delivered { background: #f0fdf4; color: #166534; }
-    .status-badge.cancelled { background: #fee2e2; color: #991b1b; }
+    .status-badge.draft { background: rgba(156, 163, 175, 0.15); color: var(--color-text-secondary); }
+    .status-badge.pending_confirmation { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+    .status-badge.confirmed { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+    .status-badge.preparing { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+    .status-badge.ready { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
+    .status-badge.delivered { background: rgba(34, 197, 94, 0.1); color: var(--color-success); }
+    .status-badge.cancelled { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
 
     .order-customer {
       display: flex;
@@ -534,24 +534,24 @@ import { NotificationService } from '../../services/notification.service';
       gap: 4px;
       margin-bottom: 12px;
       padding-bottom: 12px;
-      border-bottom: 1px solid var(--border-color, #333);
+      border-bottom: 1px solid var(--color-border);
     }
 
     .customer-name {
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .customer-phone {
       font-size: 0.85rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .store-badge {
       display: inline-block;
       margin-top: 4px;
       padding: 2px 8px;
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       border-radius: 4px;
       font-size: 0.75rem;
@@ -571,24 +571,24 @@ import { NotificationService } from '../../services/notification.service';
 
     .item-qty {
       font-weight: 600;
-      color: var(--accent-primary, #6366f1);
+      color: var(--color-primary);
       min-width: 32px;
     }
 
     .item-name {
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .more-items {
       font-size: 0.85rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       font-style: italic;
       padding-top: 4px;
     }
 
     .item-options {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       font-weight: 400;
     }
 
@@ -625,19 +625,19 @@ import { NotificationService } from '../../services/notification.service';
       justify-content: space-between;
       align-items: center;
       padding-top: 12px;
-      border-top: 1px solid var(--border-color, #333);
+      border-top: 1px solid var(--color-border);
       margin-bottom: 12px;
     }
 
     .order-total {
       font-size: 1.1rem;
       font-weight: 700;
-      color: var(--accent-secondary, #10b981);
+      color: var(--color-secondary);
     }
 
     .order-time {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .order-actions {
@@ -656,21 +656,21 @@ import { NotificationService } from '../../services/notification.service';
       font-weight: 500;
       cursor: pointer;
       transition: all 0.2s;
-      background: var(--bg-tertiary, #252542);
-      color: var(--text-primary, #fff);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
     }
 
     .action-btn:hover {
-      background: var(--bg-hover, #2f2f4f);
+      background: var(--color-bg-elevated);
     }
 
     .action-btn.confirm {
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
     }
 
     .action-btn.confirm:hover {
-      background: var(--accent-primary-dark, #5558e3);
+      background: var(--color-primary-hover);
     }
 
     .action-btn.success {
@@ -741,7 +741,7 @@ import { NotificationService } from '../../services/notification.service';
     .modal-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.7);
+      background: var(--color-overlay, rgba(0, 0, 0, 0.7));
       display: flex;
       align-items: center;
       justify-content: center;
@@ -750,8 +750,8 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .reject-modal {
-      background: var(--bg-secondary, #1a1a2e);
-      border: 1px solid var(--border-color, #333);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       width: 100%;
       max-width: 440px;
@@ -763,19 +763,19 @@ import { NotificationService } from '../../services/notification.service';
       justify-content: space-between;
       align-items: center;
       padding: 16px 20px;
-      border-bottom: 1px solid var(--border-color, #333);
+      border-bottom: 1px solid var(--color-border);
     }
 
     .modal-header h3 {
       font-size: 1.1rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .close-btn {
       background: transparent;
       border: none;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       font-size: 1.2rem;
       cursor: pointer;
       padding: 4px;
@@ -787,7 +787,7 @@ import { NotificationService } from '../../services/notification.service';
 
     .modal-info {
       margin-bottom: 16px;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       font-size: 0.9rem;
     }
 
@@ -796,16 +796,16 @@ import { NotificationService } from '../../services/notification.service';
       margin-bottom: 8px;
       font-weight: 500;
       font-size: 0.9rem;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .reject-textarea {
       width: 100%;
       padding: 12px;
       border-radius: 8px;
-      border: 1px solid var(--border-color, #333);
-      background: var(--bg-tertiary, #252542);
-      color: var(--text-primary, #fff);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-tertiary);
+      color: var(--color-text-primary);
       font-size: 0.9rem;
       resize: vertical;
       min-height: 80px;
@@ -822,7 +822,7 @@ import { NotificationService } from '../../services/notification.service';
       justify-content: flex-end;
       gap: 12px;
       padding: 16px 20px;
-      border-top: 1px solid var(--border-color, #333);
+      border-top: 1px solid var(--color-border);
     }
 
     /* Customer Detail Panel */
@@ -831,7 +831,7 @@ import { NotificationService } from '../../services/notification.service';
     .panel-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.5);
+      background: var(--color-overlay, rgba(0, 0, 0, 0.5));
       z-index: 999;
     }
 
@@ -842,8 +842,8 @@ import { NotificationService } from '../../services/notification.service';
       bottom: 0;
       width: 420px;
       max-width: 90vw;
-      background: var(--bg-primary, #0f0f23);
-      border-left: 1px solid var(--border-color, #333);
+      background: var(--color-bg-primary);
+      border-left: 1px solid var(--color-border);
       z-index: 1000;
       display: flex;
       flex-direction: column;
@@ -860,14 +860,14 @@ import { NotificationService } from '../../services/notification.service';
       justify-content: space-between;
       align-items: center;
       padding: 16px 20px;
-      border-bottom: 1px solid var(--border-color, #333);
+      border-bottom: 1px solid var(--color-border);
       flex-shrink: 0;
     }
 
     .panel-header h3 {
       font-size: 1.1rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .panel-loading {
@@ -875,7 +875,7 @@ import { NotificationService } from '../../services/notification.service';
       align-items: center;
       justify-content: center;
       padding: 48px;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .panel-content {
@@ -893,7 +893,7 @@ import { NotificationService } from '../../services/notification.service';
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       margin-bottom: 12px;
     }
 
@@ -907,7 +907,7 @@ import { NotificationService } from '../../services/notification.service';
       width: 48px;
       height: 48px;
       border-radius: 50%;
-      background: var(--accent-primary, #6366f1);
+      background: var(--color-primary);
       color: white;
       display: flex;
       align-items: center;
@@ -920,18 +920,18 @@ import { NotificationService } from '../../services/notification.service';
     .customer-detail-name {
       font-size: 1.1rem;
       font-weight: 600;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .customer-detail-phone {
       font-size: 0.9rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       font-family: var(--font-mono);
     }
 
     .customer-since {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
       margin-top: 4px;
     }
 
@@ -942,8 +942,8 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .stat-card-panel {
-      background: var(--bg-secondary, #1a1a2e);
-      border: 1px solid var(--border-color, #333);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
       border-radius: 8px;
       padding: 12px;
       text-align: center;
@@ -953,12 +953,12 @@ import { NotificationService } from '../../services/notification.service';
       display: block;
       font-size: 1.2rem;
       font-weight: 700;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .stat-card-label-panel {
       font-size: 0.75rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .favorite-item {
@@ -966,34 +966,34 @@ import { NotificationService } from '../../services/notification.service';
       justify-content: space-between;
       align-items: center;
       padding: 8px 12px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 6px;
       margin-bottom: 6px;
     }
 
     .favorite-name {
       font-size: 0.9rem;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
       font-weight: 500;
     }
 
     .favorite-count {
       font-size: 0.8rem;
-      color: var(--accent-primary, #6366f1);
+      color: var(--color-primary);
       font-weight: 600;
     }
 
     .address-card {
       padding: 10px 12px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 6px;
       margin-bottom: 6px;
       font-size: 0.85rem;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .address-card.current {
-      border: 1px solid var(--accent-primary, #6366f1);
+      border: 1px solid var(--color-primary);
       display: flex;
       gap: 8px;
       align-items: flex-start;
@@ -1007,15 +1007,15 @@ import { NotificationService } from '../../services/notification.service';
 
     .address-text {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .history-order {
       padding: 12px;
-      background: var(--bg-secondary, #1a1a2e);
+      background: var(--color-bg-secondary);
       border-radius: 8px;
       margin-bottom: 8px;
-      border: 1px solid var(--border-color, #333);
+      border: 1px solid var(--color-border);
     }
 
     .history-header {
@@ -1027,7 +1027,7 @@ import { NotificationService } from '../../services/notification.service';
 
     .history-number {
       font-weight: 700;
-      color: var(--text-primary, #fff);
+      color: var(--color-text-primary);
     }
 
     .status-badge.small {
@@ -1044,7 +1044,7 @@ import { NotificationService } from '../../services/notification.service';
 
     .history-item {
       font-size: 0.8rem;
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
 
     .history-item.more {
@@ -1059,11 +1059,11 @@ import { NotificationService } from '../../services/notification.service';
 
     .history-total {
       font-weight: 600;
-      color: var(--accent-secondary, #10b981);
+      color: var(--color-secondary);
     }
 
     .history-date {
-      color: var(--text-secondary, #888);
+      color: var(--color-text-secondary);
     }
   `]
 })

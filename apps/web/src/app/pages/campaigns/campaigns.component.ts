@@ -347,8 +347,8 @@ interface CampaignSendLog {
     }
 
     .stat-card.accent { border-color: var(--color-accent-primary); }
-    .stat-card.warning { border-color: #f59e0b; }
-    .stat-card.success { border-color: #10b981; }
+    .stat-card.warning { border-color: var(--color-warning); }
+    .stat-card.success { border-color: var(--color-success); }
 
     .stat-value {
       font-size: 1.5rem;
@@ -430,7 +430,7 @@ interface CampaignSendLog {
 
     .btn-danger {
       background: rgba(239, 68, 68, 0.1);
-      color: #ef4444;
+      color: var(--color-danger);
       border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
@@ -482,17 +482,17 @@ interface CampaignSendLog {
     }
 
     .badge-draft { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-    .badge-scheduled { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-    .badge-sending { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-    .badge-completed { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-    .badge-cancelled { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .badge-scheduled { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+    .badge-sending { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+    .badge-completed { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
+    .badge-cancelled { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
     .badge-pending_send { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-    .badge-sent { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-    .badge-opened { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-    .badge-converted { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-    .badge-failed { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .badge-sent { background: rgba(99, 102, 241, 0.15); color: var(--color-primary); }
+    .badge-opened { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+    .badge-converted { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
+    .badge-failed { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
     .badge-skipped { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
-    .badge-segment { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+    .badge-segment { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
 
     .font-medium { font-weight: 500; }
     .font-mono { font-family: var(--font-mono); font-size: 0.75rem; }

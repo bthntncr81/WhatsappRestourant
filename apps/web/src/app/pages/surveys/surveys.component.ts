@@ -208,7 +208,7 @@ interface ApiResponse<T> {
       display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;
     }
     .stat-card {
-      background: var(--color-surface, #fff); border-radius: var(--radius-md, 8px);
+      background: var(--color-bg-elevated); border-radius: var(--radius-md, 8px);
       padding: 16px 24px; flex: 1; min-width: 140px;
       border: 1px solid var(--color-border, #e5e7eb);
     }
@@ -224,7 +224,7 @@ interface ApiResponse<T> {
     .tab-btn {
       padding: 8px 20px; border-radius: var(--radius-md, 8px);
       border: 1px solid var(--color-border, #e5e7eb);
-      background: var(--color-surface, #fff); cursor: pointer;
+      background: var(--color-bg-elevated); cursor: pointer;
       font-size: 0.9rem; transition: all 0.2s;
     }
     .tab-btn.active {
@@ -234,18 +234,18 @@ interface ApiResponse<T> {
 
     .complaints-list { display: flex; flex-direction: column; gap: 12px; }
     .complaint-card {
-      background: var(--color-surface, #fff); border-radius: var(--radius-md, 8px);
+      background: var(--color-bg-elevated); border-radius: var(--radius-md, 8px);
       padding: 16px; cursor: pointer; border: 1px solid var(--color-border, #e5e7eb);
       transition: all 0.2s;
     }
     .complaint-card:hover { border-color: var(--color-primary, #3b82f6); }
-    .complaint-card.selected { border-color: var(--color-primary, #3b82f6); background: #f0f7ff; }
+    .complaint-card.selected { border-color: var(--color-primary, #3b82f6); background: rgba(99, 102, 241, 0.08); }
 
     .complaint-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
     .rating-badge { font-size: 0.85rem; }
-    .rating-1, .rating-2 { color: #e74c3c; }
-    .rating-3 { color: #f39c12; }
-    .rating-4, .rating-5 { color: #27ae60; }
+    .rating-1, .rating-2 { color: var(--color-danger, #e74c3c); }
+    .rating-3 { color: var(--color-warning, #f39c12); }
+    .rating-4, .rating-5 { color: var(--color-success, #27ae60); }
     .customer-name { font-weight: 600; flex: 1; }
     .complaint-date { color: var(--color-text-secondary, #666); font-size: 0.8rem; }
     .complaint-comment {
@@ -255,8 +255,8 @@ interface ApiResponse<T> {
     .badge {
       font-size: 0.75rem; padding: 2px 10px; border-radius: 12px;
     }
-    .badge.unresolved { background: #fee2e2; color: #dc2626; }
-    .badge.resolved { background: #dcfce7; color: #16a34a; }
+    .badge.unresolved { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); }
+    .badge.resolved { background: rgba(34, 197, 94, 0.15); color: var(--color-success); }
 
     .empty-state {
       text-align: center; padding: 40px; color: var(--color-text-secondary, #666);
@@ -270,7 +270,7 @@ interface ApiResponse<T> {
     }
     .detail-panel {
       position: fixed; top: 0; right: 0; bottom: 0; width: 480px;
-      background: var(--color-surface, #fff); z-index: 100;
+      background: var(--color-bg-elevated); z-index: 100;
       box-shadow: -4px 0 20px rgba(0,0,0,0.1);
       display: flex; flex-direction: column;
       animation: slideIn 0.25s ease-out;
@@ -304,9 +304,9 @@ interface ApiResponse<T> {
       padding: 8px 12px; border-radius: 12px; font-size: 0.85rem;
       line-height: 1.4; word-break: break-word;
     }
-    .incoming .msg-bubble { background: #f3f4f6; }
-    .outgoing .msg-bubble { background: #dcfce7; }
-    .msg-time { font-size: 0.7rem; color: #999; margin-top: 2px; padding: 0 4px; }
+    .incoming .msg-bubble { background: var(--color-bg-tertiary); }
+    .outgoing .msg-bubble { background: rgba(34, 197, 94, 0.15); }
+    .msg-time { font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px; padding: 0 4px; }
     .incoming .msg-time { text-align: left; }
     .outgoing .msg-time { text-align: right; }
 
