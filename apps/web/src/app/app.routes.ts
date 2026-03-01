@@ -83,6 +83,12 @@ export const routes: Routes = [
     canActivate: [roleGuard(['OWNER', 'ADMIN'])],
   },
   {
+    path: 'customers',
+    loadComponent: () =>
+      import('./pages/customers/customers.component').then((m) => m.CustomersComponent),
+    canActivate: [roleGuard(['OWNER', 'ADMIN'])],
+  },
+  {
     path: 'campaigns',
     loadComponent: () =>
       import('./pages/campaigns/campaigns.component').then((m) => m.CampaignsComponent),

@@ -56,7 +56,7 @@ router.put(
 const customersQuerySchema = z.object({
   segment: z.enum(['ACTIVE', 'SLEEPING', 'NEW']).optional(),
   optIn: z.enum(['PENDING', 'OPTED_IN', 'OPTED_OUT']).optional(),
-  limit: z.coerce.number().min(1).max(100).optional(),
+  limit: z.coerce.number().min(1).max(1000).optional(),
   offset: z.coerce.number().min(0).optional(),
 });
 
@@ -84,6 +84,32 @@ router.post(
     try {
       const result = await broadcastService.syncCustomerProfiles(req.tenantId!);
       res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// ==================== CUSTOMER DETAIL ====================
+
+router.get(
+  '/customers/:id/favorites',
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const favorites = await broadcastService.getCustomerFavorites(req.tenantId!, req.params.id);
+      res.json({ success: true, data: favorites });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/customers/:id/orders',
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const orders = await broadcastService.getCustomerOrders(req.tenantId!, req.params.id);
+      res.json({ success: true, data: orders });
     } catch (error) {
       next(error);
     }

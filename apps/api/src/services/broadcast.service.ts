@@ -714,6 +714,117 @@ Samimi bir kampanya mesaji yaz.`;
     return { profiles, total };
   }
 
+  // ==================== CUSTOMER DETAIL ====================
+
+  async getCustomerFavorites(tenantId: string, profileId: string) {
+    const profile = await prisma.customerProfile.findFirst({
+      where: { id: profileId, tenantId },
+    });
+    if (!profile) throw new Error('Customer profile not found');
+
+    const items = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          tenantId,
+          customerPhone: profile.customerPhone,
+          status: { in: ['DELIVERED', 'CONFIRMED', 'PREPARING', 'READY'] },
+        },
+      },
+      select: {
+        menuItemId: true,
+        menuItemName: true,
+        unitPrice: true,
+        qty: true,
+        order: { select: { createdAt: true } },
+      },
+    });
+
+    // Group by menuItemId
+    const grouped = new Map<string, {
+      menuItemId: string;
+      menuItemName: string;
+      totalQty: number;
+      orderCount: number;
+      currentPrice: number;
+      category: string | null;
+    }>();
+
+    const orderSets = new Map<string, Set<string>>();
+
+    for (const item of items) {
+      const existing = grouped.get(item.menuItemId);
+      if (existing) {
+        existing.totalQty += item.qty;
+        existing.currentPrice = Number(item.unitPrice);
+      } else {
+        grouped.set(item.menuItemId, {
+          menuItemId: item.menuItemId,
+          menuItemName: item.menuItemName,
+          totalQty: item.qty,
+          orderCount: 0,
+          currentPrice: Number(item.unitPrice),
+          category: null,
+        });
+        orderSets.set(item.menuItemId, new Set());
+      }
+      orderSets.get(item.menuItemId)!.add(item.order.createdAt.toISOString());
+    }
+
+    // Set order counts and fetch categories
+    for (const [menuItemId, entry] of grouped) {
+      entry.orderCount = orderSets.get(menuItemId)?.size || 0;
+    }
+
+    // Fetch categories
+    const menuItemIds = [...grouped.keys()];
+    if (menuItemIds.length > 0) {
+      const menuItems = await prisma.menuItem.findMany({
+        where: { id: { in: menuItemIds } },
+        select: { id: true, category: true },
+      });
+      for (const mi of menuItems) {
+        const entry = grouped.get(mi.id);
+        if (entry) entry.category = mi.category || null;
+      }
+    }
+
+    return Array.from(grouped.values())
+      .sort((a, b) => b.totalQty - a.totalQty)
+      .slice(0, 20);
+  }
+
+  async getCustomerOrders(tenantId: string, profileId: string) {
+    const profile = await prisma.customerProfile.findFirst({
+      where: { id: profileId, tenantId },
+    });
+    if (!profile) throw new Error('Customer profile not found');
+
+    const orders = await prisma.order.findMany({
+      where: {
+        tenantId,
+        customerPhone: profile.customerPhone,
+        status: { not: 'DRAFT' },
+      },
+      include: {
+        items: {
+          select: { menuItemName: true, qty: true, unitPrice: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    });
+
+    return orders.map(o => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      status: o.status,
+      totalPrice: o.totalPrice,
+      createdAt: o.createdAt,
+      itemCount: o.items.length,
+      items: o.items,
+    }));
+  }
+
   // ==================== STATS ====================
 
   async getStats(tenantId: string) {
