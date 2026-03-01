@@ -48,6 +48,11 @@ model Tenant {
   // Survey relations
   satisfactionSurveys SatisfactionSurvey[]
 
+  // Broadcast / Campaign relations
+  customerProfiles  CustomerProfile[]
+  campaigns         Campaign[]
+  broadcastSettings BroadcastSettings?
+
   // WhatsApp config
   whatsappConfig      WhatsAppConfig?
 
@@ -862,4 +867,129 @@ model SatisfactionSurvey {
   @@index([tenantId, isComplaint, createdAt])
   @@index([tenantId, createdAt])
   @@map("satisfaction_surveys")
+}
+
+// ==================== BROADCAST / CAMPAIGN ====================
+
+enum CustomerSegment {
+  ACTIVE
+  SLEEPING
+  NEW
+}
+
+enum BroadcastOptInStatus {
+  PENDING
+  OPTED_IN
+  OPTED_OUT
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignSendStatus {
+  PENDING_SEND
+  SENT
+  DELIVERED
+  OPENED
+  CONVERTED
+  FAILED
+  SKIPPED
+}
+
+model CustomerProfile {
+  id              String               @id @default(cuid())
+  tenantId        String
+  customerPhone   String
+  customerName    String?
+  segment         CustomerSegment      @default(NEW)
+  broadcastOptIn  BroadcastOptInStatus @default(PENDING)
+  optInAskedAt    DateTime?
+  optInChangedAt  DateTime?
+  avgOrderHour    Int?                 // 0-23, weighted average order hour (UTC+3)
+  lastOrderAt     DateTime?
+  orderCount      Int                  @default(0)
+  totalSpent      Decimal              @default(0) @db.Decimal(10, 2)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  campaignLogs CampaignSendLog[]
+
+  @@unique([tenantId, customerPhone])
+  @@index([tenantId, segment])
+  @@index([tenantId, broadcastOptIn])
+  @@map("customer_profiles")
+}
+
+model Campaign {
+  id              String         @id @default(cuid())
+  tenantId        String
+  name            String
+  targetSegments  String[]       // ['ACTIVE', 'SLEEPING', 'NEW'] subset
+  maxDiscountPct  Int            @default(10)
+  messageTemplate String?        // Optional admin hint for AI prompt
+  status          CampaignStatus @default(DRAFT)
+  usePersonalTime Boolean        @default(true)
+  scheduledAt     DateTime?      // Fixed time if usePersonalTime=false
+  totalRecipients Int            @default(0)
+  totalSent       Int            @default(0)
+  totalOpened     Int            @default(0)
+  totalConverted  Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  completedAt     DateTime?
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sendLogs CampaignSendLog[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("campaigns")
+}
+
+model CampaignSendLog {
+  id                String             @id @default(cuid())
+  tenantId          String
+  campaignId        String
+  customerProfileId String
+  customerPhone     String
+  status            CampaignSendStatus @default(PENDING_SEND)
+  scheduledSendAt   DateTime
+  sentAt            DateTime?
+  messageText       String?            // AI-generated personalized message
+  discountPct       Int?
+  suggestedItems    Json?              // [{menuItemId, name, originalPrice, discountedPrice}]
+  externalMessageId String?
+  errorMessage      String?
+  createdAt         DateTime           @default(now())
+
+  campaign        Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, campaignId, status])
+  @@index([tenantId, scheduledSendAt, status])
+  @@index([tenantId, customerPhone])
+  @@map("campaign_send_logs")
+}
+
+model BroadcastSettings {
+  id                    String   @id @default(cuid())
+  tenantId              String   @unique
+  isEnabled             Boolean  @default(false)
+  maxDiscountPct        Int      @default(15)
+  minDaysBetweenSends   Int      @default(3)
+  dailySendLimit        Int      @default(200)
+  activeThresholdDays   Int      @default(14)
+  sleepingThresholdDays Int      @default(60)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("broadcast_settings")
 }

@@ -17,6 +17,7 @@ import billingRouter from './routes/billing.routes';
 import { paymentRouter } from './routes/payment.routes';
 import { whatsappConfigRouter } from './routes/whatsapp-config.routes';
 import { surveyRouter } from './routes/survey.routes';
+import { broadcastRouter } from './routes/broadcast.routes';
 import prisma from './db/prisma';
 import redis from './db/redis';
 
@@ -66,6 +67,7 @@ app.use(`${config.server.apiPrefix}/billing`, billingRouter);
 app.use(`${config.server.apiPrefix}/payments`, paymentRouter);
 app.use(`${config.server.apiPrefix}/whatsapp-config`, whatsappConfigRouter);
 app.use(`${config.server.apiPrefix}/surveys`, surveyRouter);
+app.use(`${config.server.apiPrefix}/broadcast`, broadcastRouter);
 
 // 404 Handler
 app.use((req, res) => {

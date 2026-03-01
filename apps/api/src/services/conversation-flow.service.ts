@@ -9,6 +9,7 @@ import { savedAddressService } from './saved-address.service';
 import { storeService } from './store.service';
 import { upsellService } from './upsell.service';
 import { surveyService } from './survey.service';
+import { reorderService } from './reorder.service';
 import { TEMPLATES } from './message-templates';
 import { createLogger } from '../logger';
 import {
@@ -43,6 +44,8 @@ const CARD_KEYWORDS = ['kart', 'kredi'];
 const GREETING_KEYWORDS = ['merhaba', 'selam', 'iyi gunler', 'iyi g\u00fcnler', 'nasilsiniz', 'nas\u0131ls\u0131n\u0131z', 'hey', 'sa'];
 const THANKS_KEYWORDS = ['tesekkur', 'te\u015fekk\u00fcr', 'sagol', 'sa\u011fol', 'eyvallah'];
 const HELP_KEYWORDS = ['yardim', 'yard\u0131m', 'nasil', 'nas\u0131l', 'ne yapabilirim'];
+const REORDER_KEYWORDS = ['tekrar', 'favorilerim', 'favori', 'onceki', 'gene ayni', 'her zamanki'];
+const BROADCAST_OPT_OUT_KEYWORDS = ['kampanya istemiyorum', 'bildirim kapat'];
 
 // Payment link expiry (30 minutes)
 const PAYMENT_LINK_EXPIRY_MS = 30 * 60 * 1000;
@@ -220,6 +223,32 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
+    // Handle reorder list selection (sub-state)
+    if (ctx.conversation.flowSubState === 'REORDER_LIST_SHOWN') {
+      const listReplyId = ctx.payload.interactive?.listReply?.id;
+      if (listReplyId?.startsWith('reorder_')) {
+        return this.handleReorderSelection(ctx, listReplyId);
+      }
+      // Not a list reply — clear sub-state and continue normal flow
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { flowSubState: null },
+      });
+    }
+
+    // Broadcast opt-out
+    if (BROADCAST_OPT_OUT_KEYWORDS.some(k => text.includes(k))) {
+      try {
+        const { broadcastService } = await import('./broadcast.service');
+        await broadcastService.handleOptInResponse(tenantId, ctx.conversation.customerPhone, false);
+        await this.sendText(ctx, TEMPLATES.broadcastOptOutConfirmed);
+      } catch (err) {
+        logger.warn({ err }, 'Broadcast opt-out failed');
+        await this.sendText(ctx, 'Kampanya bildirimleri kapatildi.');
+      }
+      return 'IDLE';
+    }
+
     // Menu request
     if (this.matchesKeyword(text, MENU_KEYWORDS)) {
       // Let NLU handle menu display
@@ -230,6 +259,11 @@ export class ConversationFlowService {
         await this.sendText(ctx, result.confirmationMessage);
       }
       return 'IDLE';
+    }
+
+    // Reorder / Favorites
+    if (this.matchesKeyword(text, REORDER_KEYWORDS)) {
+      return this.handleReorderRequest(ctx);
     }
 
     // Check for active (non-draft) orders before NLU
@@ -594,6 +628,70 @@ export class ConversationFlowService {
   /**
    * Proceed to address/location flow after order review (and optional upsell)
    */
+  // ==================== REORDER / FAVORITES ====================
+
+  private async handleReorderRequest(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation } = ctx;
+
+    const favorites = await reorderService.getFavorites(tenantId, conversation.customerPhone, 10);
+
+    if (favorites.length === 0) {
+      await this.sendText(ctx, TEMPLATES.noFavoritesYet);
+      return 'IDLE';
+    }
+
+    const sections = reorderService.buildFavoritesListSections(favorites);
+
+    await whatsappService.sendListMessage(
+      tenantId,
+      conversationId,
+      TEMPLATES.favoritesListHeader(favorites.length),
+      TEMPLATES.favoritesListButton,
+      sections,
+      TEMPLATES.favoritesListHeaderText,
+    );
+
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { flowSubState: 'REORDER_LIST_SHOWN' },
+    });
+
+    return 'IDLE';
+  }
+
+  private async handleReorderSelection(
+    ctx: FlowContext,
+    listReplyId: string,
+  ): Promise<ConversationPhase> {
+    const { tenantId, conversationId } = ctx;
+    const menuItemId = listReplyId.replace('reorder_', '');
+
+    // Clear sub-state
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { flowSubState: null },
+    });
+
+    try {
+      const result = await reorderService.addFavoriteToOrder(
+        tenantId, conversationId, menuItemId, 1,
+      );
+
+      await inboxService.updateConversationPhase(
+        tenantId, conversationId, 'ORDER_COLLECTING', result.orderId,
+      );
+
+      await this.sendText(ctx, TEMPLATES.orderItemAdded(result.itemName, 1));
+      await this.sendText(ctx, 'Baska urun eklemek icin yazin veya "evet" ile onaylayin.');
+
+      return 'ORDER_COLLECTING';
+    } catch (error) {
+      logger.error({ error, tenantId, menuItemId }, 'Failed to add favorite to order');
+      await this.sendText(ctx, 'Bu urun su anda musait degil. Baska bir urun denemek ister misiniz?');
+      return 'IDLE';
+    }
+  }
+
   private async proceedToAddressFlow(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, conversation } = ctx;
 
@@ -770,6 +868,9 @@ export class ConversationFlowService {
     if (subState === 'SURVEY_COMMENT') {
       return this.handleSurveyComment(ctx);
     }
+    if (subState === 'BROADCAST_OPT_IN_ASKED') {
+      return this.handleBroadcastOptInResponse(ctx);
+    }
 
     // No survey active — reset to IDLE and process as new order
     await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
@@ -833,19 +934,14 @@ export class ConversationFlowService {
       return 'ORDER_CONFIRMED';
     }
 
-    // Good/neutral rating — thank and reset
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { flowSubState: null, flowMetadata: null },
-    });
-
+    // Good/neutral rating — thank and maybe ask broadcast opt-in
     if (rating >= 4) {
       await this.sendText(ctx, TEMPLATES.surveyThanksGood);
     } else {
       await this.sendText(ctx, TEMPLATES.surveyThanksNeutral);
     }
 
-    return 'ORDER_CONFIRMED';
+    return this.tryAskBroadcastOptIn(ctx);
   }
 
   /**
@@ -871,13 +967,84 @@ export class ConversationFlowService {
       await surveyService.addComment(surveyMeta.surveyId, text);
     }
 
-    // Clear sub-state and thank
+    // Thank and maybe ask broadcast opt-in
+    await this.sendText(ctx, TEMPLATES.surveyThanksBad);
+
+    return this.tryAskBroadcastOptIn(ctx);
+  }
+
+  // ==================== BROADCAST OPT-IN ====================
+
+  /**
+   * After survey completes, ask for broadcast opt-in if eligible.
+   * If not eligible, just clear sub-state and stay in ORDER_CONFIRMED.
+   */
+  private async tryAskBroadcastOptIn(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation } = ctx;
+
+    try {
+      const { broadcastService } = await import('./broadcast.service');
+      const shouldAsk = await broadcastService.askOptIn(
+        tenantId, conversationId, conversation.customerPhone,
+      );
+
+      if (shouldAsk) {
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: 'BROADCAST_OPT_IN_ASKED', flowMetadata: null },
+        });
+
+        await whatsappService.sendInteractiveButtons(
+          tenantId,
+          conversationId,
+          TEMPLATES.broadcastOptInAsk,
+          TEMPLATES.broadcastOptInButtons.buttons,
+        );
+        return 'ORDER_CONFIRMED';
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Failed to ask broadcast opt-in');
+    }
+
+    // Clear sub-state
     await prisma.conversation.update({
       where: { id: conversationId },
       data: { flowSubState: null, flowMetadata: null },
     });
+    return 'ORDER_CONFIRMED';
+  }
 
-    await this.sendText(ctx, TEMPLATES.surveyThanksBad);
+  private async handleBroadcastOptInResponse(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation, payload } = ctx;
+    const text = normalizeTr(ctx.message.text || '');
+    const buttonId = payload.interactive?.buttonReply?.id;
+
+    const accepted = buttonId === 'broadcast_yes' || this.matchesKeyword(text, CONFIRM_KEYWORDS);
+    const rejected = buttonId === 'broadcast_no' || this.matchesKeyword(text, CANCEL_KEYWORDS);
+
+    if (accepted || rejected) {
+      try {
+        const { broadcastService } = await import('./broadcast.service');
+        await broadcastService.handleOptInResponse(tenantId, conversation.customerPhone, accepted);
+      } catch (err) {
+        logger.warn({ err }, 'Broadcast opt-in response failed');
+      }
+
+      if (accepted) {
+        await this.sendText(ctx, TEMPLATES.broadcastOptInConfirmed);
+      } else {
+        await this.sendText(ctx, TEMPLATES.broadcastOptOutConfirmed);
+      }
+
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { flowSubState: null, flowMetadata: null },
+      });
+      return 'ORDER_CONFIRMED';
+    }
+
+    // Unrecognized response — remind
+    await this.sendText(ctx, 'Kampanya bildirimlerini almak ister misiniz? "evet" veya "hayir" yazin.');
     return 'ORDER_CONFIRMED';
   }
 

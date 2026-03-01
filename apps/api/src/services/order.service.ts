@@ -271,6 +271,11 @@ export class OrderService {
           // Send satisfaction survey after delivery
           if (status === 'DELIVERED') {
             await this.sendSurvey(tenantId, order.conversationId, orderId, order.orderNumber);
+
+            // Track broadcast conversion (async, non-blocking)
+            import('./broadcast.service').then(({ broadcastService }) => {
+              broadcastService.trackConversion(tenantId, order.customerPhone || '').catch(() => {});
+            }).catch(() => {});
           }
         } catch (error) {
           logger.error({ error, tenantId, orderId, status }, 'Failed to send status update WhatsApp message');

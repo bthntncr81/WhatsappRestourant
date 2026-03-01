@@ -82,6 +82,12 @@ export const routes: Routes = [
       import('./pages/surveys/surveys.component').then((m) => m.SurveysComponent),
     canActivate: [roleGuard(['OWNER', 'ADMIN'])],
   },
+  {
+    path: 'campaigns',
+    loadComponent: () =>
+      import('./pages/campaigns/campaigns.component').then((m) => m.CampaignsComponent),
+    canActivate: [roleGuard(['OWNER', 'ADMIN'])],
+  },
 
   // Wildcard
   {

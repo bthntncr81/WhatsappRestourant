@@ -323,4 +323,35 @@ export const TEMPLATES = {
 
   surveyThanksNeutral:
     'Puan icin tesekkurler! 🙏 Daha iyisini yapmak icin calisacagiz.',
+
+  // ==================== REORDER / FAVORITES ====================
+  favoritesListHeader(count: number): string {
+    return `En cok siparis verdiginiz ${count} urun 👇`;
+  },
+
+  favoritesListButton: 'Favorilerim',
+
+  favoritesListHeaderText: 'Favorileriniz',
+
+  noFavoritesYet:
+    'Henuz siparis gecmisiniz yok. Siparis verdikten sonra favorileriniz burada gorunecek!',
+
+  // ==================== BROADCAST / CAMPAIGN ====================
+  broadcastOptInAsk:
+    'Kampanyalarimizdan ve size ozel firsatlardan haberdar olmak ister misiniz? 🎉',
+
+  broadcastOptInButtons: {
+    buttons: [
+      { id: 'broadcast_yes', title: 'Evet, istiyorum' },
+      { id: 'broadcast_no', title: 'Hayir' },
+    ],
+  },
+
+  broadcastOptInConfirmed:
+    'Harika! Size ozel kampanyalar ve firsatlar hakkinda bildirim gonderecegiz. ' +
+    'Istediginiz zaman "kampanya istemiyorum" yazarak iptal edebilirsiniz.',
+
+  broadcastOptOutConfirmed:
+    'Tamam, kampanya bildirimleri kapatildi. ' +
+    'Istediginiz zaman "kampanya" yazarak tekrar acabilirsiniz.',
 };
