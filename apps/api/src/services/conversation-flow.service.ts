@@ -565,7 +565,20 @@ export class ConversationFlowService {
       return 'ORDER_COLLECTING';
     }
 
-    // Default: treat as edit intent, go back to collecting
+    // Default: treat as new product — pass to NLU to add item
+    const result = await nluOrchestratorService.processMessage(
+      tenantId, conversationId, message.id, text,
+    );
+    if (result.confirmationMessage) {
+      await this.sendText(ctx, result.confirmationMessage);
+    }
+    const order = await this.getActiveOrder(ctx);
+    if (order && order.items.length > 0) {
+      const summary = this.buildOrderSummary(order);
+      await this.sendText(ctx, summary);
+      return 'ORDER_REVIEW';
+    }
+    // NLU couldn't parse it
     await this.sendText(ctx, 'Onaylamak icin "evet", iptal icin "iptal" yazin.');
     return 'ORDER_REVIEW';
   }
