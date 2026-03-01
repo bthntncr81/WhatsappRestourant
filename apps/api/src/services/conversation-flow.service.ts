@@ -627,10 +627,10 @@ export class ConversationFlowService {
    * ORDER_CONFIRMED: Order done. New message starts fresh.
    */
   private async handleOrderConfirmed(ctx: FlowContext): Promise<ConversationPhase> {
-    await this.sendText(ctx, TEMPLATES.orderConfirmedNewOrder);
-    // Reset to IDLE for new orders
+    // Reset to IDLE and process the incoming message as a new order
     await inboxService.updateConversationPhase(ctx.tenantId, ctx.conversationId, 'IDLE', null);
-    return 'IDLE';
+    ctx.conversation.phase = 'IDLE';
+    return this.handleIdle(ctx);
   }
 
   /**
