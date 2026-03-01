@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { BillingService, SubscriptionDto } from '../../services/billing.service';
 import { ThemeService } from '../../services/theme.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-topbar',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, IconComponent],
   template: `
     <header class="topbar">
       <div class="topbar-left">
@@ -20,7 +21,7 @@ import { ThemeService } from '../../services/theme.service';
 
       <div class="topbar-center">
         <div class="search-container">
-          <span class="search-icon">⌕</span>
+          <app-icon name="search" [size]="16" class="search-icon"/>
           <input
             type="text"
             class="search-input"
@@ -35,7 +36,7 @@ import { ThemeService } from '../../services/theme.service';
         @if (subscription()) {
           <a routerLink="/billing" class="upgrade-btn" [class.trial]="subscription()!.plan === 'TRIAL'">
             @if (subscription()!.plan === 'TRIAL') {
-              <span class="upgrade-icon">⚡</span>
+              <app-icon name="zap" [size]="16" class="upgrade-icon"/>
               <span class="upgrade-text">Paketi Yükselt</span>
               @if (subscription()!.daysUntilTrialEnds) {
                 <span class="trial-badge">{{ subscription()!.daysUntilTrialEnds }} gün</span>
@@ -47,14 +48,18 @@ import { ThemeService } from '../../services/theme.service';
         }
 
         <button class="topbar-action" title="Notifications">
-          <span class="action-icon">🔔</span>
+          <app-icon name="bell" [size]="18"/>
           <span class="notification-badge">3</span>
         </button>
         <button class="topbar-action theme-toggle" (click)="themeService.toggleTheme()" [title]="themeService.isDark() ? 'Light Mode' : 'Dark Mode'">
-          <span class="action-icon">{{ themeService.isDark() ? '☀️' : '🌙' }}</span>
+          @if (themeService.isDark()) {
+            <app-icon name="sun" [size]="18"/>
+          } @else {
+            <app-icon name="moon" [size]="18"/>
+          }
         </button>
         <button class="topbar-action" title="Help">
-          <span class="action-icon">?</span>
+          <app-icon name="help-circle" [size]="18"/>
         </button>
       </div>
     </header>
@@ -106,7 +111,7 @@ import { ThemeService } from '../../services/theme.service';
         position: absolute;
         left: var(--spacing-md);
         color: var(--color-text-muted);
-        font-size: 1rem;
+        z-index: 1;
       }
 
       .search-input {
@@ -160,8 +165,10 @@ import { ThemeService } from '../../services/theme.service';
         }
       }
 
-      .action-icon {
-        font-size: 1rem;
+      .topbar-action app-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .notification-badge {
@@ -210,7 +217,8 @@ import { ThemeService } from '../../services/theme.service';
       }
 
       .upgrade-icon {
-        font-size: 1rem;
+        display: flex;
+        align-items: center;
       }
 
       .trial-badge {

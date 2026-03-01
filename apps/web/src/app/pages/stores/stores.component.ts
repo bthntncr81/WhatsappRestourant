@@ -9,15 +9,16 @@ import {
   CreateDeliveryRuleDto,
 } from '../../services/store.service';
 import { environment } from '../../../environments/environment';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-stores',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   template: `
     <div class="stores-page">
       <header class="page-header">
-        <h1>🏪 Şube Yönetimi</h1>
+        <h1><app-icon name="store" [size]="24"/> Şube Yönetimi</h1>
         <button class="add-btn" (click)="openAddStoreModal()">+ Yeni Şube</button>
       </header>
 
@@ -39,13 +40,13 @@ import { environment } from '../../../environments/environment';
 
             <div class="store-info">
               @if (store.address) {
-                <p class="address">📍 {{ store.address }}</p>
+                <p class="address"><app-icon name="map-pin" [size]="14"/> {{ store.address }}</p>
               }
               @if (store.phone) {
-                <p class="phone">📞 {{ store.phone }}</p>
+                <p class="phone"><app-icon name="phone" [size]="14"/> {{ store.phone }}</p>
               }
               <p class="coords">
-                🌐 {{ store.lat.toFixed(6) }}, {{ store.lng.toFixed(6) }}
+                <app-icon name="globe" [size]="14"/> {{ store.lat.toFixed(6) }}, {{ store.lng.toFixed(6) }}
               </p>
             </div>
 
@@ -59,13 +60,13 @@ import { environment } from '../../../environments/environment';
                 @for (rule of store.deliveryRules; track rule.id) {
                   <div class="rule-item" [class.inactive]="!rule.isActive">
                     <div class="rule-info">
-                      <span class="radius">📏 {{ rule.radiusKm }} km</span>
-                      <span class="fee">🚗 {{ rule.deliveryFee }} TL</span>
-                      <span class="min-basket">🛒 Min: {{ rule.minBasket }} TL</span>
+                      <span class="radius"><app-icon name="ruler" [size]="14"/> {{ rule.radiusKm }} km</span>
+                      <span class="fee"><app-icon name="car" [size]="14"/> {{ rule.deliveryFee }} TL</span>
+                      <span class="min-basket"><app-icon name="shopping-cart" [size]="14"/> Min: {{ rule.minBasket }} TL</span>
                     </div>
                     <div class="rule-actions">
-                      <button class="edit-btn" (click)="editRule(rule)">✏️</button>
-                      <button class="delete-btn" (click)="deleteRule(rule)">🗑️</button>
+                      <button class="edit-btn" (click)="editRule(rule)"><app-icon name="edit" [size]="14"/></button>
+                      <button class="delete-btn" (click)="deleteRule(rule)"><app-icon name="trash" [size]="14"/></button>
                     </div>
                   </div>
                 }
@@ -89,7 +90,7 @@ import { environment } from '../../../environments/environment';
 
         @if (stores().length === 0 && !loading()) {
           <div class="empty-state">
-            <span class="empty-icon">🏪</span>
+            <app-icon name="store" [size]="48" class="empty-icon"/>
             <p>Henüz şube eklenmemiş</p>
             <button class="add-btn" (click)="openAddStoreModal()">İlk Şubeyi Ekle</button>
           </div>
@@ -114,7 +115,7 @@ import { environment } from '../../../environments/environment';
                 <label>Konum * <small style="color: var(--color-text-secondary); font-weight: 400;">(Haritaya tıklayarak seçin)</small></label>
                 <div id="storeMap" class="store-map"></div>
                 @if (storeForm.lat !== 0 || storeForm.lng !== 0) {
-                  <p class="coords-display">📍 {{ storeForm.lat.toFixed(6) }}, {{ storeForm.lng.toFixed(6) }}</p>
+                  <p class="coords-display"><app-icon name="map-pin" [size]="14"/> {{ storeForm.lat.toFixed(6) }}, {{ storeForm.lng.toFixed(6) }}</p>
                 }
               </div>
               <div class="form-group">
@@ -174,7 +175,7 @@ import { environment } from '../../../environments/environment';
 
       <!-- Geo Check Test Section -->
       <div class="geo-test-section">
-        <h3>🧪 Servis Alanı Test</h3>
+        <h3><app-icon name="test-tube" [size]="14"/> Servis Alanı Test</h3>
         <div class="geo-test-form">
           <div class="form-row">
             <div class="form-group">
@@ -190,7 +191,7 @@ import { environment } from '../../../environments/environment';
         </div>
         @if (geoTestResult()) {
           <div class="geo-test-result" [class.success]="geoTestResult()!.isWithinServiceArea" [class.error]="!geoTestResult()!.isWithinServiceArea">
-            <p><strong>{{ geoTestResult()!.isWithinServiceArea ? '✅ Servis Alanı İçinde' : '❌ Servis Alanı Dışında' }}</strong></p>
+            <p><strong>@if (geoTestResult()!.isWithinServiceArea) { <app-icon name="check-circle" [size]="14"/> Servis Alanı İçinde } @else { <app-icon name="x-circle" [size]="14"/> Servis Alanı Dışında }</strong></p>
             <p>{{ geoTestResult()!.message }}</p>
             @if (geoTestResult()!.nearestStore) {
               <p>En yakın şube: {{ geoTestResult()!.nearestStore!.name }} ({{ geoTestResult()!.distance }} km)</p>
@@ -462,7 +463,7 @@ import { environment } from '../../../environments/environment';
     }
 
     .empty-icon {
-      font-size: 4rem;
+      color: var(--color-text-muted);
       margin-bottom: 16px;
     }
 

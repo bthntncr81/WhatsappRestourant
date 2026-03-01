@@ -2,15 +2,16 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderService, PrintJobDto, PrintJobStatus } from '../../services/order.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-print-jobs',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   template: `
     <div class="print-jobs-page">
       <header class="page-header">
-        <h1>🖨️ Yazdırma Kuyrukları</h1>
+        <h1><app-icon name="printer" [size]="24"/> Yazdırma Kuyrukları</h1>
         <div class="filters">
           <select [(ngModel)]="statusFilter" (change)="loadJobs()">
             <option [ngValue]="null">Tüm Durumlar</option>
@@ -19,7 +20,7 @@ import { OrderService, PrintJobDto, PrintJobStatus } from '../../services/order.
             <option value="DONE">Tamamlandı</option>
             <option value="FAILED">Başarısız</option>
           </select>
-          <button class="refresh-btn" (click)="loadJobs()">🔄 Yenile</button>
+          <button class="refresh-btn" (click)="loadJobs()"><app-icon name="refresh" [size]="14"/> Yenile</button>
         </div>
       </header>
 
@@ -46,7 +47,7 @@ import { OrderService, PrintJobDto, PrintJobStatus } from '../../services/order.
         <div class="loading">Yükleniyor...</div>
       } @else if (jobs().length === 0) {
         <div class="empty-state">
-          <span class="empty-icon">🖨️</span>
+          <app-icon name="printer" [size]="48" class="empty-icon"/>
           <p>Yazdırma işi bulunamadı</p>
         </div>
       } @else {
@@ -69,7 +70,7 @@ import { OrderService, PrintJobDto, PrintJobStatus } from '../../services/order.
                 <tr [class]="'status-' + job.status.toLowerCase()">
                   <td>
                     <span class="type-badge" [class]="job.type.toLowerCase()">
-                      {{ job.type === 'KITCHEN' ? '🍳 Mutfak' : '🛵 Kurye' }}
+                      @if (job.type === 'KITCHEN') { <app-icon name="flame" [size]="14"/> Mutfak } @else { <app-icon name="bike" [size]="14"/> Kurye }
                     </span>
                   </td>
                   <td class="order-number">#{{ job.payloadJson.orderNumber }}</td>
@@ -93,20 +94,20 @@ import { OrderService, PrintJobDto, PrintJobStatus } from '../../services/order.
                   <td class="actions">
                     <div class="action-buttons">
                       <button class="action-btn view" (click)="viewJob(job)" title="Görüntüle">
-                        👁️
+                        <app-icon name="eye" [size]="14"/>
                       </button>
                       @if (job.status === 'PENDING' || job.status === 'PROCESSING') {
                         <button class="action-btn stop" (click)="cancelJob(job)" title="Durdur">
-                          ⏹️
+                          <app-icon name="stop-circle" [size]="14"/>
                         </button>
                       }
                       @if (job.status === 'FAILED') {
                         <button class="action-btn retry" (click)="retryJob(job)" title="Tekrar Dene">
-                          🔄
+                          <app-icon name="refresh" [size]="14"/>
                         </button>
                       }
                       <button class="action-btn delete" (click)="deleteJob(job)" title="Sil">
-                        🗑️
+                        <app-icon name="trash" [size]="14"/>
                       </button>
                     </div>
                   </td>
@@ -118,7 +119,7 @@ import { OrderService, PrintJobDto, PrintJobStatus } from '../../services/order.
       }
 
       <div class="info-box">
-        <h3>ℹ️ Print Bridge Servisi</h3>
+        <h3><app-icon name="info" [size]="14"/> Print Bridge Servisi</h3>
         <p>
           Yazdırma işlemleri <code>print-bridge</code> servisi tarafından yürütülür.
           Bu servis şubede çalışan bir bilgisayarda kurulu olmalı ve API'ye bağlı olmalıdır.
@@ -134,14 +135,14 @@ pnpm dev</pre>
         <div class="modal-overlay" (click)="closeModal()">
           <div class="modal-content" (click)="$event.stopPropagation()">
             <div class="modal-header">
-              <h2>📄 Yazdırma İşi Detayı</h2>
-              <button class="close-btn" (click)="closeModal()">✕</button>
+              <h2><app-icon name="file-text" [size]="16"/> Yazdırma İşi Detayı</h2>
+              <button class="close-btn" (click)="closeModal()"><app-icon name="x" [size]="16"/></button>
             </div>
             <div class="modal-body">
               <div class="detail-grid">
                 <div class="detail-item">
                   <label>Tip:</label>
-                  <span>{{ viewingJob()!.type === 'KITCHEN' ? '🍳 Mutfak' : '🛵 Kurye' }}</span>
+                  <span>@if (viewingJob()!.type === 'KITCHEN') { <app-icon name="flame" [size]="14"/> Mutfak } @else { <app-icon name="bike" [size]="14"/> Kurye }</span>
                 </div>
                 <div class="detail-item">
                   <label>Sipariş No:</label>
@@ -169,13 +170,13 @@ pnpm dev</pre>
               
               @if (viewingJob()!.errorMessage) {
                 <div class="error-box">
-                  <h4>❌ Hata Mesajı:</h4>
+                  <h4><app-icon name="x-circle" [size]="14"/> Hata Mesajı:</h4>
                   <pre>{{ viewingJob()!.errorMessage }}</pre>
                 </div>
               }
 
               <div class="payload-section">
-                <h4>📋 İçerik (Payload):</h4>
+                <h4><app-icon name="clipboard" [size]="14"/> İçerik (Payload):</h4>
                 <div class="order-details">
                   <p><strong>Müşteri:</strong> {{ viewingJob()!.payloadJson.customerName || 'Belirtilmemiş' }}</p>
                   <p><strong>Telefon:</strong> {{ viewingJob()!.payloadJson.customerPhone }}</p>
@@ -189,7 +190,7 @@ pnpm dev</pre>
                     </div>
                   }
 
-                  <h5>🛒 Ürünler:</h5>
+                  <h5><app-icon name="shopping-cart" [size]="14"/> Ürünler:</h5>
                   <table class="items-table">
                     <thead>
                       <tr>
@@ -210,7 +211,7 @@ pnpm dev</pre>
                               </div>
                             }
                             @if (item.notes) {
-                              <div class="item-note">📝 {{ item.notes }}</div>
+                              <div class="item-note"><app-icon name="file-text" [size]="14"/> {{ item.notes }}</div>
                             }
                           </td>
                           <td>{{ item.qty }}</td>
@@ -232,7 +233,7 @@ pnpm dev</pre>
             <div class="modal-footer">
               @if (viewingJob()!.status === 'FAILED') {
                 <button class="btn btn-primary" (click)="retryJob(viewingJob()!); closeModal()">
-                  🔄 Tekrar Dene
+                  <app-icon name="refresh" [size]="14"/> Tekrar Dene
                 </button>
               }
               <button class="btn btn-secondary" (click)="closeModal()">Kapat</button>
@@ -348,7 +349,7 @@ pnpm dev</pre>
     }
 
     .empty-icon {
-      font-size: 4rem;
+      color: var(--color-text-muted);
       margin-bottom: 16px;
     }
 

@@ -3,17 +3,18 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, IconComponent],
   template: `
     <div class="auth-container">
       <div class="auth-card">
         <div class="auth-header">
           <div class="logo">
-            <span class="logo-icon">◈</span>
+            <app-icon name="hexagon" [size]="32" class="logo-icon"/>
             <span class="logo-text">Otorder</span>
           </div>
           <h1 class="auth-title">Create your workspace</h1>
@@ -23,7 +24,7 @@ import { AuthService } from '../../services/auth.service';
         <form class="auth-form" (ngSubmit)="onSubmit()">
           @if (error()) {
             <div class="error-alert">
-              <span class="error-icon">⚠</span>
+              <app-icon name="alert-triangle" [size]="16" class="error-icon"/>
               <span>{{ error() }}</span>
             </div>
           }
@@ -180,7 +181,6 @@ import { AuthService } from '../../services/auth.service';
       }
 
       .logo-icon {
-        font-size: 2rem;
         color: var(--color-accent-primary);
       }
 

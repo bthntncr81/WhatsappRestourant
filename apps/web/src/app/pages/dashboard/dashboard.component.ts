@@ -1,6 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { IconComponent } from '../../shared/icon.component';
 import { environment } from '../../../environments/environment';
 
 interface HealthData {
@@ -18,7 +19,7 @@ interface ApiResponse<T> {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconComponent],
   template: `
     <div class="dashboard">
       <div class="dashboard-header">
@@ -32,7 +33,7 @@ interface ApiResponse<T> {
         @for (stat of stats; track stat.label) {
           <div class="stat-card">
             <div class="stat-icon" [style.background]="stat.color">
-              {{ stat.icon }}
+              <app-icon [name]="stat.icon" [size]="22" />
             </div>
             <div class="stat-content">
               <span class="stat-value">{{ stat.value }}</span>
@@ -72,7 +73,7 @@ interface ApiResponse<T> {
           </div>
         } @else if (error) {
           <div class="error-state">
-            <span class="error-icon">⚠</span>
+            <app-icon name="alert-triangle" [size]="20" class="error-icon"/>
             <span class="error-message">{{ error }}</span>
             <button class="retry-btn" (click)="checkHealth()">Retry</button>
           </div>
@@ -144,7 +145,7 @@ interface ApiResponse<T> {
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.5rem;
+        color: white;
       }
 
       .stat-content {
@@ -281,10 +282,10 @@ export class DashboardComponent implements OnInit {
   error: string | null = null;
 
   stats = [
-    { label: 'Total Users', value: '1,234', icon: '👥', color: 'var(--color-accent-primary)' },
-    { label: 'Active Projects', value: '56', icon: '📁', color: '#14b8a6' },
-    { label: 'Tasks Completed', value: '892', icon: '✓', color: '#22c55e' },
-    { label: 'Pending Issues', value: '23', icon: '⚠', color: '#f59e0b' },
+    { label: 'Total Users', value: '1,234', icon: 'users', color: 'var(--color-accent-primary)' },
+    { label: 'Active Projects', value: '56', icon: 'folder', color: '#14b8a6' },
+    { label: 'Tasks Completed', value: '892', icon: 'check', color: '#22c55e' },
+    { label: 'Pending Issues', value: '23', icon: 'alert-triangle', color: '#f59e0b' },
   ];
 
   ngOnInit(): void {

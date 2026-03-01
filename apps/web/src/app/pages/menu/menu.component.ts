@@ -10,13 +10,14 @@ import {
   MenuSynonymDto,
   CanonicalMenuExport,
 } from '../../services/menu.service';
+import { IconComponent } from '../../shared/icon.component';
 
 type Tab = 'versions' | 'items' | 'options' | 'synonyms';
 
 @Component({
   selector: 'app-menu',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   template: `
     <div class="menu-page">
       <div class="page-header">
@@ -26,11 +27,11 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         </div>
         <div class="header-actions">
           <button class="btn-secondary" (click)="handleImport()">
-            <span>📥</span> Import
+            <app-icon name="download" [size]="16"/> Import
           </button>
           @if (selectedVersion()) {
             <button class="btn-secondary" (click)="handleExport()">
-              <span>📤</span> Export
+              <app-icon name="upload" [size]="16"/> Export
             </button>
           }
         </div>
@@ -44,7 +45,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
             [class.active]="activeTab() === tab.id"
             (click)="activeTab.set(tab.id)"
           >
-            <span class="tab-icon">{{ tab.icon }}</span>
+            <app-icon [name]="tab.icon" [size]="16" class="tab-icon"/>
             {{ tab.label }}
           </button>
         }
@@ -79,7 +80,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
       <!-- Error -->
       @if (error()) {
         <div class="error-alert">
-          <span>⚠</span>
+          <app-icon name="alert-triangle" [size]="16"/>
           <span>{{ error() }}</span>
           <button class="btn-sm" (click)="loadData()">Retry</button>
         </div>
@@ -99,7 +100,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
             <div class="card-content">
               @if (versions().length === 0) {
                 <div class="empty-state">
-                  <span class="empty-icon">📋</span>
+                  <app-icon name="clipboard" [size]="48" class="empty-icon"/>
                   <p>No versions yet. Create your first menu version to get started.</p>
                 </div>
               } @else {
@@ -156,7 +157,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                 </div>
               } @else if (items().length === 0) {
                 <div class="empty-state">
-                  <span class="empty-icon">🍽️</span>
+                  <app-icon name="utensils" [size]="48" class="empty-icon"/>
                   <p>No items in this version yet.</p>
                 </div>
               } @else {
@@ -181,8 +182,8 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                             }
                             @if (!selectedVersion()!.publishedAt) {
                               <div class="item-actions">
-                                <button class="btn-icon" (click)="editItem(item)">✏️</button>
-                                <button class="btn-icon danger" (click)="deleteItem(item)">🗑️</button>
+                                <button class="btn-icon" (click)="editItem(item)"><app-icon name="edit" [size]="14"/></button>
+                                <button class="btn-icon danger" (click)="deleteItem(item)"><app-icon name="trash" [size]="14"/></button>
                               </div>
                             }
                           </div>
@@ -201,7 +202,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
                   <h3>{{ editingItem() ? 'Edit Item' : 'Add Item' }}</h3>
-                  <button class="btn-icon" (click)="closeItemForm()">✕</button>
+                  <button class="btn-icon" (click)="closeItemForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveItem()">
                   <div class="form-group">
@@ -263,7 +264,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                 </div>
               } @else if (optionGroups().length === 0) {
                 <div class="empty-state">
-                  <span class="empty-icon">⚙️</span>
+                  <app-icon name="settings" [size]="48" class="empty-icon"/>
                   <p>No option groups in this version yet.</p>
                 </div>
               } @else {
@@ -281,7 +282,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                         @if (!selectedVersion()!.publishedAt) {
                           <div class="group-actions">
                             <button class="btn-sm" (click)="addOptionToGroup(group)">+ Option</button>
-                            <button class="btn-icon danger" (click)="deleteOptionGroup(group)">🗑️</button>
+                            <button class="btn-icon danger" (click)="deleteOptionGroup(group)"><app-icon name="trash" [size]="14"/></button>
                           </div>
                         }
                       </div>
@@ -299,7 +300,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                                 <span class="option-default">Default</span>
                               }
                               @if (!selectedVersion()!.publishedAt) {
-                                <button class="btn-icon small danger" (click)="deleteOption(option)">✕</button>
+                                <button class="btn-icon small danger" (click)="deleteOption(option)"><app-icon name="x" [size]="16"/></button>
                               }
                             </div>
                           }
@@ -318,7 +319,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
                   <h3>Add Option Group</h3>
-                  <button class="btn-icon" (click)="closeOptionGroupForm()">✕</button>
+                  <button class="btn-icon" (click)="closeOptionGroupForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveOptionGroup()">
                   <div class="form-group">
@@ -353,7 +354,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
                   <h3>Add Option</h3>
-                  <button class="btn-icon" (click)="closeOptionForm()">✕</button>
+                  <button class="btn-icon" (click)="closeOptionForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveOption()">
                   <div class="form-group">
@@ -398,7 +399,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                 </div>
               } @else if (synonyms().length === 0) {
                 <div class="empty-state">
-                  <span class="empty-icon">🔤</span>
+                  <app-icon name="type" [size]="48" class="empty-icon"/>
                   <p>No synonyms in this version yet.</p>
                 </div>
               } @else {
@@ -406,13 +407,13 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                   @for (syn of synonyms(); track syn.id) {
                     <div class="synonym-item">
                       <span class="synonym-phrase">"{{ syn.phrase }}"</span>
-                      <span class="synonym-arrow">→</span>
+                      <app-icon name="arrow-right" [size]="14" class="synonym-arrow"/>
                       <span class="synonym-target">
                         {{ syn.itemName || syn.optionName || 'Unknown' }}
                       </span>
                       <span class="synonym-weight text-muted">Weight: {{ syn.weight }}</span>
                       @if (!selectedVersion()!.publishedAt) {
-                        <button class="btn-icon small danger" (click)="deleteSynonym(syn)">✕</button>
+                        <button class="btn-icon small danger" (click)="deleteSynonym(syn)"><app-icon name="x" [size]="16"/></button>
                       }
                     </div>
                   }
@@ -427,7 +428,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
                   <h3>Add Synonym</h3>
-                  <button class="btn-icon" (click)="closeSynonymForm()">✕</button>
+                  <button class="btn-icon" (click)="closeSynonymForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveSynonym()">
                   <div class="form-group">
@@ -464,7 +465,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           <div class="modal large" (click)="$event.stopPropagation()">
             <div class="modal-header">
               <h3>Import Menu</h3>
-              <button class="btn-icon" (click)="showImportModal.set(false)">✕</button>
+              <button class="btn-icon" (click)="showImportModal.set(false)"><app-icon name="x" [size]="16"/></button>
             </div>
             <div class="modal-form">
               <div class="form-group">
@@ -599,8 +600,13 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
       }
 
       .empty-icon {
-        font-size: 3rem;
+        color: var(--color-text-muted);
         opacity: 0.5;
+      }
+
+      .tab-icon {
+        display: inline-flex;
+        align-items: center;
       }
 
       .loader {
@@ -1105,10 +1111,10 @@ export class MenuComponent implements OnInit {
   importJson = '';
 
   tabs = [
-    { id: 'versions' as Tab, label: 'Versions', icon: '📋' },
-    { id: 'items' as Tab, label: 'Items', icon: '🍽️' },
-    { id: 'options' as Tab, label: 'Options', icon: '⚙️' },
-    { id: 'synonyms' as Tab, label: 'Synonyms', icon: '🔤' },
+    { id: 'versions' as Tab, label: 'Versions', icon: 'clipboard' },
+    { id: 'items' as Tab, label: 'Items', icon: 'utensils' },
+    { id: 'options' as Tab, label: 'Options', icon: 'settings' },
+    { id: 'synonyms' as Tab, label: 'Synonyms', icon: 'type' },
   ];
 
   ngOnInit(): void {

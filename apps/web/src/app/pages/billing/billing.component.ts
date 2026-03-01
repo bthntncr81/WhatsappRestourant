@@ -12,11 +12,12 @@ import {
 } from '../../services/billing.service';
 import { ThemeService } from '../../services/theme.service';
 import { AuthService } from '../../services/auth.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-billing',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, IconComponent],
   template: `
     <div class="billing-standalone">
       <!-- Animated Background -->
@@ -31,16 +32,20 @@ import { AuthService } from '../../services/auth.service';
       <!-- Navigation -->
       <nav class="billing-nav">
         <a routerLink="/" class="back-link">
-          <span class="back-icon">←</span>
+          <span class="back-icon"><app-icon name="arrow-left" [size]="16"/></span>
           <span>Panele Dön</span>
         </a>
         <div class="nav-brand">
-          <span class="brand-icon">◈</span>
+          <span class="brand-icon"><app-icon name="hexagon" [size]="24"/></span>
           <span class="brand-text">Otorder</span>
         </div>
         <div class="nav-actions">
           <button class="theme-btn" (click)="themeService.toggleTheme()">
-            {{ themeService.isDark() ? '☀️' : '🌙' }}
+            @if (themeService.isDark()) {
+              <app-icon name="sun" [size]="16"/>
+            } @else {
+              <app-icon name="moon" [size]="16"/>
+            }
           </button>
           @if (authService.user(); as user) {
             <div class="user-avatar">{{ user.name.charAt(0) }}</div>
@@ -51,7 +56,7 @@ import { AuthService } from '../../services/auth.service';
       <!-- Hero Section -->
       <header class="hero-section">
         <div class="hero-badge animate-in">
-          <span class="badge-icon">✨</span>
+          <span class="badge-icon"><app-icon name="sparkles" [size]="14"/></span>
           <span>Abonelik Planları</span>
         </div>
         <h1 class="hero-title animate-in delay-1">
@@ -107,7 +112,7 @@ import { AuthService } from '../../services/auth.service';
               >
                 @if (plan.popular) {
                   <div class="popular-ribbon">
-                    <span>⭐ En Popüler</span>
+                    <span><app-icon name="star" [size]="14"/> En Popüler</span>
                   </div>
                 }
                 
@@ -116,7 +121,7 @@ import { AuthService } from '../../services/auth.service';
                 }
 
                 <div class="plan-header">
-                  <div class="plan-icon" [innerHTML]="getPlanIcon(plan.key)"></div>
+                  <div class="plan-icon"><app-icon [name]="getPlanIcon(plan.key)" [size]="40"/></div>
                   <h3 class="plan-name">{{ plan.name }}</h3>
                   <p class="plan-description">{{ plan.description }}</p>
                 </div>
@@ -143,43 +148,67 @@ import { AuthService } from '../../services/auth.service';
 
                 <ul class="feature-list">
                   <li class="feature-item" [class.highlight]="plan.features.monthlyOrderLimit === -1">
-                    <span class="feature-icon">📦</span>
+                    <span class="feature-icon"><app-icon name="package" [size]="16"/></span>
                     <span class="feature-text">
                       {{ plan.features.monthlyOrderLimit === -1 ? 'Sınırsız' : plan.features.monthlyOrderLimit }} sipariş/ay
                     </span>
                   </li>
                   <li class="feature-item" [class.highlight]="plan.features.monthlyMessageLimit === -1">
-                    <span class="feature-icon">💬</span>
+                    <span class="feature-icon"><app-icon name="message-square" [size]="16"/></span>
                     <span class="feature-text">
                       {{ plan.features.monthlyMessageLimit === -1 ? 'Sınırsız' : plan.features.monthlyMessageLimit }} mesaj/ay
                     </span>
                   </li>
                   <li class="feature-item" [class.highlight]="plan.features.maxStores === -1">
-                    <span class="feature-icon">🏪</span>
+                    <span class="feature-icon"><app-icon name="store" [size]="16"/></span>
                     <span class="feature-text">
                       {{ plan.features.maxStores === -1 ? 'Sınırsız' : plan.features.maxStores }} şube
                     </span>
                   </li>
                   <li class="feature-item" [class.highlight]="plan.features.maxUsers === -1">
-                    <span class="feature-icon">👥</span>
+                    <span class="feature-icon"><app-icon name="users" [size]="16"/></span>
                     <span class="feature-text">
                       {{ plan.features.maxUsers === -1 ? 'Sınırsız' : plan.features.maxUsers }} kullanıcı
                     </span>
                   </li>
                   <li class="feature-item" [class.available]="plan.features.whatsappIntegration">
-                    <span class="feature-icon">{{ plan.features.whatsappIntegration ? '✓' : '✗' }}</span>
+                    <span class="feature-icon">
+                      @if (plan.features.whatsappIntegration) {
+                        <app-icon name="check" [size]="14"/>
+                      } @else {
+                        <app-icon name="x" [size]="14"/>
+                      }
+                    </span>
                     <span class="feature-text">WhatsApp Entegrasyonu</span>
                   </li>
                   <li class="feature-item" [class.available]="plan.features.analytics">
-                    <span class="feature-icon">{{ plan.features.analytics ? '✓' : '✗' }}</span>
+                    <span class="feature-icon">
+                      @if (plan.features.analytics) {
+                        <app-icon name="check" [size]="14"/>
+                      } @else {
+                        <app-icon name="x" [size]="14"/>
+                      }
+                    </span>
                     <span class="feature-text">Gelişmiş Analitik</span>
                   </li>
                   <li class="feature-item" [class.available]="plan.features.prioritySupport">
-                    <span class="feature-icon">{{ plan.features.prioritySupport ? '✓' : '✗' }}</span>
+                    <span class="feature-icon">
+                      @if (plan.features.prioritySupport) {
+                        <app-icon name="check" [size]="14"/>
+                      } @else {
+                        <app-icon name="x" [size]="14"/>
+                      }
+                    </span>
                     <span class="feature-text">Öncelikli Destek</span>
                   </li>
                   <li class="feature-item" [class.available]="plan.features.apiAccess">
-                    <span class="feature-icon">{{ plan.features.apiAccess ? '✓' : '✗' }}</span>
+                    <span class="feature-icon">
+                      @if (plan.features.apiAccess) {
+                        <app-icon name="check" [size]="14"/>
+                      } @else {
+                        <app-icon name="x" [size]="14"/>
+                      }
+                    </span>
                     <span class="feature-text">API Erişimi</span>
                   </li>
                 </ul>
@@ -187,23 +216,23 @@ import { AuthService } from '../../services/auth.service';
                 <div class="plan-action">
                   @if (plan.key === overview()?.subscription?.plan) {
                     <button class="btn-current" disabled>
-                      <span class="btn-icon">✓</span>
+                      <span class="btn-icon"><app-icon name="check" [size]="14"/></span>
                       Mevcut Planınız
                     </button>
                   } @else if (plan.isFree) {
                     <button class="btn-trial" disabled>
-                      <span class="btn-icon">🎁</span>
+                      <span class="btn-icon"><app-icon name="gift" [size]="16"/></span>
                       Deneme Paketi
                     </button>
                   } @else {
                     <button class="btn-upgrade" (click)="selectPlan(plan)">
-                      <span class="btn-icon">🚀</span>
+                      <span class="btn-icon"><app-icon name="rocket" [size]="16"/></span>
                       @if (getPlanOrder(plan.key) > getPlanOrder(overview()?.subscription?.plan || 'TRIAL')) {
                         Yükselt
                       } @else {
                         Seç
                       }
-                      <span class="btn-arrow">→</span>
+                      <span class="btn-arrow"><app-icon name="arrow-right" [size]="14"/></span>
                     </button>
                   }
                 </div>
@@ -218,13 +247,13 @@ import { AuthService } from '../../services/auth.service';
         @if (overview()?.subscription) {
           <section class="usage-section animate-in delay-6">
             <h2 class="section-title">
-              <span class="title-icon">📊</span>
+              <span class="title-icon"><app-icon name="bar-chart" [size]="16"/></span>
               Mevcut Kullanımınız
             </h2>
             <div class="usage-grid">
               <div class="usage-card">
                 <div class="usage-header">
-                  <span class="usage-icon">📦</span>
+                  <span class="usage-icon"><app-icon name="package" [size]="16"/></span>
                   <span class="usage-label">Siparişler</span>
                 </div>
                 <div class="usage-progress">
@@ -244,7 +273,7 @@ import { AuthService } from '../../services/auth.service';
 
               <div class="usage-card">
                 <div class="usage-header">
-                  <span class="usage-icon">💬</span>
+                  <span class="usage-icon"><app-icon name="message-square" [size]="16"/></span>
                   <span class="usage-label">Mesajlar</span>
                 </div>
                 <div class="usage-progress">
@@ -264,7 +293,7 @@ import { AuthService } from '../../services/auth.service';
 
               <div class="usage-card">
                 <div class="usage-header">
-                  <span class="usage-icon">🏪</span>
+                  <span class="usage-icon"><app-icon name="store" [size]="16"/></span>
                   <span class="usage-label">Şubeler</span>
                 </div>
                 <div class="usage-stat">
@@ -275,7 +304,7 @@ import { AuthService } from '../../services/auth.service';
 
               <div class="usage-card">
                 <div class="usage-header">
-                  <span class="usage-icon">👥</span>
+                  <span class="usage-icon"><app-icon name="users" [size]="16"/></span>
                   <span class="usage-label">Kullanıcılar</span>
                 </div>
                 <div class="usage-stat">
@@ -290,7 +319,7 @@ import { AuthService } from '../../services/auth.service';
         <!-- FAQ Section -->
         <section class="faq-section animate-in delay-7">
           <h2 class="section-title">
-            <span class="title-icon">❓</span>
+            <span class="title-icon"><app-icon name="help-circle" [size]="16"/></span>
             Sıkça Sorulan Sorular
           </h2>
           <div class="faq-grid">
@@ -318,10 +347,10 @@ import { AuthService } from '../../services/auth.service';
       @if (showSubscribeModal && selectedPlanData()) {
         <div class="modal-overlay" (click)="closeSubscribeModal()">
           <div class="modal-container" (click)="$event.stopPropagation()">
-            <button class="modal-close" (click)="closeSubscribeModal()">×</button>
+            <button class="modal-close" (click)="closeSubscribeModal()"><app-icon name="x" [size]="16"/></button>
             
             <div class="modal-header">
-              <div class="modal-icon" [innerHTML]="getPlanIcon(selectedPlanData()!.key)"></div>
+              <div class="modal-icon"><app-icon [name]="getPlanIcon(selectedPlanData()!.key)" [size]="40"/></div>
               <h2>{{ selectedPlanData()!.name }} Planı</h2>
               <div class="modal-price">
                 ₺{{ selectedCycle() === 'MONTHLY' ? selectedPlanData()!.monthlyPrice : selectedPlanData()!.annualPrice }}
@@ -331,7 +360,7 @@ import { AuthService } from '../../services/auth.service';
 
             <form (ngSubmit)="subscribe()" class="subscribe-form">
               <div class="form-section">
-                <h3>💳 Kart Bilgileri</h3>
+                <h3><app-icon name="credit-card" [size]="16"/> Kart Bilgileri</h3>
                 <div class="form-group">
                   <label>Kart Üzerindeki İsim</label>
                   <input type="text" [(ngModel)]="cardForm.cardHolderName" name="cardHolderName" required placeholder="Ad Soyad">
@@ -357,7 +386,7 @@ import { AuthService } from '../../services/auth.service';
               </div>
 
               <div class="form-section">
-                <h3>👤 Fatura Bilgileri</h3>
+                <h3><app-icon name="user" [size]="16"/> Fatura Bilgileri</h3>
                 <div class="form-row-2">
                   <div class="form-group">
                     <label>Ad</label>
@@ -400,7 +429,7 @@ import { AuthService } from '../../services/auth.service';
 
               @if (subscribeError()) {
                 <div class="error-alert">
-                  <span class="error-icon">⚠️</span>
+                  <span class="error-icon"><app-icon name="alert-triangle" [size]="16"/></span>
                   {{ subscribeError() }}
                 </div>
               }
@@ -412,7 +441,7 @@ import { AuthService } from '../../services/auth.service';
                     <span class="btn-spinner"></span>
                     İşleniyor...
                   } @else {
-                    💳 Ödeme Yap
+                    <app-icon name="credit-card" [size]="16"/> Ödeme Yap
                   }
                 </button>
               </div>
@@ -425,7 +454,7 @@ import { AuthService } from '../../services/auth.service';
       <footer class="billing-footer">
         <div class="footer-content">
           <div class="footer-brand">
-            <span class="brand-icon">◈</span>
+            <span class="brand-icon"><app-icon name="hexagon" [size]="24"/></span>
             <span>Otorder</span>
           </div>
           <div class="footer-links">
@@ -434,7 +463,7 @@ import { AuthService } from '../../services/auth.service';
             <a href="#">İletişim</a>
           </div>
           <div class="footer-secure">
-            <span class="secure-icon">🔒</span>
+            <span class="secure-icon"><app-icon name="lock" [size]="14"/></span>
             <span>Güvenli Ödeme - iyzico</span>
           </div>
         </div>
@@ -555,7 +584,8 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .brand-icon {
-      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
       color: #1B5583;
     }
 
@@ -571,9 +601,11 @@ import { AuthService } from '../../services/auth.service';
       border-radius: 12px;
       background: var(--color-bg-tertiary);
       border: 1px solid var(--color-border);
-      font-size: 1.2rem;
       cursor: pointer;
       transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .theme-btn:hover {
@@ -830,9 +862,10 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .plan-icon {
-      font-size: 3rem;
       margin-bottom: 16px;
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .plan-name {
@@ -916,7 +949,8 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .feature-icon {
-      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
     }
 
     /* Plan Actions */
@@ -1023,7 +1057,8 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .title-icon {
-      font-size: 1.75rem;
+      display: flex;
+      align-items: center;
     }
 
     .usage-grid {
@@ -1047,7 +1082,8 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .usage-icon {
-      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
     }
 
     .usage-label {
@@ -1174,9 +1210,11 @@ import { AuthService } from '../../services/auth.service';
       background: var(--color-bg-tertiary);
       border: none;
       color: var(--color-text-primary);
-      font-size: 24px;
       cursor: pointer;
       transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .modal-close:hover {
@@ -1190,7 +1228,9 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .modal-icon {
-      font-size: 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       margin-bottom: 16px;
     }
 
@@ -1537,11 +1577,11 @@ export class BillingComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getPlanIcon(planKey: string): string {
     const icons: Record<string, string> = {
-      TRIAL: '🎁',
-      STARTER: '🚀',
-      PRO: '⭐',
+      TRIAL: 'gift',
+      STARTER: 'rocket',
+      PRO: 'star',
     };
-    return icons[planKey] || '📦';
+    return icons[planKey] || 'package';
   }
 
   getPlanOrder(plan: SubscriptionPlan | undefined): number {
@@ -1584,7 +1624,7 @@ export class BillingComponent implements OnInit, AfterViewInit, OnDestroy {
         if (res.success) {
           this.closeSubscribeModal();
           this.loadData();
-          alert('🎉 Aboneliğiniz başarıyla aktifleştirildi!');
+          alert('Aboneliğiniz başarıyla aktifleştirildi!');
         } else {
           this.subscribeError.set(res.error?.message || 'Ödeme işlemi başarısız');
         }

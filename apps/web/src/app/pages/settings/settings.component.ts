@@ -7,11 +7,12 @@ import {
   WhatsAppConfigDto,
   WhatsAppTestConnectionDto,
 } from '../../services/whatsapp-config.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, IconComponent],
   template: `
     <div class="settings">
       <div class="settings-header">
@@ -163,7 +164,13 @@ import {
             <!-- Integration Guide -->
             <div class="wa-guide">
               <button class="guide-toggle" (click)="guideOpen.set(!guideOpen())">
-                <span class="guide-toggle-icon">{{ guideOpen() ? '▾' : '▸' }}</span>
+                <span class="guide-toggle-icon">
+                  @if (guideOpen()) {
+                    <app-icon name="chevron-down" [size]="14"/>
+                  } @else {
+                    <app-icon name="chevron-right" [size]="14"/>
+                  }
+                </span>
                 <h3 class="guide-title">WhatsApp Entegrasyon Rehberi</h3>
                 <span class="guide-badge">{{ guideOpen() ? 'Gizle' : '5 Adim' }}</span>
               </button>
@@ -201,7 +208,7 @@ import {
                         <li><strong>WhatsApp Business Account ID</strong> icin: sol menuden <strong>WhatsApp &rarr; Configuration</strong> sayfasina gidin, URL'deki <code>waba_id=XXXX</code> degerini veya sayfadaki WABA ID'yi kopyalayin.</li>
                       </ol>
                       <div class="step-tip">
-                        <span class="tip-icon">💡</span>
+                        <span class="tip-icon"><app-icon name="lightbulb" [size]="16"/></span>
                         <span>Production icin kendi telefon numaranizi eklemek isterseniz <strong>"Add phone number"</strong> butonunu kullanin.</span>
                       </div>
                     </div>
@@ -215,7 +222,7 @@ import {
                     </div>
                     <div class="step-body">
                       <div class="step-warning">
-                        <span class="warning-icon">⚠️</span>
+                        <span class="warning-icon"><app-icon name="alert-triangle" [size]="16"/></span>
                         <span>API Setup sayfasindaki gecici token <strong>24 saat</strong> sonra gecersiz olur. Asagidaki adimlari takip ederek kalici token olusturun.</span>
                       </div>
                       <ol class="step-list">
@@ -240,7 +247,7 @@ import {
                         <li>Olusturulan tokeni kopyalayin ve yukaridaki <strong>Access Token</strong> alanina yapiştirin.</li>
                       </ol>
                       <div class="step-tip success">
-                        <span class="tip-icon">✅</span>
+                        <span class="tip-icon"><app-icon name="check-circle" [size]="16"/></span>
                         <span>Bu token <strong>asla expire olmaz</strong>. Bir kez olusturup kullanabilirsiniz.</span>
                       </div>
                     </div>
@@ -260,7 +267,7 @@ import {
                         <li>Gosterilen degeri kopyalayin ve yukaridaki <strong>App Secret</strong> alanina yapiştirin.</li>
                       </ol>
                       <div class="step-tip">
-                        <span class="tip-icon">🔒</span>
+                        <span class="tip-icon"><app-icon name="lock" [size]="16"/></span>
                         <span>App Secret, webhook mesajlarinin dogrulanmasi icin kullanilir. Kimseyle paylaşmayin.</span>
                       </div>
                     </div>
@@ -287,7 +294,7 @@ import {
                         <li>Webhook alanlari bolumunde <strong>"messages"</strong> alaninin yanindaki <strong>Subscribe</strong> kutusunu isaretleyin.</li>
                       </ol>
                       <div class="step-tip success">
-                        <span class="tip-icon">🎉</span>
+                        <span class="tip-icon"><app-icon name="party-popper" [size]="16"/></span>
                         <span>Tebrikler! Entegrasyon tamamlandi. <strong>"Test Connection"</strong> butonuyla baglantinizi dogrulayin.</span>
                       </div>
                     </div>

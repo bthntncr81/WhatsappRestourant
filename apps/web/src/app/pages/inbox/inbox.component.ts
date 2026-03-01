@@ -14,11 +14,12 @@ import {
   AgentDto,
 } from '../../services/inbox.service';
 import { AuthService } from '../../services/auth.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-inbox',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   template: `
     <div class="inbox-container">
       <!-- Sidebar: Conversation List -->
@@ -26,7 +27,7 @@ import { AuthService } from '../../services/auth.service';
         <div class="sidebar-header">
           <h2 class="sidebar-title">Inbox</h2>
           <button class="refresh-btn" (click)="loadConversations()" title="Refresh">
-            🔄
+            <app-icon name="refresh" [size]="16"/>
           </button>
         </div>
 
@@ -70,7 +71,7 @@ import { AuthService } from '../../services/auth.service';
             </div>
           } @else if (conversations().length === 0) {
             <div class="empty-state">
-              <span class="empty-icon">💬</span>
+              <span class="empty-icon"><app-icon name="message-square" [size]="48"/></span>
               <p>No conversations yet</p>
             </div>
           } @else {
@@ -92,7 +93,9 @@ import { AuthService } from '../../services/auth.service';
                   <div class="conv-preview">
                     @if (conv.lastMessage) {
                       <span class="preview-direction" [class.outgoing]="conv.lastMessage.direction === 'OUT'">
-                        {{ conv.lastMessage.direction === 'OUT' ? '↩' : '' }}
+                        @if (conv.lastMessage.direction === 'OUT') {
+                          <app-icon name="corner-down-left" [size]="16"/>
+                        }
                       </span>
                       <span class="preview-text">{{ conv.lastMessage.text || getKindLabel(conv.lastMessage.kind) }}</span>
                     }
@@ -113,7 +116,7 @@ import { AuthService } from '../../services/auth.service';
       <main class="chat-area" [class.with-panel]="showIntentPanel()">
         @if (!selectedConversation()) {
           <div class="no-conversation">
-            <span class="empty-icon">💬</span>
+            <span class="empty-icon"><app-icon name="message-square" [size]="48"/></span>
             <p>Select a conversation to view messages</p>
           </div>
         } @else {
@@ -136,7 +139,7 @@ import { AuthService } from '../../services/auth.service';
               <!-- Lock Status -->
               @if (currentLock()) {
                 <div class="lock-indicator" [class.own-lock]="currentLock()!.isOwnLock">
-                  🔒 {{ currentLock()!.isOwnLock ? 'Sizde' : currentLock()!.lockedByUserName }}
+                  <app-icon name="lock" [size]="14"/> {{ currentLock()!.isOwnLock ? 'Sizde' : currentLock()!.lockedByUserName }}
                 </div>
               }
 
@@ -160,11 +163,11 @@ import { AuthService } from '../../services/auth.service';
                   [disabled]="currentLock() && !currentLock()!.isOwnLock"
                   title="Devral"
                 >
-                  ✋ Devral
+                  <app-icon name="hand-stop" [size]="14"/> Devral
                 </button>
               } @else {
                 <button class="action-btn release" (click)="releaseLock()" title="Bırak">
-                  🔓 Bırak
+                  <app-icon name="unlock" [size]="14"/> Bırak
                 </button>
               }
 
@@ -174,7 +177,7 @@ import { AuthService } from '../../services/auth.service';
                 (click)="handoffToAgent()"
                 title="Temsilciye Aktar"
               >
-                🔄 Temsilciye Aktar
+                <app-icon name="refresh" [size]="14"/> Temsilciye Aktar
               </button>
 
               <!-- Panel Toggle -->
@@ -184,7 +187,7 @@ import { AuthService } from '../../services/auth.service';
                 (click)="showIntentPanel.set(!showIntentPanel())"
                 title="Toggle AI Panel"
               >
-                🤖
+                <app-icon name="bot" [size]="14"/>
               </button>
 
               <!-- Status Select -->
@@ -212,7 +215,7 @@ import { AuthService } from '../../services/auth.service';
                   <div class="message-bubble">
                     @if (msg.kind === 'LOCATION' && msg.payloadJson) {
                       <div class="message-location">
-                        📍 {{ msg.text }}
+                        <app-icon name="map-pin" [size]="14"/> {{ msg.text }}
                         <a
                           [href]="'https://maps.google.com/?q=' + msg.payloadJson['latitude'] + ',' + msg.payloadJson['longitude']"
                           target="_blank"
@@ -223,11 +226,11 @@ import { AuthService } from '../../services/auth.service';
                       </div>
                     } @else if (msg.kind === 'IMAGE') {
                       <div class="message-image">
-                        🖼️ {{ msg.text }}
+                        <app-icon name="image" [size]="14"/> {{ msg.text }}
                       </div>
                     } @else if (msg.kind === 'VOICE') {
                       <div class="message-voice">
-                        🎤 {{ msg.text }}
+                        <app-icon name="mic" [size]="14"/> {{ msg.text }}
                       </div>
                     } @else {
                       <div class="message-text">{{ msg.text }}</div>
@@ -247,8 +250,14 @@ import { AuthService } from '../../services/auth.service';
           <!-- Internal Notes Section -->
           <div class="internal-notes-section">
             <div class="notes-header" (click)="showNotes.set(!showNotes())">
-              <span>📝 Internal Notes ({{ internalNotes().length }})</span>
-              <span class="toggle-icon">{{ showNotes() ? '▼' : '▶' }}</span>
+              <span><app-icon name="file-text" [size]="14"/> Internal Notes ({{ internalNotes().length }})</span>
+              <span class="toggle-icon">
+                @if (showNotes()) {
+                  <app-icon name="chevron-down" [size]="14"/>
+                } @else {
+                  <app-icon name="chevron-right" [size]="14"/>
+                }
+              </span>
             </div>
             @if (showNotes()) {
               <div class="notes-content">
@@ -278,7 +287,7 @@ import { AuthService } from '../../services/auth.service';
           <div class="reply-container" [class.disabled]="!canWrite()">
             @if (!canWrite()) {
               <div class="lock-warning">
-                🔒 Bu sohbet {{ currentLock()?.lockedByUserName }} tarafından kilitli
+                <app-icon name="lock" [size]="14"/> Bu sohbet {{ currentLock()?.lockedByUserName }} tarafından kilitli
               </div>
             }
             <form (ngSubmit)="sendReply()" class="reply-form">
@@ -294,7 +303,7 @@ import { AuthService } from '../../services/auth.service';
                 @if (sending()) {
                   <span class="spinner"></span>
                 } @else {
-                  ➤
+                  <app-icon name="send" [size]="14"/>
                 }
               </button>
             </form>
@@ -306,8 +315,8 @@ import { AuthService } from '../../services/auth.service';
       @if (selectedConversation() && showIntentPanel()) {
         <aside class="intent-panel">
           <div class="panel-header">
-            <h3>🤖 Bot Önerisi</h3>
-            <button class="close-btn" (click)="showIntentPanel.set(false)">✕</button>
+            <h3><app-icon name="bot" [size]="14"/> Bot Önerisi</h3>
+            <button class="close-btn" (click)="showIntentPanel.set(false)"><app-icon name="x" [size]="14"/></button>
           </div>
           
           <div class="panel-content">
@@ -317,7 +326,7 @@ import { AuthService } from '../../services/auth.service';
               </div>
             } @else if (orderIntents().length === 0) {
               <div class="empty-intent">
-                <span>📋</span>
+                <span><app-icon name="clipboard" [size]="32"/></span>
                 <p>Henüz sipariş çıkarımı yok</p>
               </div>
             } @else {
@@ -332,7 +341,7 @@ import { AuthService } from '../../services/auth.service';
                   
                   @if (intent.needsClarification && intent.clarificationQuestion) {
                     <div class="clarification-box">
-                      <span class="clarification-icon">❓</span>
+                      <span class="clarification-icon"><app-icon name="help-circle" [size]="14"/></span>
                       <span>{{ intent.clarificationQuestion }}</span>
                     </div>
                   }
@@ -352,7 +361,7 @@ import { AuthService } from '../../services/auth.service';
                             </div>
                           }
                           @if (item.notes) {
-                            <div class="item-notes text-muted">📝 {{ item.notes }}</div>
+                            <div class="item-notes text-muted"><app-icon name="file-text" [size]="14"/> {{ item.notes }}</div>
                           }
                         </div>
                       }
@@ -361,7 +370,7 @@ import { AuthService } from '../../services/auth.service';
                   
                   @if (intent.extractedJson.missingFields.length > 0) {
                     <div class="missing-fields">
-                      <span class="missing-icon">⚠️</span>
+                      <span class="missing-icon"><app-icon name="alert-triangle" [size]="14"/></span>
                       <span>Eksik: {{ intent.extractedJson.missingFields.join(', ') }}</span>
                     </div>
                   }
@@ -370,16 +379,20 @@ import { AuthService } from '../../services/auth.service';
                   <div class="feedback-section">
                     @if (intent.agentFeedback) {
                       <span class="feedback-given" [attr.data-feedback]="intent.agentFeedback">
-                        {{ intent.agentFeedback === 'correct' ? '✓ Doğru' : '✗ Yanlış' }}
+                        @if (intent.agentFeedback === 'correct') {
+                          <app-icon name="check" [size]="12"/> Doğru
+                        } @else {
+                          <app-icon name="x" [size]="12"/> Yanlış
+                        }
                       </span>
                     } @else {
                       <span class="feedback-label">Bu çıkarım doğru mu?</span>
                       <div class="feedback-buttons">
                         <button class="feedback-btn correct" (click)="submitFeedback(intent, 'correct')">
-                          👍 Doğru
+                          <app-icon name="thumbs-up" [size]="14"/> Doğru
                         </button>
                         <button class="feedback-btn incorrect" (click)="submitFeedback(intent, 'incorrect')">
-                          👎 Yanlış
+                          <app-icon name="thumbs-down" [size]="14"/> Yanlış
                         </button>
                       </div>
                     }
@@ -655,7 +668,7 @@ import { AuthService } from '../../services/auth.service';
       }
 
       .empty-icon {
-        font-size: 3rem;
+        color: var(--color-text-muted);
         opacity: 0.5;
       }
 
@@ -1112,7 +1125,6 @@ import { AuthService } from '../../services/auth.service';
         text-align: center;
 
         span {
-          font-size: 2rem;
           margin-bottom: var(--spacing-sm);
         }
       }

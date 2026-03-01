@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
+import { IconComponent } from '../../shared/icon.component';
 
 interface NavItem {
   label: string;
@@ -12,12 +13,12 @@ interface NavItem {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent],
   template: `
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <span class="logo-icon">◈</span>
+          <app-icon name="hexagon" [size]="28" class="logo-icon"/>
           <span class="logo-text">Otorder</span>
         </div>
         @if (authService.tenant(); as tenant) {
@@ -37,7 +38,7 @@ interface NavItem {
                 [routerLinkActiveOptions]="{ exact: item.path === '/' }"
                 class="nav-link"
               >
-                <span class="nav-icon">{{ item.icon }}</span>
+                <app-icon [name]="item.icon" [size]="20" class="nav-icon"/>
                 <span class="nav-label">{{ item.label }}</span>
               </a>
             </li>
@@ -56,7 +57,7 @@ interface NavItem {
           </a>
         }
         <button class="logout-btn" (click)="logout()" title="Sign out">
-          <span>🚪</span>
+          <app-icon name="log-out" [size]="18"/>
         </button>
       </div>
     </aside>
@@ -89,7 +90,6 @@ interface NavItem {
       }
 
       .logo-icon {
-        font-size: 1.75rem;
         color: var(--color-accent-primary);
       }
 
@@ -149,9 +149,10 @@ interface NavItem {
       }
 
       .nav-icon {
-        font-size: 1.25rem;
         width: 24px;
-        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .nav-label {
@@ -228,11 +229,12 @@ interface NavItem {
         border: 1px solid var(--color-border);
         cursor: pointer;
         transition: all var(--transition-fast);
-        font-size: 1rem;
+        color: var(--color-text-secondary);
 
         &:hover {
           background: rgba(239, 68, 68, 0.1);
           border-color: rgba(239, 68, 68, 0.3);
+          color: var(--color-accent-danger);
         }
       }
     `,
@@ -242,17 +244,17 @@ export class SidebarComponent {
   authService = inject(AuthService);
 
   navItems: NavItem[] = [
-    { label: 'Dashboard', icon: '◉', path: '/' },
-    { label: 'Chatbot', icon: '🤖', path: '/chatbot' },
-    { label: 'Inbox', icon: '💬', path: '/inbox' },
-    { label: 'Siparişler', icon: '📦', path: '/orders' },
-    { label: 'Menü', icon: '🍽', path: '/menu' },
-    { label: 'Şubeler', icon: '🏪', path: '/stores' },
-    { label: 'Yazdırma', icon: '🖨️', path: '/print-jobs' },
-    { label: 'Anketler', icon: '📊', path: '/surveys' },
-    { label: 'Musteriler', icon: '👥', path: '/customers' },
-    { label: 'Kampanyalar', icon: '📢', path: '/campaigns' },
-    { label: 'Ayarlar', icon: '⚙', path: '/settings' },
+    { label: 'Dashboard', icon: 'dashboard', path: '/' },
+    { label: 'Chatbot', icon: 'bot', path: '/chatbot' },
+    { label: 'Inbox', icon: 'message-square', path: '/inbox' },
+    { label: 'Siparisler', icon: 'package', path: '/orders' },
+    { label: 'Menu', icon: 'utensils', path: '/menu' },
+    { label: 'Subeler', icon: 'store', path: '/stores' },
+    { label: 'Yazdirma', icon: 'printer', path: '/print-jobs' },
+    { label: 'Anketler', icon: 'bar-chart', path: '/surveys' },
+    { label: 'Musteriler', icon: 'users', path: '/customers' },
+    { label: 'Kampanyalar', icon: 'megaphone', path: '/campaigns' },
+    { label: 'Ayarlar', icon: 'settings', path: '/settings' },
   ];
 
   logout(): void {

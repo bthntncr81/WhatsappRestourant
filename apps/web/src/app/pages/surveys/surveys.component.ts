@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../services/auth.service';
+import { IconComponent } from '../../shared/icon.component';
 
 interface SurveyMessage {
   id: string;
@@ -45,7 +46,7 @@ interface ApiResponse<T> {
 @Component({
   selector: 'app-surveys',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   template: `
     <div class="surveys-page">
       <div class="page-header">
@@ -108,7 +109,7 @@ interface ApiResponse<T> {
         >
           <div class="complaint-header">
             <div class="rating-badge" [class]="'rating-' + c.rating">
-              {{ getStars(c.rating) }}
+              @for (s of getStarsArr(c.rating); track s) { <app-icon name="star" [size]="12"/> }
             </div>
             <span class="customer-name">{{ c.customerName || c.customerPhone }}</span>
             <span class="complaint-date">{{ formatDate(c.createdAt) }}</span>
@@ -146,7 +147,7 @@ interface ApiResponse<T> {
           <div class="info-row">
             <span class="info-label">Puan:</span>
             <span class="rating-badge" [class]="'rating-' + selectedComplaint()!.rating">
-              {{ getStars(selectedComplaint()!.rating) }}
+              @for (s of getStarsArr(selectedComplaint()!.rating); track s) { <app-icon name="star" [size]="14"/> }
             </span>
           </div>
           <div class="info-row" *ngIf="selectedComplaint()!.comment">
@@ -409,8 +410,8 @@ export class SurveysComponent implements OnInit {
     });
   }
 
-  getStars(rating: number): string {
-    return '⭐'.repeat(rating);
+  getStarsArr(rating: number): number[] {
+    return Array.from({ length: rating }, (_, i) => i);
   }
 
   formatDate(d: string): string {

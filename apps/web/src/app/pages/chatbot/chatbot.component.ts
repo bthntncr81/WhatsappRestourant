@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../services/auth.service';
+import { IconComponent } from '../../shared/icon.component';
 
 interface ChatButton {
   id: string;
@@ -20,16 +21,16 @@ interface ChatMessage {
 @Component({
   selector: 'app-chatbot',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent],
   template: `
     <div class="chatbot-container">
       <div class="chat-header">
         <div class="header-row">
           <div>
-            <h2>🤖 AI Chatbot Test</h2>
+            <h2><app-icon name="bot" [size]="22"/> AI Chatbot Test</h2>
             <p class="subtitle">Menü siparişlerinizi test edin</p>
           </div>
-          <button class="reset-btn" (click)="resetSession()" [disabled]="isLoading()" title="Sohbeti sıfırla">🔄 Sıfırla</button>
+          <button class="reset-btn" (click)="resetSession()" [disabled]="isLoading()" title="Sohbeti sıfırla"><app-icon name="refresh" [size]="14"/> Sıfırla</button>
         </div>
       </div>
 
@@ -38,11 +39,11 @@ interface ChatMessage {
           <div class="message" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'" [class.system]="msg.role === 'system'">
             <div class="message-avatar">
               @if (msg.role === 'user') {
-                👤
+                <app-icon name="user" [size]="16"/>
               } @else if (msg.role === 'assistant') {
-                🤖
+                <app-icon name="bot" [size]="20"/>
               } @else {
-                ⚙️
+                <app-icon name="settings" [size]="16"/>
               }
             </div>
             <div class="message-content">
@@ -60,7 +61,7 @@ interface ChatMessage {
         }
         @if (isLoading()) {
           <div class="message assistant">
-            <div class="message-avatar">🤖</div>
+            <div class="message-avatar"><app-icon name="bot" [size]="20"/></div>
             <div class="message-content">
               <div class="typing-indicator">
                 <span></span><span></span><span></span>
@@ -72,14 +73,14 @@ interface ChatMessage {
 
       <div class="chat-input-area">
         <div class="quick-actions">
-          <button class="quick-btn" (click)="sendQuickMessage('Menüyü göster')">📋 Menü</button>
-          <button class="quick-btn" (click)="sendQuickMessage('1 adet Adana Kebap istiyorum')">🍖 Kebap</button>
-          <button class="quick-btn" (click)="sendQuickMessage('2 lahmacun ve 1 ayran')">🌮 Lahmacun</button>
-          <button class="quick-btn" (click)="sendQuickMessage('evet')">✅ Onayla</button>
-          <button class="quick-btn location-btn" (click)="sendLocation()" [disabled]="isLoading()">📍 Konum</button>
-          <button class="quick-btn cash-btn" (click)="sendQuickMessage('nakit')">💵 Nakit</button>
-          <button class="quick-btn card-btn" (click)="sendQuickMessage('kart')">💳 Kart</button>
-          <button class="quick-btn pay-sim-btn" (click)="simulatePayment()" [disabled]="isLoading()">✅ Ödeme Simüle</button>
+          <button class="quick-btn" (click)="sendQuickMessage('Menüyü göster')"><app-icon name="clipboard" [size]="14"/> Menü</button>
+          <button class="quick-btn" (click)="sendQuickMessage('1 adet Adana Kebap istiyorum')"><app-icon name="utensils" [size]="14"/> Kebap</button>
+          <button class="quick-btn" (click)="sendQuickMessage('2 lahmacun ve 1 ayran')"><app-icon name="utensils" [size]="14"/> Lahmacun</button>
+          <button class="quick-btn" (click)="sendQuickMessage('evet')"><app-icon name="check" [size]="14"/> Onayla</button>
+          <button class="quick-btn location-btn" (click)="sendLocation()" [disabled]="isLoading()"><app-icon name="map-pin" [size]="14"/> Konum</button>
+          <button class="quick-btn cash-btn" (click)="sendQuickMessage('nakit')"><app-icon name="dollar-sign" [size]="14"/> Nakit</button>
+          <button class="quick-btn card-btn" (click)="sendQuickMessage('kart')"><app-icon name="credit-card" [size]="14"/> Kart</button>
+          <button class="quick-btn pay-sim-btn" (click)="simulatePayment()" [disabled]="isLoading()"><app-icon name="check" [size]="14"/> Ödeme Simüle</button>
         </div>
         <form (ngSubmit)="sendMessage()" class="input-form">
           <input
@@ -92,24 +93,24 @@ interface ChatMessage {
           />
           <button type="submit" [disabled]="isLoading() || !userInput.trim()">
             @if (isLoading()) {
-              ⏳
+              <app-icon name="hourglass" [size]="16"/>
             } @else {
-              📤
+              <app-icon name="send" [size]="16"/>
             }
           </button>
         </form>
       </div>
 
       <div class="info-panel">
-        <h4>📝 Test Senaryoları</h4>
+        <h4><app-icon name="file-text" [size]="16"/> Test Senaryoları</h4>
         <ul>
-          <li>✅ "bir döner bir ayran bir kola istiyorum"</li>
-          <li>✅ "bir de ayran ekle" — mevcut siparişe ekle</li>
-          <li>✅ "kolayı çıkar" — üründen sil</li>
-          <li>✅ "evet" — siparişi onayla</li>
-          <li>✅ 📍 Konum Gönder — teslimat adresi için</li>
-          <li>✅ "nakit" veya "kart" — ödeme yöntemi</li>
-          <li>✅ Ödeme Simüle — iyzico callback simülasyonu</li>
+          <li><app-icon name="check-circle" [size]="14"/> "bir döner bir ayran bir kola istiyorum"</li>
+          <li><app-icon name="check-circle" [size]="14"/> "bir de ayran ekle" — mevcut siparişe ekle</li>
+          <li><app-icon name="check-circle" [size]="14"/> "kolayı çıkar" — üründen sil</li>
+          <li><app-icon name="check-circle" [size]="14"/> "evet" — siparişi onayla</li>
+          <li><app-icon name="check-circle" [size]="14"/> <app-icon name="map-pin" [size]="14"/> Konum Gönder — teslimat adresi için</li>
+          <li><app-icon name="check-circle" [size]="14"/> "nakit" veya "kart" — ödeme yöntemi</li>
+          <li><app-icon name="check-circle" [size]="14"/> Ödeme Simüle — iyzico callback simülasyonu</li>
         </ul>
       </div>
     </div>
@@ -224,7 +225,7 @@ interface ChatMessage {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.2rem;
+      color: var(--color-accent-primary);
       background: var(--color-bg-tertiary);
       flex-shrink: 0;
     }

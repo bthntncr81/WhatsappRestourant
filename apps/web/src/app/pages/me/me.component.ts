@@ -1,11 +1,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService, MeResponse } from '../../services/auth.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-me',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconComponent],
   template: `
     <div class="me-page">
       <div class="me-header">
@@ -20,7 +21,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
         </div>
       } @else if (error()) {
         <div class="error-state">
-          <span class="error-icon">⚠</span>
+          <app-icon name="alert-triangle" [size]="20" class="error-icon"/>
           <span class="error-message">{{ error() }}</span>
           <button class="retry-btn" (click)="loadProfile()">Retry</button>
         </div>
@@ -29,7 +30,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
           <!-- User Card -->
           <div class="profile-card">
             <div class="card-header">
-              <span class="card-icon">👤</span>
+              <app-icon name="user" [size]="20" class="card-icon"/>
               <h2 class="card-title">User Information</h2>
             </div>
             <div class="card-content">
@@ -57,7 +58,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
           <!-- Tenant Card -->
           <div class="profile-card">
             <div class="card-header">
-              <span class="card-icon">🏢</span>
+              <app-icon name="building" [size]="20" class="card-icon"/>
               <h2 class="card-title">Current Workspace</h2>
             </div>
             <div class="card-content">
@@ -79,7 +80,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
           <!-- Memberships Card -->
           <div class="profile-card full-width">
             <div class="card-header">
-              <span class="card-icon">🔗</span>
+              <app-icon name="link" [size]="20" class="card-icon"/>
               <h2 class="card-title">All Workspaces</h2>
             </div>
             <div class="card-content">
@@ -111,7 +112,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
 
         <div class="actions">
           <button class="btn-danger" (click)="logout()">
-            <span>🚪</span> Sign out
+            <app-icon name="log-out" [size]="16"/> Sign out
           </button>
         </div>
       }
@@ -229,7 +230,7 @@ import { AuthService, MeResponse } from '../../services/auth.service';
       }
 
       .card-icon {
-        font-size: 1.25rem;
+        color: var(--color-accent-primary);
       }
 
       .card-title {

@@ -4,15 +4,16 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { OrderService, OrderDto, OrderStatus, CustomerDetailDto } from '../../services/order.service';
 import { NotificationService } from '../../services/notification.service';
+import { IconComponent } from '../../shared/icon.component';
 
 @Component({
   selector: 'app-orders',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, IconComponent],
   template: `
     <div class="orders-page">
       <header class="page-header">
-        <h1>📦 Siparişler</h1>
+        <h1><app-icon name="package" [size]="24"/> Siparişler</h1>
         <div class="filters">
           <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
             <option [ngValue]="null">Tüm Durumlar</option>
@@ -25,9 +26,13 @@ import { NotificationService } from '../../services/notification.service';
             <option value="CANCELLED">İptal</option>
           </select>
           <button class="sound-toggle-btn" (click)="notificationService.toggleSound()" [title]="notificationService.soundEnabled() ? 'Sesi Kapat' : 'Sesi Aç'">
-            {{ notificationService.soundEnabled() ? '🔔' : '🔕' }}
+            @if (notificationService.soundEnabled()) {
+              <app-icon name="bell" [size]="16"/>
+            } @else {
+              <app-icon name="bell-off" [size]="16"/>
+            }
           </button>
-          <button class="refresh-btn" (click)="loadOrders()">🔄 Yenile</button>
+          <button class="refresh-btn" (click)="loadOrders()"><app-icon name="refresh" [size]="14"/> Yenile</button>
         </div>
       </header>
 
@@ -58,7 +63,7 @@ import { NotificationService } from '../../services/notification.service';
         <div class="loading">Yükleniyor...</div>
       } @else if (orders().length === 0) {
         <div class="empty-state">
-          <span class="empty-icon">📋</span>
+          <app-icon name="clipboard" [size]="48" class="empty-icon"/>
           <p>Sipariş bulunamadı</p>
         </div>
       } @else {
@@ -81,7 +86,7 @@ import { NotificationService } from '../../services/notification.service';
                 <span class="customer-name">{{ order.customerName || 'Misafir' }}</span>
                 <span class="customer-phone">{{ order.customerPhone || '-' }}</span>
                 @if (order.storeName) {
-                  <span class="store-badge">🏪 {{ order.storeName }}</span>
+                  <span class="store-badge"><app-icon name="store" [size]="12"/> {{ order.storeName }}</span>
                 }
               </div>
 
@@ -100,7 +105,7 @@ import { NotificationService } from '../../services/notification.service';
                     <div class="item-extras">+ {{ formatExtras(item.extrasJson) }}</div>
                   }
                   @if (item.notes) {
-                    <div class="item-note">📝 {{ item.notes }}</div>
+                    <div class="item-note"><app-icon name="file-text" [size]="12"/> {{ item.notes }}</div>
                   }
                 }
                 @if (order.items.length > 3) {
@@ -129,38 +134,38 @@ import { NotificationService } from '../../services/notification.service';
               <div class="order-actions">
                 @if (order.status === 'DRAFT' || order.status === 'PENDING_CONFIRMATION') {
                   <button class="action-btn confirm" (click)="$event.stopPropagation(); confirmOrder(order)">
-                    ✓ Onayla
+                    <app-icon name="check" [size]="14"/> Onayla
                   </button>
                   <button class="action-btn reject" (click)="$event.stopPropagation(); openRejectModal(order)">
-                    ✗ Reddet
+                    <app-icon name="x" [size]="14"/> Reddet
                   </button>
                 }
                 @if (order.status === 'CONFIRMED') {
                   <button class="action-btn" (click)="$event.stopPropagation(); updateStatus(order, 'PREPARING')">
-                    🍳 Hazırlanıyor
+                    <app-icon name="flame" [size]="14"/> Hazırlanıyor
                   </button>
                 }
                 @if (order.status === 'PREPARING') {
                   <button class="action-btn success" (click)="$event.stopPropagation(); updateStatus(order, 'READY')">
-                    ✓ Hazır
+                    <app-icon name="check" [size]="14"/> Hazır
                   </button>
                 }
                 @if (order.status === 'READY') {
                   <button class="action-btn success" (click)="$event.stopPropagation(); updateStatus(order, 'DELIVERED')">
-                    🚗 Teslim Edildi
+                    <app-icon name="car" [size]="14"/> Teslim Edildi
                   </button>
                 }
                 @if (order.status !== 'CANCELLED' && order.status !== 'DELIVERED') {
                   <button class="action-btn danger" (click)="$event.stopPropagation(); updateStatus(order, 'CANCELLED')">
-                    ✗ İptal
+                    <app-icon name="x" [size]="14"/> İptal
                   </button>
                 }
                 @if (order.orderNumber) {
                   <button class="action-btn" (click)="$event.stopPropagation(); reprintKitchen(order)">
-                    🍳 Mutfak Fişi
+                    <app-icon name="flame" [size]="14"/> Mutfak Fişi
                   </button>
                   <button class="action-btn" (click)="$event.stopPropagation(); reprintCourier(order)">
-                    🛵 Kurye Fişi
+                    <app-icon name="bike" [size]="14"/> Kurye Fişi
                   </button>
                 }
               </div>
@@ -175,7 +180,7 @@ import { NotificationService } from '../../services/notification.service';
           <div class="reject-modal" (click)="$event.stopPropagation()">
             <div class="modal-header">
               <h3>Siparişi Reddet</h3>
-              <button class="close-btn" (click)="closeRejectModal()">✕</button>
+              <button class="close-btn" (click)="closeRejectModal()"><app-icon name="x" [size]="16"/></button>
             </div>
             <div class="modal-body">
               <p class="modal-info">
@@ -212,7 +217,7 @@ import { NotificationService } from '../../services/notification.service';
         <div class="customer-panel" (click)="$event.stopPropagation()">
           <div class="panel-header">
             <h3>Musteri Detayi</h3>
-            <button class="close-btn" (click)="closeCustomerPanel()">✕</button>
+            <button class="close-btn" (click)="closeCustomerPanel()"><app-icon name="x" [size]="16"/></button>
           </div>
 
           @if (customerDetailLoading()) {
@@ -261,7 +266,7 @@ import { NotificationService } from '../../services/notification.service';
                 <div class="panel-section">
                   <h4 class="section-title">Teslimat Adresi (Bu Siparis)</h4>
                   <div class="address-card current">
-                    <span class="address-icon">📍</span>
+                    <app-icon name="map-pin" [size]="16" class="address-icon"/>
                     <span>{{ selectedOrder()!.deliveryAddress }}</span>
                   </div>
                 </div>
@@ -456,8 +461,8 @@ import { NotificationService } from '../../services/notification.service';
     }
 
     .empty-icon {
-      font-size: 4rem;
       margin-bottom: 16px;
+      color: var(--color-text-muted);
     }
 
     .orders-grid {
