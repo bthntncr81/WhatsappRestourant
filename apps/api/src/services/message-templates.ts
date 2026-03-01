@@ -284,4 +284,14 @@ export const TEMPLATES = {
 
   agentHandoff:
     '👤 Sizi bir temsilciye yonlendiriyorum. Lutfen bekleyin...',
+
+  // ==================== UPSELL ====================
+  upsellButtons(price: number): { buttons: Array<{ id: string; title: string }> } {
+    return {
+      buttons: [
+        { id: 'upsell_accept', title: `✅ Ekle ${price.toFixed(0)} TL` },
+        { id: 'upsell_reject', title: '❌ Hayir' },
+      ],
+    };
+  },
 };

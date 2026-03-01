@@ -41,6 +41,10 @@ model Tenant {
   billingTransactions BillingTransaction[]
   orderPayments       OrderPayment[]
 
+  // Upsell relations
+  crossSellRules CrossSellRule[]
+  upsellEvents   UpsellEvent[]
+
   // WhatsApp config
   whatsappConfig      WhatsAppConfig?
 
@@ -125,6 +129,8 @@ model MenuItem {
   version      MenuVersion             @relation(fields: [versionId], references: [id], onDelete: Cascade)
   optionGroups MenuItemOptionGroup[]
   synonyms     MenuSynonym[]           @relation("ItemSynonyms")
+  triggerRules CrossSellRule[]         @relation("trigger")
+  suggestRules CrossSellRule[]         @relation("suggest")
 
   @@index([tenantId, versionId])
   @@index([tenantId, versionId, category])
@@ -256,6 +262,7 @@ model Conversation {
   nearestStoreId   String?
   geoCheckJson     Json?   // Full GeoCheckResult for reference
   flowSubState     String? // Sub-state within a phase (e.g., WAITING_SAVE_CONFIRM)
+  flowMetadata     String? // JSON metadata for current flow sub-state
 
   tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   messages       Message[]
@@ -266,6 +273,7 @@ model Conversation {
   internalNotes  InternalNote[]
   participants   ConversationParticipant[]
   orderPayments  OrderPayment[]
+  upsellEvents   UpsellEvent[]
 
   @@unique([tenantId, customerPhone])
   @@index([tenantId, status])
@@ -566,6 +574,44 @@ model SavedAddress {
 
   @@index([tenantId, customerPhone])
   @@map("saved_addresses")
+}
+
+// ==================== CROSS-SELL / UPSELL ====================
+
+model CrossSellRule {
+  id            String   @id @default(cuid())
+  tenantId      String
+  triggerItemId String
+  suggestItemId String
+  message       String?
+  priority      Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  triggerItem MenuItem @relation("trigger", fields: [triggerItemId], references: [id], onDelete: Cascade)
+  suggestItem MenuItem @relation("suggest", fields: [suggestItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, triggerItemId])
+  @@map("cross_sell_rules")
+}
+
+model UpsellEvent {
+  id              String   @id @default(cuid())
+  tenantId        String
+  conversationId  String
+  orderId         String
+  suggestedItemId String
+  suggestedName   String
+  accepted        Boolean
+  source          String
+  createdAt       DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("upsell_events")
 }
 
 // ==================== BILLING & SUBSCRIPTION ====================

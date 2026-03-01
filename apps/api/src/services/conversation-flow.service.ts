@@ -7,6 +7,7 @@ import { orderService } from './order.service';
 import { orderPaymentService } from './order-payment.service';
 import { savedAddressService } from './saved-address.service';
 import { storeService } from './store.service';
+import { upsellService } from './upsell.service';
 import { TEMPLATES } from './message-templates';
 import { createLogger } from '../logger';
 import {
@@ -422,8 +423,14 @@ export class ConversationFlowService {
    * ORDER_REVIEW: Order summary shown, waiting for customer yes/no/edit.
    */
   private async handleOrderReview(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, conversationId, message, conversation } = ctx;
+    const { tenantId, conversationId, message, conversation, payload } = ctx;
     const text = normalizeTr(message.text || '');
+    const buttonId = payload.interactive?.buttonReply?.id;
+
+    // Handle UPSELL_OFFERED sub-state
+    if (conversation.flowSubState === 'UPSELL_OFFERED') {
+      return this.handleUpsellResponse(ctx, text, buttonId);
+    }
 
     if (message.kind !== 'TEXT' || !text) {
       return 'ORDER_REVIEW';
@@ -436,7 +443,7 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // Confirm -> ask for location
+    // Confirm -> try upsell, then ask for location
     if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
       // Check if this is an addition order - skip location/address
       const order = await this.getActiveOrder(ctx);
@@ -452,40 +459,48 @@ export class ConversationFlowService {
         return 'PAYMENT_METHOD_SELECTION';
       }
 
-      // Check for saved addresses before requesting location
-      const savedAddresses = await savedAddressService.getByCustomerPhone(
-        tenantId, conversation.customerPhone,
-      );
+      // Try upsell before proceeding to address/location
+      if (order) {
+        try {
+          const suggestion = await upsellService.getSuggestion(
+            tenantId,
+            order.id,
+            conversation.customerPhone,
+            conversation.customerName,
+          );
 
-      if (savedAddresses.length > 0) {
-        // Build list message with saved addresses + "Yeni Adres" option
-        const rows = savedAddresses.map((addr) => ({
-          id: `saved_addr_${addr.id}`,
-          title: addr.name.substring(0, 24),
-          description: addr.address.substring(0, 72),
-        }));
-        rows.push({
-          id: 'new_address',
-          title: TEMPLATES.newAddressRowTitle,
-          description: TEMPLATES.newAddressRowDescription,
-        });
+          if (suggestion) {
+            // Store suggestion in flowSubState metadata
+            await prisma.conversation.update({
+              where: { id: conversationId },
+              data: {
+                flowSubState: 'UPSELL_OFFERED',
+                flowMetadata: JSON.stringify({
+                  upsellItemId: suggestion.itemId,
+                  upsellItemName: suggestion.itemName,
+                  upsellPrice: suggestion.price,
+                  upsellSource: suggestion.source,
+                }),
+              },
+            });
 
-        await whatsappService.sendListMessage(
-          tenantId,
-          conversationId,
-          TEMPLATES.savedAddressListHeader,
-          TEMPLATES.savedAddressListButton,
-          [{ title: 'Adresler', rows }],
-        );
-        return 'ADDRESS_SELECTION';
+            // Send AI message + buttons
+            const tmpl = TEMPLATES.upsellButtons(suggestion.price);
+            await whatsappService.sendInteractiveButtons(
+              tenantId,
+              conversationId,
+              suggestion.message,
+              tmpl.buttons,
+            );
+            return 'ORDER_REVIEW';
+          }
+        } catch (err) {
+          logger.warn({ err }, 'Upsell check failed, continuing normal flow');
+        }
       }
 
-      await whatsappService.sendLocationRequest(
-        tenantId,
-        conversationId,
-        TEMPLATES.locationRequest,
-      );
-      return 'LOCATION_REQUEST';
+      // No upsell -> proceed to address/location
+      return this.proceedToAddressFlow(ctx);
     }
 
     // Edit -> back to collecting
@@ -497,6 +512,123 @@ export class ConversationFlowService {
     // Default: treat as edit intent, go back to collecting
     await this.sendText(ctx, 'Onaylamak icin "evet", iptal icin "iptal" yazin.');
     return 'ORDER_REVIEW';
+  }
+
+  /**
+   * Handle customer response to upsell offer
+   */
+  private async handleUpsellResponse(
+    ctx: FlowContext,
+    text: string,
+    buttonId: string | undefined,
+  ): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation } = ctx;
+
+    // Parse stored upsell metadata
+    let upsellMeta: any = {};
+    try {
+      upsellMeta = JSON.parse(conversation.flowMetadata || '{}');
+    } catch { /* ignore */ }
+
+    const accepted = buttonId === 'upsell_accept' ||
+      this.matchesKeyword(text, ['ekle', 'evet', 'tamam', 'olsun']);
+    const rejected = buttonId === 'upsell_reject' ||
+      this.matchesKeyword(text, ['hayir', 'istemiyorum', 'yok', 'gecen']);
+
+    if (accepted && upsellMeta.upsellItemId) {
+      // Add upsell item to order
+      const order = await this.getActiveOrder(ctx);
+      if (order) {
+        await prisma.orderItem.create({
+          data: {
+            orderId: order.id,
+            menuItemId: upsellMeta.upsellItemId,
+            menuItemName: upsellMeta.upsellItemName,
+            qty: 1,
+            unitPrice: upsellMeta.upsellPrice,
+          },
+        });
+
+        // Update order total
+        const newTotal = Number(order.totalPrice) + upsellMeta.upsellPrice;
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { totalPrice: newTotal },
+        });
+
+        await this.sendText(ctx, `✅ ${upsellMeta.upsellItemName} sepete eklendi!`);
+
+        // Log upsell event
+        await upsellService.logEvent(
+          tenantId, conversationId, order.id,
+          upsellMeta.upsellItemId, upsellMeta.upsellItemName,
+          true, upsellMeta.upsellSource || 'rule',
+        );
+      }
+    } else if (rejected) {
+      // Log rejection
+      const order = await this.getActiveOrder(ctx);
+      if (order && upsellMeta.upsellItemId) {
+        await upsellService.logEvent(
+          tenantId, conversationId, order.id,
+          upsellMeta.upsellItemId, upsellMeta.upsellItemName,
+          false, upsellMeta.upsellSource || 'rule',
+        );
+      }
+    } else {
+      // Unrecognized response — remind
+      await this.sendText(ctx, 'Eklemek icin "evet", devam etmek icin "hayir" yazin.');
+      return 'ORDER_REVIEW';
+    }
+
+    // Clear sub-state and proceed to address/location
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { flowSubState: null, flowMetadata: null },
+    });
+
+    return this.proceedToAddressFlow(ctx);
+  }
+
+  /**
+   * Proceed to address/location flow after order review (and optional upsell)
+   */
+  private async proceedToAddressFlow(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation } = ctx;
+
+    // Check for saved addresses before requesting location
+    const savedAddresses = await savedAddressService.getByCustomerPhone(
+      tenantId, conversation.customerPhone,
+    );
+
+    if (savedAddresses.length > 0) {
+      const rows = savedAddresses.map((addr) => ({
+        id: `saved_addr_${addr.id}`,
+        title: addr.name.substring(0, 24),
+        description: addr.address.substring(0, 72),
+      }));
+      rows.push({
+        id: 'new_address',
+        title: TEMPLATES.newAddressRowTitle,
+        description: TEMPLATES.newAddressRowDescription,
+      });
+
+      await whatsappService.sendListMessage(
+        tenantId,
+        conversationId,
+        TEMPLATES.savedAddressListHeader,
+        TEMPLATES.savedAddressListButton,
+        [{ title: 'Adresler', rows }],
+      );
+      return 'ADDRESS_SELECTION';
+    }
+
+    await whatsappService.sendLocationRequest(
+      tenantId,
+      conversationId,
+      TEMPLATES.locationRequest,
+    );
+    return 'LOCATION_REQUEST';
   }
 
   /**
