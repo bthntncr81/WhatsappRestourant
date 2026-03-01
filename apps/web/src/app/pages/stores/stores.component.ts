@@ -27,9 +27,14 @@ import { environment } from '../../../environments/environment';
           <div class="store-card" [class.inactive]="!store.isActive">
             <div class="store-header">
               <h3>{{ store.name }}</h3>
-              <span class="status-badge" [class.active]="store.isActive">
-                {{ store.isActive ? 'Aktif' : 'Pasif' }}
-              </span>
+              <div class="badges">
+                <span class="status-badge" [class.active]="store.isActive">
+                  {{ store.isActive ? 'Aktif' : 'Pasif' }}
+                </span>
+                <span class="open-badge" [class.open]="store.isOpen" [class.closed]="!store.isOpen">
+                  {{ store.isOpen ? 'Açık' : 'Kapalı' }}
+                </span>
+              </div>
             </div>
 
             <div class="store-info">
@@ -71,6 +76,9 @@ import { environment } from '../../../environments/environment';
 
             <div class="store-actions">
               <button class="edit-btn" (click)="editStore(store)">Düzenle</button>
+              <button class="open-toggle-btn" [class.is-open]="store.isOpen" (click)="toggleStoreOpen(store)">
+                {{ store.isOpen ? 'Kapat' : 'Aç' }}
+              </button>
               <button class="toggle-btn" (click)="toggleStore(store)">
                 {{ store.isActive ? 'Devre Dışı' : 'Aktifleştir' }}
               </button>
@@ -283,6 +291,27 @@ import { environment } from '../../../environments/environment';
       background: #10b981;
     }
 
+    .badges {
+      display: flex;
+      gap: 6px;
+    }
+
+    .open-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+    }
+
+    .open-badge.open {
+      background: #10b981;
+    }
+
+    .open-badge.closed {
+      background: #ef4444;
+    }
+
     .store-info {
       margin-bottom: 16px;
     }
@@ -393,6 +422,15 @@ import { environment } from '../../../environments/environment';
     .edit-btn {
       background: var(--bg-tertiary, #252542);
       color: var(--text-primary, #fff);
+    }
+
+    .open-toggle-btn {
+      background: #10b981;
+      color: white;
+    }
+
+    .open-toggle-btn.is-open {
+      background: #ef4444;
     }
 
     .toggle-btn {
@@ -779,6 +817,13 @@ export class StoresComponent implements OnInit, OnDestroy {
         error: (err) => console.error('Create store failed:', err),
       });
     }
+  }
+
+  toggleStoreOpen(store: StoreDto): void {
+    this.storeService.toggleStoreOpen(store.id).subscribe({
+      next: () => this.loadStores(),
+      error: (err) => console.error('Toggle store open failed:', err),
+    });
   }
 
   toggleStore(store: StoreDto): void {

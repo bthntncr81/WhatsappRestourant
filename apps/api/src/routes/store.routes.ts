@@ -32,6 +32,7 @@ const updateStoreSchema = z.object({
   lng: z.number().min(-180).max(180).optional(),
   phone: z.string().max(20).optional(),
   isActive: z.boolean().optional(),
+  isOpen: z.boolean().optional(),
 });
 
 const createDeliveryRuleSchema = z.object({
@@ -152,6 +153,26 @@ router.delete(
     try {
       await storeService.deleteStore(req.tenantId!, req.params.id);
       res.json({ success: true, message: 'Store deleted' });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * PATCH /stores/:id/toggle-open
+ * Toggle store open/closed (ADMIN only)
+ */
+router.patch(
+  '/:id/toggle-open',
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<StoreDto>>, next: NextFunction) => {
+    try {
+      const current = await storeService.getStore(req.tenantId!, req.params.id);
+      const store = await storeService.updateStore(req.tenantId!, req.params.id, {
+        isOpen: !current.isOpen,
+      });
+      res.json({ success: true, data: store });
     } catch (error) {
       next(error);
     }

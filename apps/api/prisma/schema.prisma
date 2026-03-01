@@ -31,8 +31,9 @@ model Tenant {
   printJobs    PrintJob[]
 
   // Store relations
-  stores        Store[]
-  deliveryRules DeliveryRule[]
+  stores         Store[]
+  deliveryRules  DeliveryRule[]
+  savedAddresses SavedAddress[]
 
   // Billing relations
   subscription        Subscription?
@@ -227,7 +228,9 @@ enum ConversationPhase {
   ORDER_COLLECTING
   ORDER_REVIEW
   LOCATION_REQUEST
+  ADDRESS_SELECTION
   ADDRESS_COLLECTION
+  ADDRESS_SAVE_PROMPT
   PAYMENT_METHOD_SELECTION
   PAYMENT_PENDING
   ORDER_CONFIRMED
@@ -252,6 +255,7 @@ model Conversation {
   isWithinService  Boolean?
   nearestStoreId   String?
   geoCheckJson     Json?   // Full GeoCheckResult for reference
+  flowSubState     String? // Sub-state within a phase (e.g., WAITING_SAVE_CONFIRM)
 
   tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   messages       Message[]
@@ -501,12 +505,14 @@ model Store {
   lng       Float
   phone     String?
   isActive  Boolean  @default(true)
+  isOpen    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  deliveryRules DeliveryRule[]
-  orders        Order[]
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deliveryRules  DeliveryRule[]
+  orders         Order[]
+  savedAddresses SavedAddress[]
 
   @@index([tenantId, isActive])
   @@map("stores")
@@ -540,6 +546,26 @@ model DeliveryRule {
   @@index([tenantId, storeId])
   @@index([tenantId, isActive])
   @@map("delivery_rules")
+}
+
+// ==================== SAVED ADDRESSES ====================
+
+model SavedAddress {
+  id            String   @id @default(cuid())
+  tenantId      String
+  customerPhone String
+  name          String
+  address       String
+  lat           Float
+  lng           Float
+  storeId       String
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  store  Store  @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, customerPhone])
+  @@map("saved_addresses")
 }
 
 // ==================== BILLING & SUBSCRIPTION ====================

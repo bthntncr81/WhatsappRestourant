@@ -22,6 +22,7 @@ export interface StoreDto {
   lng: number;
   phone: string | null;
   isActive: boolean;
+  isOpen: boolean;
   createdAt: string;
   updatedAt: string;
   deliveryRules?: DeliveryRuleDto[];
@@ -129,6 +130,14 @@ export class StoreService {
   deleteStore(id: string): Observable<ApiResponse<void>> {
     return this.http.delete<ApiResponse<void>>(
       `${environment.apiBaseUrl}/stores/${id}`,
+      this.headers
+    );
+  }
+
+  toggleStoreOpen(id: string): Observable<ApiResponse<StoreDto>> {
+    return this.http.patch<ApiResponse<StoreDto>>(
+      `${environment.apiBaseUrl}/stores/${id}/toggle-open`,
+      {},
       this.headers
     );
   }

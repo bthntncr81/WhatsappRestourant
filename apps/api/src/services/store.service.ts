@@ -89,6 +89,7 @@ export class StoreService {
         ...(data.lng !== undefined && { lng: data.lng }),
         ...(data.phone !== undefined && { phone: data.phone }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.isOpen !== undefined && { isOpen: data.isOpen }),
       },
       include: { deliveryRules: true },
     });
@@ -234,12 +235,20 @@ export class StoreService {
       lng: store.lng,
       phone: store.phone,
       isActive: store.isActive,
+      isOpen: store.isOpen ?? true,
       createdAt: store.createdAt.toISOString(),
       updatedAt: store.updatedAt.toISOString(),
       deliveryRules: store.deliveryRules?.map((rule: any) =>
         this.mapDeliveryRuleToDto(rule)
       ),
     };
+  }
+
+  async areAllStoresClosed(tenantId: string): Promise<boolean> {
+    const openCount = await prisma.store.count({
+      where: { tenantId, isActive: true, isOpen: true },
+    });
+    return openCount === 0;
   }
 
   private mapDeliveryRuleToDto(rule: any): DeliveryRuleDto {

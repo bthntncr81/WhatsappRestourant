@@ -5,6 +5,8 @@ import { nluOrchestratorService } from './nlu/orchestrator.service';
 import { geoService } from './geo.service';
 import { orderService } from './order.service';
 import { orderPaymentService } from './order-payment.service';
+import { savedAddressService } from './saved-address.service';
+import { storeService } from './store.service';
 import { TEMPLATES } from './message-templates';
 import { createLogger } from '../logger';
 import {
@@ -77,6 +79,24 @@ export class ConversationFlowService {
     );
 
     try {
+      // Store-closed guard: block new orders when all stores are closed
+      const guardPhases: ConversationPhase[] = [
+        'IDLE', 'ORDER_COLLECTING', 'ORDER_REVIEW', 'ADDITION_PROMPT',
+      ];
+      if (guardPhases.includes(currentPhase)) {
+        const allClosed = await storeService.areAllStoresClosed(tenantId);
+        if (allClosed) {
+          // Only send if last outbound wasn't already the closed message
+          const lastOut = await prisma.message.findFirst({
+            where: { conversationId, tenantId, direction: 'OUT' },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (!lastOut || lastOut.text !== TEMPLATES.storeClosed) {
+            await this.sendText(ctx, TEMPLATES.storeClosed);
+          }
+          return;
+        }
+      }
       // Global reset command - works in any phase
       const RESET_KEYWORDS = ['sifirla', 'sıfırla', 'reset', 'bastan', 'baştan'];
       const normalizedText = normalizeTr(ctx.message.text || '');
@@ -107,8 +127,14 @@ export class ConversationFlowService {
         case 'LOCATION_REQUEST':
           nextPhase = await this.handleLocationRequest(ctx);
           break;
+        case 'ADDRESS_SELECTION':
+          nextPhase = await this.handleAddressSelection(ctx);
+          break;
         case 'ADDRESS_COLLECTION':
           nextPhase = await this.handleAddressCollection(ctx);
+          break;
+        case 'ADDRESS_SAVE_PROMPT':
+          nextPhase = await this.handleAddressSavePrompt(ctx);
           break;
         case 'PAYMENT_METHOD_SELECTION':
           nextPhase = await this.handlePaymentMethodSelection(ctx);
@@ -396,7 +422,7 @@ export class ConversationFlowService {
    * ORDER_REVIEW: Order summary shown, waiting for customer yes/no/edit.
    */
   private async handleOrderReview(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, conversationId, message } = ctx;
+    const { tenantId, conversationId, message, conversation } = ctx;
     const text = normalizeTr(message.text || '');
 
     if (message.kind !== 'TEXT' || !text) {
@@ -424,6 +450,34 @@ export class ConversationFlowService {
         // Skip location & address -> go straight to payment
         await this.sendPaymentButtons(ctx);
         return 'PAYMENT_METHOD_SELECTION';
+      }
+
+      // Check for saved addresses before requesting location
+      const savedAddresses = await savedAddressService.getByCustomerPhone(
+        tenantId, conversation.customerPhone,
+      );
+
+      if (savedAddresses.length > 0) {
+        // Build list message with saved addresses + "Yeni Adres" option
+        const rows = savedAddresses.map((addr) => ({
+          id: `saved_addr_${addr.id}`,
+          title: addr.name.substring(0, 24),
+          description: addr.address.substring(0, 72),
+        }));
+        rows.push({
+          id: 'new_address',
+          title: TEMPLATES.newAddressRowTitle,
+          description: TEMPLATES.newAddressRowDescription,
+        });
+
+        await whatsappService.sendListMessage(
+          tenantId,
+          conversationId,
+          TEMPLATES.savedAddressListHeader,
+          TEMPLATES.savedAddressListButton,
+          [{ title: 'Adresler', rows }],
+        );
+        return 'ADDRESS_SELECTION';
       }
 
       await whatsappService.sendLocationRequest(
@@ -702,9 +756,13 @@ export class ConversationFlowService {
     } else {
       // --- Sub-state: waiting for confirmation ---
       if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
-        // Address confirmed → proceed to payment
-        await this.sendPaymentButtons(ctx);
-        return 'PAYMENT_METHOD_SELECTION';
+        // Address confirmed → ask if they want to save it
+        await prisma.conversation.update({
+          where: { id: ctx.conversationId },
+          data: { flowSubState: 'WAITING_SAVE_CONFIRM' },
+        });
+        await this.sendText(ctx, TEMPLATES.askSaveAddress);
+        return 'ADDRESS_SAVE_PROMPT';
       }
 
       if (this.matchesKeyword(text, EDIT_KEYWORDS)) {
@@ -721,6 +779,200 @@ export class ConversationFlowService {
       await this.sendText(ctx, 'Lutfen *"evet"* ile onaylayin veya *"hayir"* yazarak adresinizi tekrar girin.');
       return 'ADDRESS_COLLECTION';
     }
+  }
+
+  // ==================== ADDRESS SELECTION ====================
+
+  /**
+   * ADDRESS_SELECTION: Saved addresses list shown, waiting for selection.
+   */
+  private async handleAddressSelection(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, message, payload, conversation } = ctx;
+    const text = normalizeTr(message.text || '');
+
+    // Cancel
+    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+      await this.cancelActiveOrder(ctx);
+      await this.sendText(ctx, TEMPLATES.orderCancelled);
+      return 'IDLE';
+    }
+
+    // Handle list reply (interactive)
+    const listReplyId = payload.interactive?.listReply?.id;
+
+    if (listReplyId === 'new_address') {
+      // User wants to enter a new address
+      await whatsappService.sendLocationRequest(
+        tenantId,
+        conversationId,
+        TEMPLATES.locationRequest,
+      );
+      return 'LOCATION_REQUEST';
+    }
+
+    if (listReplyId?.startsWith('saved_addr_')) {
+      const addressId = listReplyId.replace('saved_addr_', '');
+      const savedAddr = await savedAddressService.getById(tenantId, addressId);
+
+      if (!savedAddr) {
+        await this.sendText(ctx, TEMPLATES.savedAddressInvalid);
+        await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+        return 'LOCATION_REQUEST';
+      }
+
+      // Re-validate geo: store might be closed or out of range now
+      const geoResult = await geoService.checkServiceArea(tenantId, {
+        lat: savedAddr.lat,
+        lng: savedAddr.lng,
+      });
+      await inboxService.updateConversationGeoCheck(tenantId, conversationId, geoResult, {
+        lat: savedAddr.lat,
+        lng: savedAddr.lng,
+      });
+
+      if (!geoResult.isWithinServiceArea) {
+        await this.sendText(ctx, TEMPLATES.savedAddressInvalid);
+        await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+        return 'LOCATION_REQUEST';
+      }
+
+      // Check minimum basket
+      const order = await this.getActiveOrder(ctx);
+      if (order && geoResult.deliveryRule) {
+        const orderTotal = Number(order.totalPrice);
+        const minBasket = Number(geoResult.deliveryRule.minBasket);
+        if (orderTotal < minBasket) {
+          await this.sendText(ctx, TEMPLATES.locationMinBasketNotMet(minBasket, orderTotal));
+          return 'ORDER_COLLECTING';
+        }
+      }
+
+      // Set delivery address and store on order
+      if (order) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            deliveryAddress: savedAddr.address,
+            storeId: geoResult.nearestStore?.id || savedAddr.storeId,
+          },
+        });
+      }
+
+      const storeName = geoResult.nearestStore?.name || 'En yakin sube';
+      const deliveryFee = geoResult.deliveryRule ? Number(geoResult.deliveryRule.deliveryFee) : 0;
+      const distance = geoResult.distance || 0;
+      await this.sendText(ctx, TEMPLATES.locationConfirmed(storeName, deliveryFee, distance));
+
+      // Skip address collection — go straight to payment
+      await this.sendPaymentButtons(ctx);
+      return 'PAYMENT_METHOD_SELECTION';
+    }
+
+    // Text fallback — might be typing "yeni" etc.
+    if (text.includes('yeni')) {
+      await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+      return 'LOCATION_REQUEST';
+    }
+
+    // Unrecognized — resend list
+    const savedAddresses = await savedAddressService.getByCustomerPhone(tenantId, conversation.customerPhone);
+    const rows = savedAddresses.map((addr) => ({
+      id: `saved_addr_${addr.id}`,
+      title: addr.name.substring(0, 24),
+      description: addr.address.substring(0, 72),
+    }));
+    rows.push({
+      id: 'new_address',
+      title: TEMPLATES.newAddressRowTitle,
+      description: TEMPLATES.newAddressRowDescription,
+    });
+    await whatsappService.sendListMessage(
+      tenantId, conversationId,
+      TEMPLATES.savedAddressListHeader,
+      TEMPLATES.savedAddressListButton,
+      [{ title: 'Adresler', rows }],
+    );
+    return 'ADDRESS_SELECTION';
+  }
+
+  // ==================== ADDRESS SAVE PROMPT ====================
+
+  /**
+   * ADDRESS_SAVE_PROMPT: Ask if customer wants to save the address, then collect name.
+   */
+  private async handleAddressSavePrompt(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, message, conversation } = ctx;
+    const text = normalizeTr(message.text || '');
+
+    if (message.kind !== 'TEXT' || !text) {
+      return 'ADDRESS_SAVE_PROMPT';
+    }
+
+    const subState = conversation.flowSubState || 'WAITING_SAVE_CONFIRM';
+
+    if (subState === 'WAITING_SAVE_CONFIRM') {
+      if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+        // User wants to save — ask for name
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: 'WAITING_ADDRESS_NAME' },
+        });
+        await this.sendText(ctx, TEMPLATES.askAddressName);
+        return 'ADDRESS_SAVE_PROMPT';
+      }
+
+      // "hayir" or cancel — skip saving, go to payment
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { flowSubState: null },
+      });
+      await this.sendText(ctx, TEMPLATES.addressNotSaved);
+      await this.sendPaymentButtons(ctx);
+      return 'PAYMENT_METHOD_SELECTION';
+    }
+
+    if (subState === 'WAITING_ADDRESS_NAME') {
+      const name = (message.text || '').trim();
+
+      // Get customer location and store from conversation's geo check
+      const customerLat = conversation.customerLat;
+      const customerLng = conversation.customerLng;
+      const nearestStoreId = conversation.nearestStoreId;
+
+      // Get delivery address from active order
+      const order = await this.getActiveOrder(ctx);
+      const address = order?.deliveryAddress || '';
+
+      if (customerLat && customerLng && nearestStoreId && address) {
+        await savedAddressService.create(tenantId, conversation.customerPhone, {
+          name,
+          address,
+          lat: customerLat,
+          lng: customerLng,
+          storeId: nearestStoreId,
+        });
+        await this.sendText(ctx, TEMPLATES.addressSaved(name));
+      } else {
+        logger.warn({ tenantId, conversationId }, 'Missing geo data for address save');
+        await this.sendText(ctx, TEMPLATES.addressNotSaved);
+      }
+
+      // Clear sub-state and proceed to payment
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { flowSubState: null },
+      });
+      await this.sendPaymentButtons(ctx);
+      return 'PAYMENT_METHOD_SELECTION';
+    }
+
+    // Unknown sub-state — go to payment
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { flowSubState: null },
+    });
+    await this.sendPaymentButtons(ctx);
+    return 'PAYMENT_METHOD_SELECTION';
   }
 
   // ==================== GEO HELPERS ====================

@@ -108,7 +108,10 @@ export class WhatsAppService {
           lat: payload.location.latitude,
           lng: payload.location.longitude,
         });
-        await inboxService.updateConversationGeoCheck(tenantId, conversation.id, result);
+        await inboxService.updateConversationGeoCheck(tenantId, conversation.id, result, {
+          lat: payload.location.latitude,
+          lng: payload.location.longitude,
+        });
         logger.info(
           { tenantId, conversationId: conversation.id, isWithinServiceArea: result.isWithinServiceArea },
           'Geo check stored for location message'
@@ -252,6 +255,47 @@ export class WhatsAppService {
       return { messageId: message.id, externalId: result.messageId };
     } catch (error) {
       logger.error({ error, tenantId, conversationId }, 'Failed to send location request');
+      return { messageId: message.id };
+    }
+  }
+
+  /**
+   * Send interactive list message (e.g., saved address selection)
+   */
+  async sendListMessage(
+    tenantId: string,
+    conversationId: string,
+    body: string,
+    buttonText: string,
+    sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    header?: string,
+  ): Promise<{ messageId: string; externalId?: string }> {
+    const conversation = await inboxService.getConversation(tenantId, conversationId);
+
+    const message = await inboxService.createMessage(
+      tenantId,
+      conversationId,
+      'OUT',
+      'TEXT',
+      body,
+      { isSystemMessage: true, interactive: { type: 'list', sections } },
+    );
+
+    try {
+      const tenantConfig = await this.getTenantConfig(tenantId);
+      let result;
+      if (tenantConfig) {
+        result = await whatsappProviderService.sendListMessageWithConfig(
+          conversation.customerPhone, body, buttonText, sections, tenantConfig, header,
+        );
+      } else {
+        result = await whatsappProviderService.sendListMessage(
+          conversation.customerPhone, body, buttonText, sections, header,
+        );
+      }
+      return { messageId: message.id, externalId: result.messageId };
+    } catch (error) {
+      logger.error({ error, tenantId, conversationId }, 'Failed to send list message');
       return { messageId: message.id };
     }
   }

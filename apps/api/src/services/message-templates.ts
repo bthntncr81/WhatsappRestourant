@@ -248,6 +248,31 @@ export const TEMPLATES = {
     );
   },
 
+  // ==================== SAVED ADDRESSES ====================
+  savedAddressListHeader: 'Kayitli adresleriniz:',
+  savedAddressListButton: 'Adres Sec',
+  newAddressRowTitle: 'Yeni Adres',
+  newAddressRowDescription: 'Yeni konum gondererek adres girin',
+
+  askSaveAddress:
+    'Bu adresi kaydetmek ister misiniz?\n' +
+    '✅ _"evet"_ - Kaydet\n' +
+    '❌ _"hayir"_ - Kaydetme',
+
+  askAddressName: 'Bu adrese bir isim verin (ornek: _Ev_, _Is_, _Annemin Evi_):',
+
+  addressSaved(name: string): string {
+    return `✅ Adres *"${name}"* olarak kaydedildi.`;
+  },
+
+  addressNotSaved: 'Tamam, adres kaydedilmedi.',
+
+  savedAddressInvalid:
+    '⚠️ Sectiginiz adres artik hizmet alaninda degil.\nLutfen yeni konum gonderin.',
+
+  // ==================== STORE STATUS ====================
+  storeClosed: '⏰ Suanda kapaliyiz. Acildigimizda tekrar siparis verebilirsiniz.',
+
   // ==================== GENERAL ====================
   orderCancelled: '🚫 Siparisinia iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
 

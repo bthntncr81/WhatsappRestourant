@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  whatres-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whatres-api
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://highfive:highfive123@host.docker.internal:5432/whatres_db?schema=public
+      DATABASE_HOST: host.docker.internal
+      DATABASE_PORT: 5432
+      DATABASE_NAME: whatres_db
+      DATABASE_USER: highfive
+      DATABASE_PASSWORD: highfive123
+      REDIS_HOST: whatres-redis
+      REDIS_PORT: 6379
+      API_PREFIX: /api
+      CORS_ORIGIN: https://whatres.highfivepps.com
+      JWT_SECRET: ${JWT_SECRET:-whatres-prod-secret-change-me}
+      JWT_EXPIRES_IN: 7d
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_ORG_ID: ${OPENAI_ORG_ID:-}
+      OPENAI_MODEL: gpt-4o-mini
+      IYZICO_API_KEY: ${IYZICO_API_KEY:-sandbox-ifkcjkaPdtshoWkt36gjOwpZ9Z5XsUZM}
+      IYZICO_SECRET_KEY: ${IYZICO_SECRET_KEY:-sandbox-0PfKYCdPshA2ZhqfdGq6JxfB5dXQWeqa}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      APP_BASE_URL: ${APP_BASE_URL:-https://api-whatres.highfivepps.com}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      whatres-redis:
+        condition: service_healthy
+
+  whatres-redis:
+    image: redis:7-alpine
+    container_name: whatres-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - whatres_redis_data:/data
+
+volumes:
+  whatres_redis_data:

@@ -1,0 +1,12 @@
+node_modules
+.nx
+.angular
+dist
+.git
+.claude
+.env
+.env.local
+.DS_Store
+*.log
+tmp
+coverage

@@ -102,6 +102,27 @@ export class WhatsAppProviderService {
     });
   }
 
+  /**
+   * Send interactive list message (e.g., saved address selection)
+   */
+  async sendListMessage(
+    to: string,
+    body: string,
+    buttonText: string,
+    sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    header?: string,
+  ): Promise<{ messageId: string }> {
+    const interactive: Record<string, unknown> = {
+      type: 'list',
+      body: { text: body },
+      action: { button: buttonText, sections },
+    };
+    if (header) {
+      interactive.header = { type: 'text', text: header };
+    }
+    return this.sendMessage(to, { type: 'interactive', interactive });
+  }
+
   // ==================== WEBHOOK VERIFICATION ====================
 
   /**
@@ -275,6 +296,28 @@ export class WhatsAppProviderService {
         action: { name: 'send_location' },
       },
     }, tenantConfig);
+  }
+
+  /**
+   * Send list message using per-tenant DB config
+   */
+  async sendListMessageWithConfig(
+    to: string,
+    body: string,
+    buttonText: string,
+    sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    tenantConfig: { phoneNumberId: string; accessToken: string },
+    header?: string,
+  ): Promise<{ messageId: string }> {
+    const interactive: Record<string, unknown> = {
+      type: 'list',
+      body: { text: body },
+      action: { button: buttonText, sections },
+    };
+    if (header) {
+      interactive.header = { type: 'text', text: header };
+    }
+    return this.sendMessageWithConfig(to, { type: 'interactive', interactive }, tenantConfig);
   }
 
   // ==================== PRIVATE ====================

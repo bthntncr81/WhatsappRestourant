@@ -1,8 +1,9 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { OrderService, OrderDto, OrderStatus } from '../../services/order.service';
+import { NotificationService } from '../../services/notification.service';
 
 @Component({
   selector: 'app-orders',
@@ -13,7 +14,7 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
       <header class="page-header">
         <h1>📦 Siparişler</h1>
         <div class="filters">
-          <select [(ngModel)]="statusFilter" (change)="loadOrders()">
+          <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
             <option [ngValue]="null">Tüm Durumlar</option>
             <option value="DRAFT">Taslak</option>
             <option value="PENDING_CONFIRMATION">Onay Bekliyor</option>
@@ -23,28 +24,31 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
             <option value="DELIVERED">Teslim Edildi</option>
             <option value="CANCELLED">İptal</option>
           </select>
+          <button class="sound-toggle-btn" (click)="notificationService.toggleSound()" [title]="notificationService.soundEnabled() ? 'Sesi Kapat' : 'Sesi Aç'">
+            {{ notificationService.soundEnabled() ? '🔔' : '🔕' }}
+          </button>
           <button class="refresh-btn" (click)="loadOrders()">🔄 Yenile</button>
         </div>
       </header>
 
       <div class="stats-bar">
-        <div class="stat" [class.active]="statusFilter === null" (click)="statusFilter = null; loadOrders()">
+        <div class="stat" [class.active]="statusFilter() === null" (click)="statusFilter.set(null)">
           <span class="stat-value">{{ stats().total }}</span>
           <span class="stat-label">Toplam</span>
         </div>
-        <div class="stat" [class.active]="statusFilter === 'PENDING_CONFIRMATION'" (click)="statusFilter = 'PENDING_CONFIRMATION'; loadOrders()">
+        <div class="stat" [class.active]="statusFilter() === 'PENDING_CONFIRMATION'" [class.pulse]="hasNewPending()" (click)="statusFilter.set('PENDING_CONFIRMATION')">
           <span class="stat-value warning">{{ stats().pending }}</span>
           <span class="stat-label">Bekleyen</span>
         </div>
-        <div class="stat" [class.active]="statusFilter === 'CONFIRMED'" (click)="statusFilter = 'CONFIRMED'; loadOrders()">
+        <div class="stat" [class.active]="statusFilter() === 'CONFIRMED'" (click)="statusFilter.set('CONFIRMED')">
           <span class="stat-value info">{{ stats().confirmed }}</span>
           <span class="stat-label">Onaylı</span>
         </div>
-        <div class="stat" [class.active]="statusFilter === 'PREPARING'" (click)="statusFilter = 'PREPARING'; loadOrders()">
+        <div class="stat" [class.active]="statusFilter() === 'PREPARING'" (click)="statusFilter.set('PREPARING')">
           <span class="stat-value">{{ stats().preparing }}</span>
           <span class="stat-label">Hazırlanıyor</span>
         </div>
-        <div class="stat" [class.active]="statusFilter === 'READY'" (click)="statusFilter = 'READY'; loadOrders()">
+        <div class="stat" [class.active]="statusFilter() === 'READY'" (click)="statusFilter.set('READY')">
           <span class="stat-value success">{{ stats().ready }}</span>
           <span class="stat-label">Hazır</span>
         </div>
@@ -240,6 +244,30 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
 
     .refresh-btn:hover {
       background: var(--accent-primary-dark, #5558e3);
+    }
+
+    .sound-toggle-btn {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color, #333);
+      background: var(--bg-secondary, #1a1a2e);
+      color: var(--text-primary, #fff);
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .sound-toggle-btn:hover {
+      border-color: var(--accent-primary, #6366f1);
+    }
+
+    .stat.pulse {
+      animation: pulse-glow 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { background: transparent; }
+      50% { background: rgba(245, 158, 11, 0.15); }
     }
 
     .stats-bar {
@@ -627,12 +655,21 @@ import { OrderService, OrderDto, OrderStatus } from '../../services/order.servic
     }
   `]
 })
-export class OrdersComponent implements OnInit {
+export class OrdersComponent implements OnInit, OnDestroy {
   private orderService = inject(OrderService);
+  notificationService = inject(NotificationService);
 
-  orders = signal<OrderDto[]>([]);
+  private allOrders = signal<OrderDto[]>([]);
   loading = signal(false);
-  statusFilter: OrderStatus | null = null;
+  statusFilter = signal<OrderStatus | null>(null);
+  hasNewPending = signal(false);
+
+  orders = computed(() => {
+    const all = this.allOrders();
+    const filter = this.statusFilter();
+    if (!filter) return all;
+    return all.filter(o => o.status === filter);
+  });
 
   // Reject modal state
   showRejectModal = signal(false);
@@ -640,7 +677,7 @@ export class OrdersComponent implements OnInit {
   rejectReason = '';
 
   stats = computed(() => {
-    const all = this.orders();
+    const all = this.allOrders();
     return {
       total: all.length,
       pending: all.filter(o => o.status === 'PENDING_CONFIRMATION').length,
@@ -650,18 +687,69 @@ export class OrdersComponent implements OnInit {
     };
   });
 
+  // Polling
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private knownOrderIds = new Set<string>();
+
   ngOnInit(): void {
     this.loadOrders();
+    this.startPolling();
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
+  }
+
+  private startPolling(): void {
+    this.pollInterval = setInterval(() => {
+      this.pollOrders();
+    }, 5000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
+  private pollOrders(): void {
+    this.orderService.getOrders().subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          const fetched = res.data.orders;
+          this.detectNewOrders(fetched);
+          this.allOrders.set(fetched);
+        }
+      },
+    });
+  }
+
+  private detectNewOrders(fetched: OrderDto[]): void {
+    if (this.knownOrderIds.size === 0) return;
+
+    const newPending = fetched.filter(
+      o => o.status === 'PENDING_CONFIRMATION' && !this.knownOrderIds.has(o.id)
+    );
+
+    if (newPending.length > 0) {
+      this.hasNewPending.set(true);
+      this.notificationService.playOrderNotification();
+      setTimeout(() => this.hasNewPending.set(false), 5000);
+    }
+
+    this.knownOrderIds = new Set(fetched.map(o => o.id));
   }
 
   loadOrders(): void {
     this.loading.set(true);
-    const params = this.statusFilter ? { status: this.statusFilter } : undefined;
-    
-    this.orderService.getOrders(params).subscribe({
+
+    this.orderService.getOrders().subscribe({
       next: (res) => {
         if (res.success && res.data) {
-          this.orders.set(res.data.orders);
+          const fetched = res.data.orders;
+          this.allOrders.set(fetched);
+          this.knownOrderIds = new Set(fetched.map(o => o.id));
         }
         this.loading.set(false);
       },

@@ -9,6 +9,7 @@ export interface StoreDto {
   lng: number;
   phone: string | null;
   isActive: boolean;
+  isOpen: boolean;
   createdAt: string;
   updatedAt: string;
   deliveryRules?: DeliveryRuleDto[];
@@ -30,6 +31,7 @@ export interface UpdateStoreDto {
   lng?: number;
   phone?: string;
   isActive?: boolean;
+  isOpen?: boolean;
 }
 
 // ==================== DELIVERY RULE ====================

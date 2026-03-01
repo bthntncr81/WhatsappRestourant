@@ -286,7 +286,8 @@ export class InboxService {
   async updateConversationGeoCheck(
     tenantId: string,
     conversationId: string,
-    geoCheck: GeoCheckResult
+    geoCheck: GeoCheckResult,
+    customerLocation?: { lat: number; lng: number },
   ): Promise<void> {
     await prisma.conversation.update({
       where: { id: conversationId, tenantId },
@@ -294,6 +295,10 @@ export class InboxService {
         isWithinService: geoCheck.isWithinServiceArea,
         nearestStoreId: geoCheck.nearestStore?.id || null,
         geoCheckJson: geoCheck as unknown as Prisma.InputJsonValue,
+        ...(customerLocation ? {
+          customerLat: customerLocation.lat,
+          customerLng: customerLocation.lng,
+        } : {}),
       },
     });
   }

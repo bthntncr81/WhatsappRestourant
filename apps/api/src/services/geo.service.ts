@@ -47,7 +47,7 @@ export class GeoService {
   ): Promise<GeoCheckResult> {
     // Get all active stores with their delivery rules
     const stores = await prisma.store.findMany({
-      where: { tenantId, isActive: true },
+      where: { tenantId, isActive: true, isOpen: true },
       include: {
         deliveryRules: {
           where: { isActive: true },
@@ -190,6 +190,7 @@ export class GeoService {
       lng: store.lng,
       phone: store.phone,
       isActive: store.isActive,
+      isOpen: store.isOpen ?? true,
       createdAt: store.createdAt.toISOString(),
       updatedAt: store.updatedAt.toISOString(),
     };
