@@ -221,7 +221,6 @@ export class ConversationFlowService {
           const transcribed = await whisperService.transcribeVoiceMessage(tenantId, voiceId);
           if (transcribed) {
             // Re-process as text message with transcribed content
-            await this.sendText(ctx, `🎤 "${transcribed}"`);
             const fakeTextMessage = { ...message, kind: 'TEXT' as const, text: transcribed };
             const fakeCtx = { ...ctx, message: fakeTextMessage };
             return this.handleIdle(fakeCtx);
@@ -424,7 +423,6 @@ export class ConversationFlowService {
         if (voiceId && whisperService.isAvailable()) {
           const transcribed = await whisperService.transcribeVoiceMessage(tenantId, voiceId);
           if (transcribed) {
-            await this.sendText(ctx, `🎤 "${transcribed}"`);
             const fakeTextMessage = { ...message, kind: 'TEXT' as const, text: transcribed };
             const fakeCtx = { ...ctx, message: fakeTextMessage };
             return this.handleOrderCollecting(fakeCtx);
