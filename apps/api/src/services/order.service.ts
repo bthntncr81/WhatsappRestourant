@@ -13,6 +13,7 @@ import { chatbotService } from './chatbot.service';
 import { whatsappService } from './whatsapp.service';
 import { TEMPLATES } from './message-templates';
 import { orderPaymentService } from './order-payment.service';
+import { inboxService } from './inbox.service';
 
 const logger = createLogger();
 
@@ -266,6 +267,11 @@ export class OrderService {
       if (whatsappMessage) {
         try {
           await whatsappService.sendText(tenantId, order.conversationId, whatsappMessage);
+
+          // Send satisfaction survey after delivery
+          if (status === 'DELIVERED') {
+            await this.sendSurvey(tenantId, order.conversationId, orderId, order.orderNumber);
+          }
         } catch (error) {
           logger.error({ error, tenantId, orderId, status }, 'Failed to send status update WhatsApp message');
         }
@@ -545,6 +551,40 @@ export class OrderService {
       updatedAt: order.updatedAt.toISOString(),
       confirmedAt: order.confirmedAt?.toISOString() || null,
     };
+  }
+
+  /**
+   * Send satisfaction survey after delivery
+   */
+  private async sendSurvey(
+    tenantId: string,
+    conversationId: string,
+    orderId: string,
+    orderNumber: number,
+  ): Promise<void> {
+    try {
+      // Small delay so delivered message arrives first
+      await new Promise((r) => setTimeout(r, 2000));
+
+      // Store survey context in flowMetadata
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          flowSubState: 'SURVEY_RATING',
+          flowMetadata: JSON.stringify({ surveyOrderId: orderId, surveyOrderNumber: orderNumber }),
+        },
+      });
+
+      // Send survey buttons
+      await whatsappService.sendInteractiveButtons(
+        tenantId,
+        conversationId,
+        TEMPLATES.surveyAsk(orderNumber),
+        TEMPLATES.surveyButtons.buttons,
+      );
+    } catch (error) {
+      logger.warn({ error, tenantId, orderId }, 'Failed to send satisfaction survey');
+    }
   }
 }
 

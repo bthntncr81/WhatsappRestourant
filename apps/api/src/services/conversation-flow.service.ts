@@ -8,6 +8,7 @@ import { orderPaymentService } from './order-payment.service';
 import { savedAddressService } from './saved-address.service';
 import { storeService } from './store.service';
 import { upsellService } from './upsell.service';
+import { surveyService } from './survey.service';
 import { TEMPLATES } from './message-templates';
 import { createLogger } from '../logger';
 import {
@@ -759,10 +760,125 @@ export class ConversationFlowService {
    * ORDER_CONFIRMED: Order done. New message starts fresh.
    */
   private async handleOrderConfirmed(ctx: FlowContext): Promise<ConversationPhase> {
-    // Reset to IDLE and process the incoming message as a new order
-    await inboxService.updateConversationPhase(ctx.tenantId, ctx.conversationId, 'IDLE', null);
+    const { tenantId, conversationId, conversation, message, payload } = ctx;
+    const subState = conversation.flowSubState;
+
+    // Handle survey sub-states
+    if (subState === 'SURVEY_RATING') {
+      return this.handleSurveyRating(ctx);
+    }
+    if (subState === 'SURVEY_COMMENT') {
+      return this.handleSurveyComment(ctx);
+    }
+
+    // No survey active — reset to IDLE and process as new order
+    await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
     ctx.conversation.phase = 'IDLE';
     return this.handleIdle(ctx);
+  }
+
+  /**
+   * Handle survey rating response (1-5 stars)
+   */
+  private async handleSurveyRating(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation, payload } = ctx;
+    const text = normalizeTr(ctx.message.text || '');
+    const buttonId = payload.interactive?.buttonReply?.id;
+
+    // Parse rating from button or text
+    let rating: number | null = null;
+
+    if (buttonId?.startsWith('survey_')) {
+      rating = parseInt(buttonId.replace('survey_', ''), 10);
+    } else if (text) {
+      // Try to parse number from text (1-5)
+      const num = parseInt(text, 10);
+      if (num >= 1 && num <= 5) {
+        rating = num;
+      }
+    }
+
+    if (!rating) {
+      // Unrecognized — remind
+      await this.sendText(ctx, 'Lutfen 1-5 arasi bir puan verin veya butonlardan secim yapin.');
+      return 'ORDER_CONFIRMED';
+    }
+
+    // Parse survey metadata
+    let surveyMeta: any = {};
+    try {
+      surveyMeta = JSON.parse(conversation.flowMetadata || '{}');
+    } catch { /* ignore */ }
+
+    // Create survey record
+    const survey = await surveyService.createSurvey(
+      tenantId,
+      conversationId,
+      surveyMeta.surveyOrderId || '',
+      conversation.customerPhone,
+      conversation.customerName,
+      rating,
+    );
+
+    if (rating <= 2) {
+      // Bad rating — ask for comment
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          flowSubState: 'SURVEY_COMMENT',
+          flowMetadata: JSON.stringify({ ...surveyMeta, surveyId: survey.id }),
+        },
+      });
+      await this.sendText(ctx, TEMPLATES.surveyAskComment);
+      return 'ORDER_CONFIRMED';
+    }
+
+    // Good/neutral rating — thank and reset
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { flowSubState: null, flowMetadata: null },
+    });
+
+    if (rating >= 4) {
+      await this.sendText(ctx, TEMPLATES.surveyThanksGood);
+    } else {
+      await this.sendText(ctx, TEMPLATES.surveyThanksNeutral);
+    }
+
+    return 'ORDER_CONFIRMED';
+  }
+
+  /**
+   * Handle survey comment (free text after bad rating)
+   */
+  private async handleSurveyComment(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, conversation } = ctx;
+    const text = (ctx.message.text || '').trim();
+
+    if (!text) {
+      await this.sendText(ctx, 'Lutfen yazili mesaj gonderin.');
+      return 'ORDER_CONFIRMED';
+    }
+
+    // Parse survey metadata
+    let surveyMeta: any = {};
+    try {
+      surveyMeta = JSON.parse(conversation.flowMetadata || '{}');
+    } catch { /* ignore */ }
+
+    // Save comment
+    if (surveyMeta.surveyId) {
+      await surveyService.addComment(surveyMeta.surveyId, text);
+    }
+
+    // Clear sub-state and thank
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { flowSubState: null, flowMetadata: null },
+    });
+
+    await this.sendText(ctx, TEMPLATES.surveyThanksBad);
+    return 'ORDER_CONFIRMED';
   }
 
   /**

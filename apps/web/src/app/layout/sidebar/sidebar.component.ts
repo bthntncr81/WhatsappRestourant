@@ -252,6 +252,7 @@ export class SidebarComponent {
     { label: 'Menü', icon: '🍽', path: '/menu' },
     { label: 'Şubeler', icon: '🏪', path: '/stores' },
     { label: 'Yazdırma', icon: '🖨️', path: '/print-jobs' },
+    { label: 'Anketler', icon: '📊', path: '/surveys' },
     { label: 'Ayarlar', icon: '⚙', path: '/settings' },
   ];
 

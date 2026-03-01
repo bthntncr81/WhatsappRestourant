@@ -45,6 +45,9 @@ model Tenant {
   crossSellRules CrossSellRule[]
   upsellEvents   UpsellEvent[]
 
+  // Survey relations
+  satisfactionSurveys SatisfactionSurvey[]
+
   // WhatsApp config
   whatsappConfig      WhatsAppConfig?
 
@@ -274,6 +277,7 @@ model Conversation {
   participants   ConversationParticipant[]
   orderPayments  OrderPayment[]
   upsellEvents   UpsellEvent[]
+  surveys        SatisfactionSurvey[]
 
   @@unique([tenantId, customerPhone])
   @@index([tenantId, status])
@@ -835,4 +839,27 @@ model WhatsAppConfig {
   tenant                Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_configs")
+}
+
+model SatisfactionSurvey {
+  id              String   @id @default(cuid())
+  tenantId        String
+  conversationId  String
+  orderId         String
+  customerPhone   String
+  customerName    String?
+  rating          Int      // 1-5
+  comment         String?  // Customer's free text comment (if rating <= 2)
+  isComplaint     Boolean  @default(false) // true if rating <= 2
+  resolvedAt      DateTime?
+  resolvedBy      String?  // userId who resolved
+  resolutionNote  String?
+  createdAt       DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isComplaint, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("satisfaction_surveys")
 }

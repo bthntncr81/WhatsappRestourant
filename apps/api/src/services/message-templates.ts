@@ -294,4 +294,33 @@ export const TEMPLATES = {
       ],
     };
   },
+
+  // ==================== SATISFACTION SURVEY ====================
+  surveyAsk(orderNumber: number): string {
+    return (
+      `Siparis #${orderNumber} teslim edildi!\n\n` +
+      `Hizmetimizi nasil buldunuz? 🤔\n` +
+      `Lutfen 1-5 arasi puan verin:`
+    );
+  },
+
+  surveyButtons: {
+    buttons: [
+      { id: 'survey_5', title: '⭐⭐⭐⭐⭐' },
+      { id: 'survey_3', title: '⭐⭐⭐' },
+      { id: 'survey_1', title: '⭐' },
+    ],
+  },
+
+  surveyAskComment:
+    'Geri bildiriminiz icin tesekkurler. Bizi daha iyi yapabilmemiz icin neler yasadiginizi kisa bir mesajla yazar misiniz?',
+
+  surveyThanksGood:
+    'Cok tesekkur ederiz! 🙏 Sizi memnun ettigimize sevindik. Yine bekleriz! 😊',
+
+  surveyThanksBad:
+    'Geri bildiriminiz icin tesekkurler. 🙏 Sorunuzu en kisa surede degerlendirecegiz. Ozur dileriz!',
+
+  surveyThanksNeutral:
+    'Puan icin tesekkurler! 🙏 Daha iyisini yapmak icin calisacagiz.',
 };
