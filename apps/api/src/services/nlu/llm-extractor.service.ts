@@ -328,7 +328,7 @@ export class LlmOrderExtractorService {
       })
       .join('\n');
 
-    let msg = `Siparisiniz:\n\n${itemLines}\n\nToplam: ${totalPrice.toFixed(2)} TL`;
+    let msg = `Siparisiniz:\n\n${itemLines}\n\nAra Toplam: ${totalPrice.toFixed(2)} TL`;
     if (orderNotes) {
       msg += `\n\nNot: ${orderNotes}`;
     }

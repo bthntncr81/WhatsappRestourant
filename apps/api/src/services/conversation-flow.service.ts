@@ -36,7 +36,7 @@ function normalizeTr(text: string): string {
 }
 
 // Keywords for user intent detection
-const CONFIRM_KEYWORDS = ['evet', 'onayla', 'tamam', 'olsun', 'tamamla', 'onayliyorum'];
+const CONFIRM_KEYWORDS = ['evet', 'onayla', 'tamam', 'olsun', 'tamamla', 'onayliyorum', 'harika', 'super', 'guzel', 'iyi', 'mükemmel', 'mukemmel', 'dogru', 'aynen', 'kesinlikle'];
 const CANCEL_KEYWORDS = ['iptal', 'vazgec', 'istemiyorum', 'sil', 'temizle'];
 const EDIT_KEYWORDS = ['hayir', 'degistir', 'degis', 'ekle', 'cikar'];
 const MENU_KEYWORDS = ['menu', 'men\u00fc', 'neler var', 'fiyat', 'liste'];
@@ -312,16 +312,16 @@ export class ConversationFlowService {
     }
 
     if (result.draftOrderId) {
-      // Items found, draft created - show summary and move to ORDER_COLLECTING
+      // Items found, draft created - show summary with buttons and move to ORDER_REVIEW
       await inboxService.updateConversationPhase(
-        tenantId, conversationId, 'ORDER_COLLECTING', result.draftOrderId,
+        tenantId, conversationId, 'ORDER_REVIEW', result.draftOrderId,
       );
       if (result.confirmationMessage) {
-        await this.sendText(ctx, result.confirmationMessage);
+        await this.sendOrderConfirmButtons(ctx, result.confirmationMessage);
       }
       // Adim 9: Erken minimum sepet uyarisi
       await this.checkMinBasketWarning(ctx, result.draftOrderId);
-      return 'ORDER_COLLECTING';
+      return 'ORDER_REVIEW';
     }
 
     if (result.clarificationQuestion) {
