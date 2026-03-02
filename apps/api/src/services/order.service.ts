@@ -427,7 +427,7 @@ export class OrderService {
       where: {
         tenantId,
         conversationId,
-        status: { in: ['CONFIRMED', 'PREPARING', 'READY'] },
+        status: { in: ['PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY'] },
         parentOrderId: null,
       },
       include: { items: true, store: { select: { id: true, name: true } } },
@@ -458,7 +458,7 @@ export class OrderService {
       throw new AppError(404, 'ORDER_NOT_FOUND', 'Order not found');
     }
 
-    if (!['CONFIRMED', 'PREPARING', 'READY'].includes(order.status)) {
+    if (!['PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY'].includes(order.status)) {
       throw new AppError(400, 'INVALID_STATUS', `Cannot add items to order with status ${order.status}`);
     }
 

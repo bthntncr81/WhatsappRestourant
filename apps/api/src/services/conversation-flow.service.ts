@@ -284,7 +284,7 @@ export class ConversationFlowService {
       tenantId, conversationId
     );
 
-    if (activeParentOrder && ['CONFIRMED', 'PREPARING', 'READY'].includes(activeParentOrder.status)) {
+    if (activeParentOrder && ['PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY'].includes(activeParentOrder.status)) {
       // Seamless addition: run NLU directly, add items to existing order
       const addResult = await nluOrchestratorService.processMessage(
         tenantId, conversationId, message.id, text,
