@@ -47,6 +47,14 @@ const THANKS_KEYWORDS = ['tesekkur', 'te\u015fekk\u00fcr', 'sagol', 'sa\u011fol'
 const HELP_KEYWORDS = ['yardim', 'yard\u0131m', 'nasil', 'nas\u0131l', 'ne yapabilirim'];
 const REORDER_KEYWORDS = ['tekrar', 'favorilerim', 'favori', 'onceki', 'gene ayni', 'her zamanki'];
 const BROADCAST_OPT_OUT_KEYWORDS = ['kampanya istemiyorum', 'bildirim kapat'];
+const PAYMENT_CHANGE_KEYWORDS = [
+  'online ode', 'online öde',
+  'odeme linki', 'ödeme linki',
+  'online odeme', 'online ödeme',
+  'kart ile ode', 'kart ile öde',
+  'kartla ode', 'kartla öde',
+  'link gonder', 'link gönder',
+];
 
 // Payment link expiry (30 minutes)
 const PAYMENT_LINK_EXPIRY_MS = 30 * 60 * 1000;
@@ -185,7 +193,32 @@ export class ConversationFlowService {
     if (!conversation) return;
 
     if (success) {
-      // Move to PENDING_CONFIRMATION (waiting for restaurant approval)
+      // Check if order is already confirmed (payment change scenario)
+      const order = await prisma.order.findFirst({
+        where: { id: orderId, tenantId },
+        select: { status: true, orderNumber: true },
+      });
+
+      if (order && order.status !== 'DRAFT') {
+        // Payment change: order already confirmed, just update payment method
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { paymentMethod: 'CREDIT_CARD' },
+        });
+        await whatsappService.sendText(
+          tenantId,
+          conversationId,
+          TEMPLATES.paymentChangeSuccess(order.orderNumber || 0),
+        );
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: null },
+        });
+        await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
+        return;
+      }
+
+      // Normal flow: DRAFT → PENDING_CONFIRMATION
       const pendingOrder = await orderService.setPendingConfirmation(tenantId, orderId, {
         paymentMethod: 'CREDIT_CARD',
       });
@@ -198,6 +231,24 @@ export class ConversationFlowService {
 
       await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
     } else {
+      // Check if this was a payment change attempt
+      const order = await prisma.order.findFirst({
+        where: { id: orderId, tenantId },
+        select: { status: true },
+      });
+      if (order && order.status !== 'DRAFT') {
+        // Payment change failed - keep existing payment method
+        await whatsappService.sendText(
+          tenantId,
+          conversationId,
+          'Online odeme basarisiz oldu. Mevcut odeme yonteminiz gecerli olmaya devam edecektir.',
+        );
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: null },
+        });
+        return;
+      }
       await whatsappService.sendText(tenantId, conversationId, TEMPLATES.paymentFailed);
       // Stay in PAYMENT_PENDING - user can retry or switch to cash
     }
@@ -285,6 +336,12 @@ export class ConversationFlowService {
     );
 
     if (activeParentOrder && ['PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY'].includes(activeParentOrder.status)) {
+      // Payment change request: customer wants to switch to online payment
+      const isPaymentChange = PAYMENT_CHANGE_KEYWORDS.some(k => text.includes(k));
+      if (isPaymentChange) {
+        return this.handlePaymentChangeRequest(ctx, activeParentOrder);
+      }
+
       // Seamless addition: run NLU directly, add items to existing order
       const addResult = await nluOrchestratorService.processMessage(
         tenantId, conversationId, message.id, text,
@@ -1014,6 +1071,34 @@ export class ConversationFlowService {
     }
     if (subState === 'BROADCAST_OPT_IN_ASKED') {
       return this.handleBroadcastOptInResponse(ctx);
+    }
+
+    // Payment change pending: customer sent a payment link, waiting for iyzico callback
+    if (subState === 'PAYMENT_CHANGE_PENDING') {
+      const text = normalizeTr(message.text || '');
+      // Cancel payment change — revert to cash
+      if (this.matchesKeyword(text, CANCEL_KEYWORDS) || this.matchesKeyword(text, CASH_KEYWORDS)) {
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: null },
+        });
+        await this.sendText(ctx, 'Online odeme iptal edildi. Mevcut odeme yonteminiz gecerlidir. ✅');
+        return 'ORDER_CONFIRMED';
+      }
+      // Remind about payment link
+      const orderId = conversation.activeOrderId;
+      if (orderId) {
+        const pendingPayment = await orderPaymentService.getPendingPayment(tenantId, orderId);
+        if (pendingPayment?.checkoutFormUrl) {
+          await this.sendText(ctx, TEMPLATES.reminderPayment(pendingPayment.checkoutFormUrl));
+          return 'ORDER_CONFIRMED';
+        }
+      }
+      // No pending payment found — clear sub-state
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { flowSubState: null },
+      });
     }
 
     // No survey active — reset to IDLE and process as new order
@@ -1892,6 +1977,60 @@ export class ConversationFlowService {
     await inboxService.updateConversationPhase(
       tenantId, conversationId, 'ORDER_CONFIRMED', null,
     );
+    return 'ORDER_CONFIRMED';
+  }
+
+  /**
+   * Payment change: customer wants to switch from cash/card-at-door to online payment
+   */
+  private async handlePaymentChangeRequest(
+    ctx: FlowContext,
+    activeOrder: any,
+  ): Promise<ConversationPhase> {
+    const { tenantId, conversationId } = ctx;
+
+    // Already paid online — nothing to change
+    const wasOnline = await this.wasOriginalPaymentOnline(tenantId, activeOrder.id);
+    if (wasOnline) {
+      await this.sendText(ctx, 'Siparisinia zaten online odeme ile onaylandi. ✅');
+      return 'ORDER_CONFIRMED';
+    }
+
+    try {
+      const payment = await orderPaymentService.initiateCardPayment(
+        tenantId,
+        activeOrder.id,
+        conversationId,
+        ctx.conversation.customerPhone,
+      );
+
+      if (payment.checkoutFormUrl) {
+        const total = Number(activeOrder.totalPrice);
+        await this.sendText(
+          ctx,
+          TEMPLATES.paymentChangeLinkSent(
+            activeOrder.orderNumber || 0,
+            total,
+            payment.checkoutFormUrl,
+          ),
+        );
+
+        // Mark sub-state so handleOrderConfirmed knows we're waiting for payment
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: 'PAYMENT_CHANGE_PENDING' },
+        });
+        await inboxService.updateConversationPhase(
+          tenantId, conversationId, 'ORDER_CONFIRMED', activeOrder.id,
+        );
+        return 'ORDER_CONFIRMED';
+      }
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.warn({ err: errMsg, tenantId, orderId: activeOrder.id }, 'Payment change link creation failed');
+    }
+
+    await this.sendText(ctx, 'Online odeme linki olusturulamadi. Mevcut odeme yonteminiz gecerli olmaya devam edecektir.');
     return 'ORDER_CONFIRMED';
   }
 

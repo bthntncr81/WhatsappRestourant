@@ -70,6 +70,26 @@ export const TEMPLATES = {
     );
   },
 
+  // ==================== PAYMENT CHANGE ====================
+
+  paymentChangeLinkSent(orderNumber: number, total: number, url: string): string {
+    return (
+      `💳 Siparis #${orderNumber} icin online odeme linki:\n\n` +
+      `${url}\n\n` +
+      `Toplam: ${total.toFixed(2)} TL\n` +
+      `⏰ Link 30 dakika gecerlidir.\n` +
+      `Vazgecmek icin *"iptal"* yazabilirsiniz.`
+    );
+  },
+
+  paymentChangeSuccess(orderNumber: number): string {
+    return (
+      `✅ *Online odemeniz basariyla alindi!*\n\n` +
+      `📦 Siparis No: #${orderNumber}\n` +
+      `💳 Odeme yontemi guncellendi: Online kredi karti`
+    );
+  },
+
   // ==================== LOCATION ====================
   locationRequest:
     '📍 Teslimat icin konumunuzu gonderin.\nAsagidaki butona tiklayarak konum paylasabilirsiniz.',
