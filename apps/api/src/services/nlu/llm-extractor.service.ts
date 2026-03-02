@@ -48,6 +48,15 @@ GENEL SIPARIS NOTLARI (orderNotes):
 - Bu notlar belirli bir urune ait DEGiL, tum siparise ait
 - Urun-spesifik notlar (orn: "sogansiz") → item.notes alanina yaz (orderNotes'a DEGIL)
 
+YANINDA / EK ISTEKLER:
+- "yaninda", "yaninda X gonderin", "bir de X olsun", "X da ekleyin", "yaninda X lutfen" gibi ek istek ifadeleri:
+  Eger istenen urun menu adaylarinda varsa → action: "add" ile yeni item ekle
+  Eger istenen urun menu adaylarinda yoksa (ketcap, tursu, mayonez, ekmek, pecete, tabak, cakmak gibi yan istekler):
+    → orderNotes alanina yaz (orn: "Yaninda ketcap ve tursu isteniyor")
+    → Mevcut itemler icin action: "keep" (degistirme)
+    → confidence: 0.85 (istek anlasildi, menude olmayan yan istek)
+    → clarificationQuestion: null (soru sormaya gerek yok, istek orderNotes olarak kaydedildi)
+
 DEGISIKLIK KOMUTLARI (action alani):
 - "ekle", "bir de ... istiyorum", "... da ekle" → action: "add"
 - "cikar", "kaldir", "istemiyorum", "iptal" → action: "remove"

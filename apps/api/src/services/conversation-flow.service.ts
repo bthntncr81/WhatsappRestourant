@@ -557,20 +557,33 @@ export class ConversationFlowService {
       return 'ORDER_COLLECTING';
     }
 
-    // Default: treat as new product — pass to NLU to add item
+    // Default: treat as new product or note — pass to NLU
     const result = await nluOrchestratorService.processMessage(
       tenantId, conversationId, message.id, text,
     );
-    if (result.confirmationMessage) {
-      await this.sendText(ctx, result.confirmationMessage);
+
+    if (result.draftOrderId) {
+      await inboxService.updateConversationPhase(
+        tenantId, conversationId, 'ORDER_REVIEW', result.draftOrderId,
+      );
     }
-    const order = await this.getActiveOrder(ctx);
-    if (order && order.items.length > 0) {
-      const summary = this.buildOrderSummary(order);
-      await this.sendOrderConfirmButtons(ctx, summary);
+
+    if (result.confirmationMessage) {
+      // Send updated order summary with confirm/cancel buttons
+      await this.sendOrderConfirmButtons(ctx, result.confirmationMessage);
+      return 'ORDER_REVIEW';
+    } else if (result.clarificationQuestion) {
+      // Send clarification, then re-show current order with buttons
+      await this.sendText(ctx, result.clarificationQuestion);
+      const order = await this.getActiveOrder(ctx);
+      if (order && order.items.length > 0) {
+        const summary = this.buildOrderSummary(order);
+        await this.sendOrderConfirmButtons(ctx, summary);
+      }
       return 'ORDER_REVIEW';
     }
-    // NLU couldn't parse it — re-send confirm buttons
+
+    // NLU couldn't parse — re-send existing order
     const existingOrder = await this.getActiveOrder(ctx);
     if (existingOrder && existingOrder.items.length > 0) {
       const summary = this.buildOrderSummary(existingOrder);
