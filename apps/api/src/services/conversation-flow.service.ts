@@ -877,6 +877,15 @@ export class ConversationFlowService {
       return 'LOCATION_REQUEST';
     }
 
+    // Mid-flow addition: customer wants to add more items while sending location
+    if (text) {
+      const added = await this.tryMidFlowAddition(ctx, text);
+      if (added) {
+        await this.sendText(ctx, TEMPLATES.reminderSendLocation);
+        return 'LOCATION_REQUEST';
+      }
+    }
+
     // Text message during LOCATION_REQUEST — give contextual help
     // Check if previous geo check was out of service area
     const prevGeoCheck = await inboxService.getConversationGeoCheck(tenantId, conversationId);
@@ -922,6 +931,15 @@ export class ConversationFlowService {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
+    }
+
+    // Mid-flow addition: customer wants to add more items before paying
+    if (text) {
+      const added = await this.tryMidFlowAddition(ctx, text);
+      if (added) {
+        await this.sendPaymentButtons(ctx);
+        return 'PAYMENT_METHOD_SELECTION';
+      }
     }
 
     // Re-send payment buttons
@@ -1442,6 +1460,14 @@ export class ConversationFlowService {
       return 'LOCATION_REQUEST';
     }
 
+    // Mid-flow addition: customer wants to add more items while picking address
+    if (message.kind === 'TEXT' && text) {
+      const added = await this.tryMidFlowAddition(ctx, text);
+      if (added) {
+        return this.proceedToAddressFlow(ctx);
+      }
+    }
+
     // Unrecognized — resend list
     const savedAddresses = await savedAddressService.getByCustomerPhone(tenantId, conversation.customerPhone);
     const rows = savedAddresses.map((addr) => ({
@@ -1874,6 +1900,38 @@ export class ConversationFlowService {
       where: { tenantId, orderId, method: 'CREDIT_CARD', status: 'SUCCESS' },
     });
     return !!payment;
+  }
+
+  /**
+   * Mid-flow addition: When customer sends an item request during ADDRESS_SELECTION,
+   * LOCATION_REQUEST, or PAYMENT_METHOD_SELECTION, add items to draft and re-show flow.
+   * Returns true if addition was handled, false if text was not a food item.
+   */
+  private async tryMidFlowAddition(ctx: FlowContext, text: string): Promise<boolean> {
+    const { tenantId, conversationId, message } = ctx;
+
+    if (!text || !message.id) return false;
+
+    const result = await nluOrchestratorService.processMessage(
+      tenantId, conversationId, message.id, text,
+    );
+
+    if (result.draftOrderId && result.itemsExtracted) {
+      // Items were added to the existing draft order
+      const order = await this.getActiveOrder(ctx);
+      if (order && order.items.length > 0) {
+        const summary = this.buildOrderSummary(order);
+        await this.sendText(ctx, `Eklendi! Guncel siparisiniz:\n\n${summary}`);
+      }
+      return true;
+    }
+
+    if (result.clarificationQuestion) {
+      await this.sendText(ctx, result.clarificationQuestion);
+      return true;
+    }
+
+    return false;
   }
 
   private async cancelActiveOrder(ctx: FlowContext): Promise<void> {
