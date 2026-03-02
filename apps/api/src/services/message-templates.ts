@@ -53,6 +53,23 @@ export const TEMPLATES = {
     return `✅ ${qty}x ${itemName} sepete eklendi.`;
   },
 
+  seamlessAdditionConfirmed(orderNumber: number, addedItems: string, additionTotal: number, newTotal: number): string {
+    return (
+      `➕ *${addedItems}* siparisinize (#${orderNumber}) eklendi!\n\n` +
+      `Ek tutar: ${additionTotal.toFixed(2)} TL\n` +
+      `Yeni toplam: ${newTotal.toFixed(2)} TL`
+    );
+  },
+
+  seamlessAdditionPaymentNeeded(orderNumber: number, addedItems: string, additionTotal: number, paymentUrl: string, newTotal: number): string {
+    return (
+      `➕ *${addedItems}* siparisinize (#${orderNumber}) eklendi!\n\n` +
+      `Ek tutar: ${additionTotal.toFixed(2)} TL\n` +
+      `💳 Ek odeme icin: ${paymentUrl}\n\n` +
+      `Yeni toplam: ${newTotal.toFixed(2)} TL`
+    );
+  },
+
   // ==================== LOCATION ====================
   locationRequest:
     '📍 Teslimat icin konumunuzu gonderin.\nAsagidaki butona tiklayarak konum paylasabilirsiniz.',

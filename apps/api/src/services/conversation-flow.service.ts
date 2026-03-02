@@ -279,26 +279,46 @@ export class ConversationFlowService {
       return this.handleReorderRequest(ctx);
     }
 
-    // Check for active (non-draft) orders before NLU
+    // Check for active (non-draft) orders — seamless addition
     const activeParentOrder = await orderService.findActiveOrderForConversation(
       tenantId, conversationId
     );
 
     if (activeParentOrder && ['CONFIRMED', 'PREPARING', 'READY'].includes(activeParentOrder.status)) {
-      // Ask if they want to add to existing or start new
-      await whatsappService.sendInteractiveButtons(
-        tenantId,
-        conversationId,
-        TEMPLATES.additionPrompt(activeParentOrder.orderNumber || 0),
-        [
-          { id: 'add_to_order', title: 'Ekleme Yap' },
-          { id: 'new_order', title: 'Yeni Siparis' },
-        ],
+      // Seamless addition: run NLU directly, add items to existing order
+      const addResult = await nluOrchestratorService.processMessage(
+        tenantId, conversationId, message.id, text,
       );
-      await inboxService.updateConversationPhase(
-        tenantId, conversationId, 'ADDITION_PROMPT', activeParentOrder.id
-      );
-      return 'ADDITION_PROMPT';
+
+      if (addResult.needsAgentHandoff) {
+        await this.sendText(ctx, TEMPLATES.agentHandoff);
+        return 'AGENT_HANDOFF';
+      }
+
+      if (addResult.draftOrderId && addResult.itemsExtracted) {
+        return this.handleSeamlessAddition(ctx, activeParentOrder, addResult.draftOrderId);
+      }
+
+      if (addResult.clarificationQuestion) {
+        await inboxService.updateConversationPhase(
+          tenantId, conversationId, 'ORDER_COLLECTING', null,
+        );
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: {
+            flowSubState: 'SEAMLESS_ADDITION',
+            flowMetadata: JSON.stringify({ parentOrderId: activeParentOrder.id }),
+          },
+        });
+        await this.sendText(ctx, addResult.clarificationQuestion);
+        return 'ORDER_COLLECTING';
+      }
+
+      if (!addResult.itemsExtracted) {
+        // Not a food item — greeting or general message
+        await this.sendText(ctx, TEMPLATES.greeting);
+        return 'IDLE';
+      }
     }
 
     // Try NLU extraction
@@ -337,67 +357,12 @@ export class ConversationFlowService {
     return 'IDLE';
   }
 
-  // ==================== ADDITION PROMPT ====================
+  // ==================== ADDITION PROMPT (legacy fallback) ====================
 
   private async handleAdditionPrompt(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, conversationId, message, payload, conversation } = ctx;
-    const text = normalizeTr(message.text || '');
-    const buttonId = payload.interactive?.buttonReply?.id;
-
-    // Cancel
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
-      await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
-      return 'IDLE';
-    }
-
-    // "Ekleme Yap" button or keyword
-    const ADDITION_KEYWORDS = ['ekleme', 'ekle', 'evet'];
-    if (buttonId === 'add_to_order' || ADDITION_KEYWORDS.some(k => text.includes(k))) {
-      const parentOrderId = conversation.activeOrderId;
-      if (!parentOrderId) {
-        await this.sendText(ctx, TEMPLATES.orderEmpty);
-        return 'IDLE';
-      }
-
-      // Create child draft order linked to parent
-      const childDraft = await orderService.createAdditionDraft(
-        tenantId, conversationId, parentOrderId
-      );
-
-      // Get parent order number for the message
-      const parentOrder = await orderService.getOrder(tenantId, parentOrderId);
-
-      await inboxService.updateConversationPhase(
-        tenantId, conversationId, 'ORDER_COLLECTING', childDraft.id
-      );
-
-      await this.sendText(ctx, TEMPLATES.additionStarted(parentOrder.orderNumber || 0));
-      return 'ORDER_COLLECTING';
-    }
-
-    // "Yeni Siparis" button or keyword
-    const NEW_ORDER_KEYWORDS = ['yeni', 'hayir'];
-    if (buttonId === 'new_order' || NEW_ORDER_KEYWORDS.some(k => text.includes(k))) {
-      await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
-      await this.sendText(ctx, TEMPLATES.newOrderPrompt);
-      return 'IDLE';
-    }
-
-    // Unrecognized - resend buttons
-    const parentOrderId = conversation.activeOrderId;
-    if (parentOrderId) {
-      const parentOrder = await orderService.getOrder(tenantId, parentOrderId);
-      await whatsappService.sendInteractiveButtons(
-        tenantId,
-        conversationId,
-        TEMPLATES.additionPrompt(parentOrder.orderNumber || 0),
-        [
-          { id: 'add_to_order', title: 'Ekleme Yap' },
-          { id: 'new_order', title: 'Yeni Siparis' },
-        ],
-      );
-    }
-    return 'ADDITION_PROMPT';
+    // Legacy: redirect to IDLE — seamless addition handles this now
+    await inboxService.updateConversationPhase(ctx.tenantId, ctx.conversationId, 'IDLE', null);
+    return this.handleIdle(ctx);
   }
 
   /**
@@ -407,6 +372,44 @@ export class ConversationFlowService {
     const { tenantId, conversationId, message, conversation } = ctx;
     const text = normalizeTr(message.text || '');
     const buttonId = ctx.payload.interactive?.buttonReply?.id;
+
+    // Handle SEAMLESS_ADDITION sub-state: clarification answer for active order addition
+    if (conversation.flowSubState === 'SEAMLESS_ADDITION') {
+      let parentMeta: any = {};
+      try { parentMeta = JSON.parse(conversation.flowMetadata || '{}'); } catch { /* ignore */ }
+      const parentOrderId = parentMeta.parentOrderId;
+
+      if (parentOrderId && message.kind === 'TEXT' && text) {
+        const addResult = await nluOrchestratorService.processMessage(
+          tenantId, conversationId, message.id, text,
+        );
+
+        if (addResult.draftOrderId && addResult.itemsExtracted) {
+          const activeOrder = await orderService.getOrder(tenantId, parentOrderId);
+          if (activeOrder) {
+            await prisma.conversation.update({
+              where: { id: conversationId },
+              data: { flowSubState: null, flowMetadata: null },
+            });
+            return this.handleSeamlessAddition(ctx, activeOrder, addResult.draftOrderId);
+          }
+        }
+
+        if (addResult.clarificationQuestion) {
+          await this.sendText(ctx, addResult.clarificationQuestion);
+          return 'ORDER_COLLECTING';
+        }
+
+        // No items extracted — clear sub-state and go to IDLE
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: null, flowMetadata: null },
+        });
+        await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
+        await this.sendText(ctx, TEMPLATES.greeting);
+        return 'IDLE';
+      }
+    }
 
     // Handle confirm/cancel buttons from order summary
     if (buttonId === 'confirm_order') {
@@ -1758,6 +1761,119 @@ export class ConversationFlowService {
       where: { id: orderId, tenantId: ctx.tenantId, status: 'DRAFT' },
       include: { items: true },
     });
+  }
+
+  /**
+   * Seamless addition: transfer draft items to active order, handle payment delta
+   */
+  private async handleSeamlessAddition(
+    ctx: FlowContext,
+    activeOrder: any,
+    draftOrderId: string,
+  ): Promise<ConversationPhase> {
+    const { tenantId, conversationId } = ctx;
+
+    const draft = await prisma.order.findFirst({
+      where: { id: draftOrderId, tenantId },
+      include: { items: true },
+    });
+
+    if (!draft || draft.items.length === 0) {
+      await this.sendText(ctx, TEMPLATES.greeting);
+      return 'IDLE';
+    }
+
+    // Validate: READY status only allows isReadyFood items
+    if (activeOrder.status === 'READY') {
+      const itemMenuIds = draft.items.map((i: any) => i.menuItemId);
+      const menuItems = await prisma.menuItem.findMany({
+        where: { id: { in: itemMenuIds }, tenantId },
+        select: { id: true, name: true, isReadyFood: true },
+      });
+      const nonReadyItems = menuItems.filter((mi) => !mi.isReadyFood);
+      if (nonReadyItems.length > 0) {
+        const names = nonReadyItems.map((i) => i.name).join(', ');
+        await this.sendText(ctx, TEMPLATES.additionReadyFoodOnly(names));
+        await prisma.orderItem.deleteMany({ where: { orderId: draftOrderId } });
+        await prisma.order.delete({ where: { id: draftOrderId } });
+        return 'IDLE';
+      }
+    }
+
+    const itemsToAdd = draft.items.map((item: any) => ({
+      menuItemId: item.menuItemId,
+      menuItemName: item.menuItemName,
+      qty: item.qty,
+      unitPrice: Number(item.unitPrice),
+      optionsJson: item.optionsJson,
+      extrasJson: item.extrasJson,
+      notes: item.notes,
+    }));
+
+    const additionTotal = itemsToAdd.reduce(
+      (sum, i) => sum + i.unitPrice * i.qty, 0
+    );
+
+    // Add items to the active order
+    const updatedOrder = await orderService.addItemsToOrder(
+      tenantId, activeOrder.id, itemsToAdd
+    );
+
+    // Clean up draft
+    await prisma.orderItem.deleteMany({ where: { orderId: draftOrderId } });
+    await prisma.order.delete({ where: { id: draftOrderId } });
+
+    const addedItemsSummary = itemsToAdd
+      .map(i => `${i.qty}x ${i.menuItemName}`)
+      .join(', ');
+
+    // Check if original payment was online credit card
+    const wasOnline = await this.wasOriginalPaymentOnline(tenantId, activeOrder.id);
+
+    if (wasOnline) {
+      try {
+        const payment = await orderPaymentService.initiateAdditionPayment(
+          tenantId, activeOrder.id, conversationId,
+          ctx.conversation.customerPhone,
+          additionTotal,
+          itemsToAdd.map(i => ({ menuItemName: i.menuItemName, qty: i.qty, unitPrice: i.unitPrice })),
+        );
+        await this.sendText(ctx, TEMPLATES.seamlessAdditionPaymentNeeded(
+          activeOrder.orderNumber || 0,
+          addedItemsSummary,
+          additionTotal,
+          payment.checkoutFormUrl || '',
+          updatedOrder.totalPrice,
+        ));
+      } catch (err) {
+        logger.warn({ err, tenantId, orderId: activeOrder.id }, 'Addition payment failed, notifying without payment link');
+        await this.sendText(ctx, TEMPLATES.seamlessAdditionConfirmed(
+          activeOrder.orderNumber || 0,
+          addedItemsSummary,
+          additionTotal,
+          updatedOrder.totalPrice,
+        ));
+      }
+    } else {
+      await this.sendText(ctx, TEMPLATES.seamlessAdditionConfirmed(
+        activeOrder.orderNumber || 0,
+        addedItemsSummary,
+        additionTotal,
+        updatedOrder.totalPrice,
+      ));
+    }
+
+    await inboxService.updateConversationPhase(
+      tenantId, conversationId, 'ORDER_CONFIRMED', null,
+    );
+    return 'ORDER_CONFIRMED';
+  }
+
+  private async wasOriginalPaymentOnline(tenantId: string, orderId: string): Promise<boolean> {
+    const payment = await prisma.orderPayment.findFirst({
+      where: { tenantId, orderId, method: 'CREDIT_CARD', status: 'SUCCESS' },
+    });
+    return !!payment;
   }
 
   private async cancelActiveOrder(ctx: FlowContext): Promise<void> {

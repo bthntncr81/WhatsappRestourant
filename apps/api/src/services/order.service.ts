@@ -436,6 +436,97 @@ export class OrderService {
     return order ? this.mapToDto(order) : null;
   }
 
+  async addItemsToOrder(
+    tenantId: string,
+    orderId: string,
+    items: Array<{
+      menuItemId: string;
+      menuItemName: string;
+      qty: number;
+      unitPrice: number;
+      optionsJson: any;
+      extrasJson: any;
+      notes: string | null;
+    }>,
+  ): Promise<OrderDto> {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { items: true, store: { select: { id: true, name: true } } },
+    });
+
+    if (!order) {
+      throw new AppError(404, 'ORDER_NOT_FOUND', 'Order not found');
+    }
+
+    if (!['CONFIRMED', 'PREPARING', 'READY'].includes(order.status)) {
+      throw new AppError(400, 'INVALID_STATUS', `Cannot add items to order with status ${order.status}`);
+    }
+
+    const addedAt = new Date();
+
+    const result = await prisma.$transaction(async (tx) => {
+      for (const item of items) {
+        await tx.orderItem.create({
+          data: {
+            orderId,
+            menuItemId: item.menuItemId,
+            menuItemName: item.menuItemName,
+            qty: item.qty,
+            unitPrice: item.unitPrice,
+            optionsJson: item.optionsJson || undefined,
+            extrasJson: item.extrasJson || undefined,
+            notes: item.notes,
+            addedAt,
+          },
+        });
+      }
+
+      const allItems = await tx.orderItem.findMany({ where: { orderId } });
+      const newTotal = allItems.reduce(
+        (sum, i) => sum + Number(i.unitPrice) * i.qty, 0
+      );
+
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: { totalPrice: newTotal },
+        include: { items: true, store: { select: { id: true, name: true } } },
+      });
+
+      // Kitchen print job for added items only
+      const additionPayload: PrintJobPayload = {
+        orderNumber: updated.orderNumber || 0,
+        timestamp: addedAt.toISOString(),
+        storeName: (updated as any).store?.name || null,
+        items: items.map((i) => ({
+          name: i.menuItemName,
+          qty: i.qty,
+          options: (i.optionsJson as any[])?.map((o: any) => o.optionName) || [],
+          notes: i.notes,
+        })),
+        notes: `EKLEME - Siparis #${updated.orderNumber}`,
+      };
+
+      await tx.printJob.create({
+        data: {
+          tenantId,
+          orderId,
+          type: 'KITCHEN',
+          status: 'PENDING',
+          payloadJson: additionPayload as any,
+        },
+      });
+
+      return updated;
+    });
+
+    logger.info(
+      { tenantId, orderId, addedItemsCount: items.length, newTotal: Number(result.totalPrice) },
+      'Items added to existing order',
+    );
+
+    return this.mapToDto(result);
+  }
+
   async createAdditionDraft(
     tenantId: string,
     conversationId: string,
@@ -567,6 +658,7 @@ export class OrderService {
         optionsJson: item.optionsJson,
         extrasJson: item.extrasJson,
         notes: item.notes,
+        addedAt: item.addedAt?.toISOString() || null,
       })),
       parentOrderId: order.parentOrderId || null,
       rejectionReason: order.rejectionReason || null,

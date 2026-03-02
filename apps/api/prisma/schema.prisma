@@ -387,6 +387,7 @@ model OrderItem {
   optionsJson Json?
   extrasJson  Json?
   notes      String?
+  addedAt    DateTime?
   createdAt  DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)

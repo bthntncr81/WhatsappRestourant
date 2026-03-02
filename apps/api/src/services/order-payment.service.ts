@@ -283,6 +283,87 @@ export class OrderPaymentService {
     }
   }
 
+  /**
+   * Initiate a delta card payment for items added to an existing order
+   */
+  async initiateAdditionPayment(
+    tenantId: string,
+    orderId: string,
+    conversationId: string,
+    customerPhone: string,
+    amount: number,
+    items: Array<{ menuItemName: string; qty: number; unitPrice: number }>,
+  ): Promise<OrderPaymentDto> {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, tenantId },
+      include: { conversation: true },
+    });
+
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    const callbackUrl = `${APP_BASE_URL}${API_PREFIX}/payments/callback/iyzico`;
+
+    const basketItems = items.map((item, idx) => ({
+      id: `addition-${orderId.slice(0, 8)}-${idx}`,
+      name: item.menuItemName,
+      category1: 'Yemek',
+      itemType: 'PHYSICAL' as const,
+      price: (item.unitPrice * item.qty).toFixed(2),
+    }));
+
+    const result = await iyzicoService.initializeCheckoutForm({
+      price: amount.toFixed(2),
+      paidPrice: amount.toFixed(2),
+      basketId: `${orderId}-add`,
+      conversationId: `add-${orderId.slice(0, 12)}`,
+      callbackUrl,
+      buyer: {
+        id: `cust-${customerPhone.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20)}`,
+        name: order.customerName || 'Musteri',
+        surname: 'Musteri',
+        gsmNumber: customerPhone,
+        email: `musteri${customerPhone.replace(/[^0-9]/g, '').slice(-10) || 'test'}@email.com`,
+        identityNumber: '11111111111',
+        ip: '85.34.78.112',
+        city: 'Istanbul',
+        country: 'Turkey',
+        address: order.deliveryAddress || 'Adres belirtilmedi',
+        zipCode: '34000',
+      },
+      basketItems,
+    });
+
+    if (!result.success || !result.token) {
+      throw new Error(result.error || 'iyzico addition payment failed');
+    }
+
+    const checkoutFormUrl = result.paymentPageUrl || `${APP_BASE_URL}${API_PREFIX}/payments/checkout/${result.token}`;
+
+    const payment = await prisma.orderPayment.create({
+      data: {
+        tenantId,
+        orderId,
+        conversationId,
+        method: 'CREDIT_CARD',
+        status: 'PENDING',
+        amount,
+        currency: 'TRY',
+        iyzicoToken: result.token,
+        checkoutFormUrl,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+
+    logger.info(
+      { tenantId, orderId, paymentId: payment.id, amount },
+      'Addition payment initiated',
+    );
+
+    return this.mapToDto(payment);
+  }
+
   // ==================== HELPERS ====================
 
   private mapToDto(payment: any): OrderPaymentDto {

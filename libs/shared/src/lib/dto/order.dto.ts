@@ -41,6 +41,7 @@ export interface OrderItemDto {
   optionsJson: OrderItemOption[] | null;
   extrasJson: OrderItemExtra[] | null;
   notes: string | null;
+  addedAt: string | null;
 }
 
 export interface OrderItemOption {

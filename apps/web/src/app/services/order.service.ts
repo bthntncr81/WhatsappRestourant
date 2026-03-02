@@ -35,6 +35,7 @@ export interface OrderItemDto {
   optionsJson: { groupName: string; optionName: string; priceDelta: number }[] | null;
   extrasJson: { name: string; qty: number; price: number }[] | null;
   notes: string | null;
+  addedAt: string | null;
 }
 
 export interface OrderDto {

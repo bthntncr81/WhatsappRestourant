@@ -69,7 +69,7 @@ import { IconComponent } from '../../shared/icon.component';
       } @else {
         <div class="orders-grid">
           @for (order of orders(); track order.id) {
-            <div class="order-card" [class]="'status-' + order.status.toLowerCase()" (click)="openCustomerPanel(order)">
+            <div class="order-card" [class]="'status-' + order.status.toLowerCase()" [class.order-modified]="recentlyModifiedOrderIds().has(order.id)" (click)="openCustomerPanel(order)">
               <div class="order-header">
                 <div class="order-number">
                   #{{ order.orderNumber || '---' }}
@@ -91,11 +91,14 @@ import { IconComponent } from '../../shared/icon.component';
               </div>
 
               <div class="order-items">
-                @for (item of order.items.slice(0, 3); track item.id) {
-                  <div class="item-row">
+                @for (item of order.items.slice(0, 5); track item.id) {
+                  <div class="item-row" [class.addition-item]="item.addedAt">
                     <span class="item-qty">{{ item.qty }}x</span>
                     <span class="item-name">
                       {{ item.menuItemName }}
+                      @if (item.addedAt) {
+                        <span class="addition-label">Yeni ekleme</span>
+                      }
                       @if (item.optionsJson && item.optionsJson.length > 0) {
                         <span class="item-options">({{ formatOptions(item.optionsJson) }})</span>
                       }
@@ -108,8 +111,8 @@ import { IconComponent } from '../../shared/icon.component';
                     <div class="item-note"><app-icon name="file-text" [size]="12"/> {{ item.notes }}</div>
                   }
                 }
-                @if (order.items.length > 3) {
-                  <div class="more-items">+{{ order.items.length - 3 }} ürün daha</div>
+                @if (order.items.length > 5) {
+                  <div class="more-items">+{{ order.items.length - 5 }} ürün daha</div>
                 }
               </div>
 
@@ -1070,6 +1073,36 @@ import { IconComponent } from '../../shared/icon.component';
     .history-date {
       color: var(--color-text-secondary);
     }
+
+    /* Order modified flash animation */
+    .order-card.order-modified {
+      animation: flash-modified 0.6s ease-in-out 3;
+      border-color: #f59e0b;
+    }
+
+    @keyframes flash-modified {
+      0%, 100% { box-shadow: none; }
+      50% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.5); }
+    }
+
+    .addition-item {
+      background: rgba(59, 130, 246, 0.08);
+      border-radius: 4px;
+      padding: 4px 6px;
+      margin: 2px 0;
+    }
+
+    .addition-label {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
   `]
 })
 export class OrdersComponent implements OnInit, OnDestroy {
@@ -1110,13 +1143,23 @@ export class OrdersComponent implements OnInit, OnDestroy {
     };
   });
 
+  recentlyModifiedOrderIds = signal(new Set<string>());
+
   // Polling
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private knownOrderIds = new Set<string>();
+  private knownOrderItemCounts = new Map<string, number>();
 
   ngOnInit(): void {
     this.loadOrders();
     this.startPolling();
+
+    // Unlock audio on first user interaction
+    const unlockHandler = () => {
+      this.notificationService.unlockAudio();
+      document.removeEventListener('click', unlockHandler);
+    };
+    document.addEventListener('click', unlockHandler);
   }
 
   ngOnDestroy(): void {
@@ -1149,19 +1192,47 @@ export class OrdersComponent implements OnInit, OnDestroy {
   }
 
   private detectNewOrders(fetched: OrderDto[]): void {
-    if (this.knownOrderIds.size === 0) return;
+    if (this.knownOrderIds.size === 0) {
+      this.knownOrderIds = new Set(fetched.map(o => o.id));
+      this.knownOrderItemCounts = new Map(fetched.map(o => [o.id, o.items.length]));
+      return;
+    }
 
+    let shouldNotify = false;
+
+    // Detect new PENDING_CONFIRMATION orders
     const newPending = fetched.filter(
       o => o.status === 'PENDING_CONFIRMATION' && !this.knownOrderIds.has(o.id)
     );
 
     if (newPending.length > 0) {
       this.hasNewPending.set(true);
-      this.notificationService.playOrderNotification();
+      shouldNotify = true;
       setTimeout(() => this.hasNewPending.set(false), 5000);
     }
 
+    // Detect additions to existing orders (item count increased)
+    const modifiedOrders = new Set<string>();
+    for (const order of fetched) {
+      const knownCount = this.knownOrderItemCounts.get(order.id);
+      if (knownCount !== undefined && order.items.length > knownCount) {
+        modifiedOrders.add(order.id);
+        shouldNotify = true;
+      }
+    }
+
+    if (modifiedOrders.size > 0) {
+      this.recentlyModifiedOrderIds.set(modifiedOrders);
+      setTimeout(() => this.recentlyModifiedOrderIds.set(new Set()), 10000);
+    }
+
+    if (shouldNotify) {
+      this.notificationService.playOrderNotification();
+    }
+
+    // Update tracking
     this.knownOrderIds = new Set(fetched.map(o => o.id));
+    this.knownOrderItemCounts = new Map(fetched.map(o => [o.id, o.items.length]));
   }
 
   loadOrders(): void {
@@ -1173,6 +1244,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
           const fetched = res.data.orders;
           this.allOrders.set(fetched);
           this.knownOrderIds = new Set(fetched.map(o => o.id));
+          this.knownOrderItemCounts = new Map(fetched.map(o => [o.id, o.items.length]));
         }
         this.loading.set(false);
       },
