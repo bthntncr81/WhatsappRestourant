@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import { getConfig } from '@whatres/config';
 import { createLogger } from './logger';
 import { errorHandler } from './middleware/error-handler';
@@ -18,6 +19,7 @@ import { paymentRouter } from './routes/payment.routes';
 import { whatsappConfigRouter } from './routes/whatsapp-config.routes';
 import { surveyRouter } from './routes/survey.routes';
 import { broadcastRouter } from './routes/broadcast.routes';
+import { menuMediaRouter } from './routes/menu-media.routes';
 import prisma from './db/prisma';
 import redis from './db/redis';
 
@@ -52,6 +54,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Serve uploaded files (menu media images/PDFs)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
 // Routes
 app.use(`${config.server.apiPrefix}/health`, healthRouter);
 app.use(`${config.server.apiPrefix}/auth`, authRouter);
@@ -68,6 +73,7 @@ app.use(`${config.server.apiPrefix}/payments`, paymentRouter);
 app.use(`${config.server.apiPrefix}/whatsapp-config`, whatsappConfigRouter);
 app.use(`${config.server.apiPrefix}/surveys`, surveyRouter);
 app.use(`${config.server.apiPrefix}/broadcast`, broadcastRouter);
+app.use(`${config.server.apiPrefix}/menu-media`, menuMediaRouter);
 
 // 404 Handler
 app.use((req, res) => {

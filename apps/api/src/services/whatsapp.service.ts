@@ -301,6 +301,79 @@ export class WhatsAppService {
   }
 
   /**
+   * Send an image message via WhatsApp
+   */
+  async sendImage(
+    tenantId: string,
+    conversationId: string,
+    imageUrl: string,
+    caption?: string,
+  ): Promise<{ messageId: string; externalId?: string }> {
+    const conversation = await inboxService.getConversation(tenantId, conversationId);
+
+    const message = await inboxService.createMessage(
+      tenantId, conversationId, 'OUT', 'IMAGE',
+      caption || 'Menu',
+      { isSystemMessage: true, imageUrl },
+    );
+
+    try {
+      const tenantConfig = await this.getTenantConfig(tenantId);
+      let result;
+      if (tenantConfig) {
+        result = await whatsappProviderService.sendImageWithConfig(
+          conversation.customerPhone, imageUrl, tenantConfig, caption,
+        );
+      } else {
+        result = await whatsappProviderService.sendImage(
+          conversation.customerPhone, imageUrl, caption,
+        );
+      }
+      return { messageId: message.id, externalId: result.messageId };
+    } catch (error) {
+      logger.error({ error, tenantId, conversationId }, 'Failed to send image');
+      return { messageId: message.id };
+    }
+  }
+
+  /**
+   * Send a document message via WhatsApp
+   */
+  async sendDocument(
+    tenantId: string,
+    conversationId: string,
+    documentUrl: string,
+    filename: string,
+    caption?: string,
+  ): Promise<{ messageId: string; externalId?: string }> {
+    const conversation = await inboxService.getConversation(tenantId, conversationId);
+
+    const message = await inboxService.createMessage(
+      tenantId, conversationId, 'OUT', 'TEXT',
+      caption || filename,
+      { isSystemMessage: true, documentUrl, filename },
+    );
+
+    try {
+      const tenantConfig = await this.getTenantConfig(tenantId);
+      let result;
+      if (tenantConfig) {
+        result = await whatsappProviderService.sendDocumentWithConfig(
+          conversation.customerPhone, documentUrl, filename, tenantConfig, caption,
+        );
+      } else {
+        result = await whatsappProviderService.sendDocument(
+          conversation.customerPhone, documentUrl, filename, caption,
+        );
+      }
+      return { messageId: message.id, externalId: result.messageId };
+    } catch (error) {
+      logger.error({ error, tenantId, conversationId }, 'Failed to send document');
+      return { messageId: message.id };
+    }
+  }
+
+  /**
    * Send message (agent/admin sending from inbox)
    */
   async sendMessage(

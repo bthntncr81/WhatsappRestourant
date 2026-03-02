@@ -9,6 +9,7 @@ export * from './lib/dto/store.dto';
 export * from './lib/dto/billing.dto';
 export * from './lib/dto/payment.dto';
 export * from './lib/dto/whatsapp-config.dto';
+export * from './lib/dto/menu-media.dto';
 
 // Types
 export * from './lib/types/common.types';

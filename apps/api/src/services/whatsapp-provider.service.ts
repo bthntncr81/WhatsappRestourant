@@ -123,6 +123,33 @@ export class WhatsAppProviderService {
     return this.sendMessage(to, { type: 'interactive', interactive });
   }
 
+  /**
+   * Send an image message via URL
+   */
+  async sendImage(
+    to: string,
+    imageUrl: string,
+    caption?: string,
+  ): Promise<{ messageId: string }> {
+    const image: Record<string, string> = { link: imageUrl };
+    if (caption) image.caption = caption;
+    return this.sendMessage(to, { type: 'image', image });
+  }
+
+  /**
+   * Send a document message via URL
+   */
+  async sendDocument(
+    to: string,
+    documentUrl: string,
+    filename: string,
+    caption?: string,
+  ): Promise<{ messageId: string }> {
+    const document: Record<string, string> = { link: documentUrl, filename };
+    if (caption) document.caption = caption;
+    return this.sendMessage(to, { type: 'document', document });
+  }
+
   // ==================== WEBHOOK VERIFICATION ====================
 
   /**
@@ -326,6 +353,35 @@ export class WhatsAppProviderService {
       interactive.header = { type: 'text', text: header };
     }
     return this.sendMessageWithConfig(to, { type: 'interactive', interactive }, tenantConfig);
+  }
+
+  /**
+   * Send image using per-tenant DB config
+   */
+  async sendImageWithConfig(
+    to: string,
+    imageUrl: string,
+    tenantConfig: { phoneNumberId: string; accessToken: string },
+    caption?: string,
+  ): Promise<{ messageId: string }> {
+    const image: Record<string, string> = { link: imageUrl };
+    if (caption) image.caption = caption;
+    return this.sendMessageWithConfig(to, { type: 'image', image }, tenantConfig);
+  }
+
+  /**
+   * Send document using per-tenant DB config
+   */
+  async sendDocumentWithConfig(
+    to: string,
+    documentUrl: string,
+    filename: string,
+    tenantConfig: { phoneNumberId: string; accessToken: string },
+    caption?: string,
+  ): Promise<{ messageId: string }> {
+    const document: Record<string, string> = { link: documentUrl, filename };
+    if (caption) document.caption = caption;
+    return this.sendMessageWithConfig(to, { type: 'document', document }, tenantConfig);
   }
 
   // ==================== PRIVATE ====================

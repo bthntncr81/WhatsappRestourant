@@ -31,6 +31,8 @@ services:
       IYZICO_SECRET_KEY: ${IYZICO_SECRET_KEY:-sandbox-0PfKYCdPshA2ZhqfdGq6JxfB5dXQWeqa}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       APP_BASE_URL: ${APP_BASE_URL:-https://api-whatres.highfivepps.com}
+    volumes:
+      - whatres_uploads:/app/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -51,3 +53,4 @@ services:
 
 volumes:
   whatres_redis_data:
+  whatres_uploads:

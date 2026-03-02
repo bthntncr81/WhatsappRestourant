@@ -31,6 +31,9 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Uploaded files
+uploads/
+
 # Test
 coverage/
 

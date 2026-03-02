@@ -265,14 +265,11 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // Menu request
+    // Menu request — send uploaded menu media (images/PDFs)
     if (this.matchesKeyword(text, MENU_KEYWORDS)) {
-      // Let NLU handle menu display
-      const result = await nluOrchestratorService.processMessage(
-        tenantId, conversationId, message.id, text,
-      );
-      if (result.confirmationMessage) {
-        await this.sendText(ctx, result.confirmationMessage);
+      const sent = await this.sendMenuMedia(ctx);
+      if (!sent) {
+        await this.sendText(ctx, TEMPLATES.menuNotAvailable);
       }
       return 'IDLE';
     }
@@ -1784,6 +1781,36 @@ export class ConversationFlowService {
 
   private matchesKeyword(text: string, keywords: string[]): boolean {
     return keywords.some((kw) => text.includes(kw));
+  }
+
+  /**
+   * Send uploaded menu media (images/PDFs) to the customer.
+   * Returns true if media was sent, false if no media uploaded.
+   */
+  private async sendMenuMedia(ctx: FlowContext): Promise<boolean> {
+    const { menuMediaService } = await import('./menu-media.service');
+    const media = await menuMediaService.getMediaForTenant(ctx.tenantId);
+
+    if (media.length === 0) return false;
+
+    await this.sendText(ctx, TEMPLATES.menuMediaIntro);
+
+    for (const item of media) {
+      if (item.type === 'IMAGE') {
+        await whatsappService.sendImage(
+          ctx.tenantId, ctx.conversationId,
+          item.url, item.caption || undefined,
+        );
+      } else {
+        await whatsappService.sendDocument(
+          ctx.tenantId, ctx.conversationId,
+          item.url, item.filename, item.caption || undefined,
+        );
+      }
+    }
+
+    await this.sendText(ctx, TEMPLATES.menuMediaFooter);
+    return true;
   }
 
   /**

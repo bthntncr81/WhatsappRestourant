@@ -295,6 +295,14 @@ export const TEMPLATES = {
   agentHandoff:
     '👤 Sizi bir temsilciye yonlendiriyorum. Lutfen bekleyin...',
 
+  // ==================== MENU MEDIA ====================
+  menuMediaIntro: '📋 Menumuze goz atin:',
+
+  menuMediaFooter: 'Siparis vermek icin istediginiz urunleri yazabilirsiniz.',
+
+  menuNotAvailable:
+    'Menu henuz yuklenmemis. Siparis vermek icin urun adini yazabilirsiniz.',
+
   // ==================== UPSELL ====================
   upsellButtons(price: number): { buttons: Array<{ id: string; title: string }> } {
     return {

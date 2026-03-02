@@ -56,6 +56,9 @@ model Tenant {
   // WhatsApp config
   whatsappConfig      WhatsAppConfig?
 
+  // Menu media (images/PDFs for WhatsApp)
+  menuMedia           MenuMedia[]
+
   @@map("tenants")
 }
 
@@ -844,6 +847,27 @@ model WhatsAppConfig {
   tenant                Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("whatsapp_configs")
+}
+
+// ==================== MENU MEDIA (Per-Tenant) ====================
+
+model MenuMedia {
+  id         String   @id @default(cuid())
+  tenantId   String
+  type       String   // IMAGE or DOCUMENT
+  filename   String   // Original filename
+  storedName String   // UUID-based stored filename
+  mimeType   String   // image/jpeg, image/png, image/webp, application/pdf
+  sizeBytes  Int
+  sortOrder  Int      @default(0)
+  caption    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sortOrder])
+  @@map("menu_media")
 }
 
 model SatisfactionSurvey {

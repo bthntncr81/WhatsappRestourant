@@ -7,6 +7,7 @@ import {
   WhatsAppConfigDto,
   WhatsAppTestConnectionDto,
 } from '../../services/whatsapp-config.service';
+import { MenuMediaService, MenuMediaDto } from '../../services/menu-media.service';
 import { IconComponent } from '../../shared/icon.component';
 
 @Component({
@@ -304,6 +305,71 @@ import { IconComponent } from '../../shared/icon.component';
             </div>
           </div>
         </div>
+
+        <!-- Menu Media Upload -->
+        <div class="settings-section">
+          <h2 class="section-title">Menu Gorselleri</h2>
+          <div class="settings-card">
+            <div class="setting-item column">
+              <span class="setting-label">WhatsApp Menu Gorselleri</span>
+              <span class="setting-description text-muted">
+                Musteriler "menu" yazdiginda gonderilecek gorselleri yukleyin. (maks. 10 dosya, jpeg/png/webp/pdf)
+              </span>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="setting-item">
+              <label class="upload-area" [class.dragging]="isDragging()">
+                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+                       (change)="onFileSelected($event)" hidden #fileInput />
+                <div class="upload-content" (click)="fileInput.click()"
+                     (dragover)="onDragOver($event)" (dragleave)="isDragging.set(false)" (drop)="onDrop($event)">
+                  <app-icon name="upload" [size]="24"/>
+                  <span class="upload-text">
+                    @if (isUploadingMedia()) {
+                      Yukleniyor...
+                    } @else {
+                      Dosya secin veya surukleyin
+                    }
+                  </span>
+                  <span class="upload-hint text-muted">{{ menuMedia().length }} / 10 dosya</span>
+                </div>
+              </label>
+            </div>
+
+            @if (mediaError()) {
+              <div class="error-banner">{{ mediaError() }}</div>
+            }
+
+            <!-- Media List -->
+            @for (item of menuMedia(); track item.id) {
+              <div class="media-item">
+                <div class="media-preview">
+                  @if (item.type === 'IMAGE') {
+                    <img [src]="item.url" [alt]="item.filename" class="media-thumb" />
+                  } @else {
+                    <div class="media-pdf-icon">
+                      <app-icon name="file-text" [size]="24"/>
+                    </div>
+                  }
+                </div>
+                <div class="media-info">
+                  <span class="media-filename">{{ item.filename }}</span>
+                  <span class="media-size text-muted">{{ formatFileSize(item.sizeBytes) }}</span>
+                </div>
+                <button class="btn-icon btn-danger-icon" (click)="deleteMedia(item.id)" title="Sil">
+                  <app-icon name="trash" [size]="16"/>
+                </button>
+              </div>
+            }
+
+            @if (menuMedia().length === 0) {
+              <div class="media-empty text-muted">
+                Henuz menu gorseli yuklenmemis.
+              </div>
+            }
+          </div>
+        </div>
       }
     </div>
   `,
@@ -464,12 +530,50 @@ import { IconComponent } from '../../shared/icon.component';
         font-size: 0.8125rem; color: var(--color-text-secondary); line-height: 1.5;
         &.success { background: rgba(16, 185, 129, 0.1); }
       }
+
+      /* Menu Media Upload */
+      .upload-area {
+        width: 100%; cursor: pointer;
+        &.dragging .upload-content { border-color: var(--color-accent-primary); background: rgba(0, 83, 155, 0.05); }
+      }
+      .upload-content {
+        display: flex; flex-direction: column; align-items: center; gap: var(--spacing-sm);
+        padding: var(--spacing-xl); border: 2px dashed var(--color-border);
+        border-radius: var(--radius-md); transition: var(--transition-fast);
+        color: var(--color-text-secondary);
+        &:hover { border-color: var(--color-accent-primary); background: rgba(0, 83, 155, 0.03); }
+      }
+      .upload-text { font-size: 0.875rem; font-weight: 500; }
+      .upload-hint { font-size: 0.75rem; }
+      .media-item {
+        display: flex; align-items: center; gap: var(--spacing-md);
+        padding: var(--spacing-md) var(--spacing-lg);
+        border-bottom: 1px solid var(--color-border);
+        &:last-child { border-bottom: none; }
+      }
+      .media-preview { flex-shrink: 0; width: 56px; height: 56px; border-radius: var(--radius-sm); overflow: hidden; }
+      .media-thumb { width: 100%; height: 100%; object-fit: cover; }
+      .media-pdf-icon {
+        width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+        background: var(--color-bg-tertiary); color: var(--color-text-secondary);
+      }
+      .media-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+      .media-filename { font-size: 0.875rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .media-size { font-size: 0.75rem; }
+      .btn-icon {
+        display: flex; align-items: center; justify-content: center;
+        width: 32px; height: 32px; border: none; border-radius: var(--radius-sm);
+        background: transparent; cursor: pointer; flex-shrink: 0;
+      }
+      .btn-danger-icon { color: #ef4444; &:hover { background: rgba(239, 68, 68, 0.1); } }
+      .media-empty { padding: var(--spacing-xl); text-align: center; font-size: 0.875rem; }
     `,
   ],
 })
 export class SettingsComponent implements OnInit {
   private authService = inject(AuthService);
   private waConfigService = inject(WhatsAppConfigService);
+  private menuMediaService = inject(MenuMediaService);
 
   isAdmin = this.authService.isAdmin;
 
@@ -482,6 +586,12 @@ export class SettingsComponent implements OnInit {
   copyFeedback = signal<string | null>(null);
   guideOpen = signal(false);
 
+  // Menu Media
+  menuMedia = signal<MenuMediaDto[]>([]);
+  isUploadingMedia = signal(false);
+  mediaError = signal<string | null>(null);
+  isDragging = signal(false);
+
   waForm = new FormGroup({
     phoneNumberId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     wabaId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -492,6 +602,7 @@ export class SettingsComponent implements OnInit {
   ngOnInit() {
     if (this.isAdmin()) {
       this.loadConfig();
+      this.loadMenuMedia();
     }
   }
 
@@ -599,5 +710,70 @@ export class SettingsComponent implements OnInit {
       case 'ERROR': return 'Error';
       default: return 'Not Connected';
     }
+  }
+
+  // ==================== Menu Media ====================
+
+  loadMenuMedia() {
+    this.menuMediaService.getMedia().subscribe({
+      next: (res) => {
+        if (res.success && res.data) this.menuMedia.set(res.data);
+      },
+    });
+  }
+
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    this.uploadFile(file);
+    input.value = '';
+  }
+
+  onDragOver(event: DragEvent) {
+    event.preventDefault();
+    this.isDragging.set(true);
+  }
+
+  onDrop(event: DragEvent) {
+    event.preventDefault();
+    this.isDragging.set(false);
+    const file = event.dataTransfer?.files?.[0];
+    if (file) this.uploadFile(file);
+  }
+
+  private uploadFile(file: File) {
+    this.mediaError.set(null);
+    this.isUploadingMedia.set(true);
+    this.menuMediaService.uploadMedia(file).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.menuMedia.update((list) => [...list, res.data!]);
+        }
+        this.isUploadingMedia.set(false);
+      },
+      error: (err) => {
+        this.mediaError.set(err.error?.error?.message || 'Yukleme basarisiz');
+        this.isUploadingMedia.set(false);
+      },
+    });
+  }
+
+  deleteMedia(mediaId: string) {
+    if (!confirm('Bu dosyayi silmek istediginizden emin misiniz?')) return;
+    this.menuMediaService.deleteMedia(mediaId).subscribe({
+      next: () => {
+        this.menuMedia.update((list) => list.filter((m) => m.id !== mediaId));
+      },
+      error: (err) => {
+        this.mediaError.set(err.error?.error?.message || 'Silme basarisiz');
+      },
+    });
+  }
+
+  formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 }
