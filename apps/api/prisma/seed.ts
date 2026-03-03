@@ -149,96 +149,77 @@ async function main() {
   });
 
   const menuItems = [
-    // Burgerler
-    { name: 'Klasik Burger', category: 'Burgerler', basePrice: 120, description: 'Dana köfte, marul, domates, turşu, özel sos' },
-    { name: 'Cheese Burger', category: 'Burgerler', basePrice: 135, description: 'Dana köfte, cheddar peyniri, marul, domates' },
-    { name: 'Double Burger', category: 'Burgerler', basePrice: 165, description: 'Çift dana köfte, çift cheddar, özel sos' },
-    { name: 'Tavuk Burger', category: 'Burgerler', basePrice: 110, description: 'Izgara tavuk, marul, domates, mayonez' },
-    
-    // Pizzalar
-    { name: 'Margarita Pizza', category: 'Pizzalar', basePrice: 140, description: 'Domates sos, mozzarella, fesleğen' },
-    { name: 'Karışık Pizza', category: 'Pizzalar', basePrice: 170, description: 'Sucuk, sosis, mantar, biber, mozzarella' },
-    { name: 'Pepperoni Pizza', category: 'Pizzalar', basePrice: 160, description: 'Pepperoni, mozzarella, domates sos' },
-    
-    // Dönerler
-    { name: 'Tavuk Döner', category: 'Dönerler', basePrice: 95, description: 'Tavuk döner, pilav veya ekmek arası' },
-    { name: 'Et Döner', category: 'Dönerler', basePrice: 130, description: 'Dana döner, pilav veya ekmek arası' },
-    { name: 'İskender', category: 'Dönerler', basePrice: 180, description: 'Dana döner, tereyağı, yoğurt, domates sos' },
-    
-    // İçecekler
-    { name: 'Kola', category: 'İçecekler', basePrice: 25, description: '330ml' },
-    { name: 'Ayran', category: 'İçecekler', basePrice: 15, description: '300ml' },
-    { name: 'Su', category: 'İçecekler', basePrice: 10, description: '500ml' },
-    { name: 'Limonata', category: 'İçecekler', basePrice: 30, description: 'Ev yapımı, 300ml' },
-    
-    // Tatlılar
-    { name: 'Künefe', category: 'Tatlılar', basePrice: 85, description: 'Antep fıstıklı künefe' },
-    { name: 'Sütlaç', category: 'Tatlılar', basePrice: 45, description: 'Fırın sütlaç' },
-    { name: 'Baklava', category: 'Tatlılar', basePrice: 95, description: '4 dilim fıstıklı baklava' },
+    // Pizza
+    { name: 'Margherita', category: 'Pizza', basePrice: 300, description: 'Domates sos, mozzarella, taze fesleğen. İtalyan klasiği!' },
+    { name: 'Marinara', category: 'Pizza', basePrice: 250, description: 'Domates sos, sarımsak. Peynir sevmeyenler için sade lezzet!' },
+    { name: 'Acılı', category: 'Pizza', basePrice: 400, description: 'Domates sos, mozzarella, sucuk, jalapeno, kırmızı biber. Cesurlar için!' },
+    { name: 'Dört Peynirli', category: 'Pizza', basePrice: 350, description: 'Domates sos, mozzarella, cheddar, parmesan, gorgonzola. Peynir cenneti!' },
+    { name: 'Karışık', category: 'Pizza', basePrice: 400, description: 'Domates sos, mozzarella, sucuk, salam, mantar. Her şeyden biraz!' },
+    { name: 'Pepperoni', category: 'Pizza', basePrice: 400, description: 'Domates sosu, mozarella, sucuk, parmesan' },
+    { name: 'Kavurmalı', category: 'Pizza', basePrice: 550, description: 'Domates sos, mozzarella, kavurma, mısır. Türk damak tadına özel!' },
+    { name: 'Füme Mantar', category: 'Pizza', basePrice: 550, description: 'Domates sos, mozzarella, füme et, mantar. Duman aroması!' },
+    { name: 'Et Partisi', category: 'Pizza', basePrice: 550, description: 'Domates sos, mozzarella, ıslı et, sucuk, acı sos. Protein şöleni!' },
+    { name: 'High Five Özel', category: 'Pizza', basePrice: 450, description: 'Domates sos, mozzarella, sucuk, füme et, biber. Şefin imzası!' },
+
+    // Makarna
+    { name: 'Kremalı Mantarlı', category: 'Makarna', basePrice: 200, description: 'Krema sos, taze mantar. Hafif ve lezzetli!' },
+    { name: 'Napolitan', category: 'Makarna', basePrice: 200, description: 'Domates sos, parmesan.' },
+    { name: 'Arabiatta', category: 'Makarna', basePrice: 200, description: 'Acılı domates sos' },
+    { name: 'Köz Biberli', category: 'Makarna', basePrice: 200, description: 'Krema sos, kaşar, köz biber. Hafif tütsü aroması!' },
+    { name: 'Köz Patlıcanlı', category: 'Makarna', basePrice: 200, description: 'Domates sos, köz patlıcan. Türk mutfağı esintisi!' },
+    { name: 'Pesto', category: 'Makarna', basePrice: 250, description: 'Pesto soslu parmesan krema' },
+    { name: 'Beşamel Soslu', category: 'Makarna', basePrice: 275, description: 'Beşamel sos, kaşar peyniri. Kremsi lezzet!' },
+    { name: '4 Peynirli Makarna', category: 'Makarna', basePrice: 300, description: 'Peynir sos, krema, 4 çeşit peynir. Peynir tutkunlarına!' },
+    { name: 'Acılı Sosisli', category: 'Makarna', basePrice: 350, description: 'Domates sos, sosis' },
+    { name: 'Etli Mantarlı', category: 'Makarna', basePrice: 450, description: 'Özel sos, füme et, mantar. Doyurucu lezzet!' },
+    { name: 'High Five Makarna', category: 'Makarna', basePrice: 450, description: 'Özel sos, füme et, parmesan, kaşar. Şefin imzası!' },
+
+    // İçecek
+    { name: 'Ayran', category: 'İçecek', basePrice: 20, description: 'Geleneksel, köpüklü', isReadyFood: true },
+    { name: 'Limonata', category: 'İçecek', basePrice: 35, description: 'Taze sıkılmış, ev yapımı', isReadyFood: true },
+    { name: 'Damla Su', category: 'İçecek', basePrice: 40, description: '', isReadyFood: true },
+    { name: 'Coca Cola Şişe', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Coca Cola Zero Şişe', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Fanta Şişe', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Sprite Şişe', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Cappy Vişne', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Cappy Şeftali', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Cappy Karışık', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Fusetea Şeftali', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Fusetea Limon', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+    { name: 'Fusetea Mango', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
+
+    // Tatlı
+    { name: 'Tiramisu', category: 'Tatlı', basePrice: 75, description: 'İtalyan klasiği, kahve ve mascarpone' },
+    { name: 'Çikolatalı Sufle', category: 'Tatlı', basePrice: 85, description: 'Sıcak servis, akan çikolata' },
   ];
 
   for (const item of menuItems) {
+    const itemId = `item-${item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '')}`;
     await prisma.menuItem.upsert({
-      where: { id: `item-${item.name.toLowerCase().replace(/\s+/g, '-')}` },
-      update: {},
-      create: {
-        id: `item-${item.name.toLowerCase().replace(/\s+/g, '-')}`,
-        tenantId: tenant.id,
-        versionId: menuVersion.id,
+      where: { id: itemId },
+      update: {
         name: item.name,
-        description: item.description,
+        description: item.description || '',
         category: item.category,
         basePrice: item.basePrice,
         isActive: true,
+        isReadyFood: (item as any).isReadyFood || false,
+      },
+      create: {
+        id: itemId,
+        tenantId: tenant.id,
+        versionId: menuVersion.id,
+        name: item.name,
+        description: item.description || '',
+        category: item.category,
+        basePrice: item.basePrice,
+        isActive: true,
+        isReadyFood: (item as any).isReadyFood || false,
       },
     });
   }
   console.log(`✓ Menu: ${menuItems.length} items created`);
-
-  // Menu Option Groups
-  const burgerOptionGroup = await prisma.menuOptionGroup.upsert({
-    where: { id: 'og-burger-boyut' },
-    update: {},
-    create: {
-      id: 'og-burger-boyut',
-      tenantId: tenant.id,
-      versionId: menuVersion.id,
-      name: 'Boyut',
-      type: 'SINGLE',
-    },
-  });
-
-  await prisma.menuOption.createMany({
-    skipDuplicates: true,
-    data: [
-      { id: 'opt-normal', tenantId: tenant.id, versionId: menuVersion.id, groupId: burgerOptionGroup.id, name: 'Normal', priceDelta: 0 },
-      { id: 'opt-buyuk', tenantId: tenant.id, versionId: menuVersion.id, groupId: burgerOptionGroup.id, name: 'Büyük', priceDelta: 25 },
-      { id: 'opt-mega', tenantId: tenant.id, versionId: menuVersion.id, groupId: burgerOptionGroup.id, name: 'Mega', priceDelta: 45 },
-    ],
-  });
-
-  const pizzaOptionGroup = await prisma.menuOptionGroup.upsert({
-    where: { id: 'og-pizza-boyut' },
-    update: {},
-    create: {
-      id: 'og-pizza-boyut',
-      tenantId: tenant.id,
-      versionId: menuVersion.id,
-      name: 'Boyut',
-      type: 'SINGLE',
-    },
-  });
-
-  await prisma.menuOption.createMany({
-    skipDuplicates: true,
-    data: [
-      { id: 'opt-pizza-kucuk', tenantId: tenant.id, versionId: menuVersion.id, groupId: pizzaOptionGroup.id, name: 'Küçük', priceDelta: 0 },
-      { id: 'opt-pizza-orta', tenantId: tenant.id, versionId: menuVersion.id, groupId: pizzaOptionGroup.id, name: 'Orta', priceDelta: 30 },
-      { id: 'opt-pizza-buyuk', tenantId: tenant.id, versionId: menuVersion.id, groupId: pizzaOptionGroup.id, name: 'Büyük', priceDelta: 50 },
-    ],
-  });
-
-  console.log('✓ Option groups created');
 
   // ==================== SAMPLE CONVERSATION ====================
   console.log('\nCreating sample conversation...');
@@ -265,8 +246,8 @@ async function main() {
   const messages = [
     { direction: 'IN', kind: 'TEXT', text: 'Merhaba, sipariş vermek istiyorum' },
     { direction: 'OUT', kind: 'TEXT', text: 'Merhaba! Size nasıl yardımcı olabilirim? Menümüzü görmek ister misiniz?' },
-    { direction: 'IN', kind: 'TEXT', text: '1 adet cheese burger ve 1 kola istiyorum' },
-    { direction: 'OUT', kind: 'TEXT', text: 'Tabii! 1x Cheese Burger (135 TL) ve 1x Kola (25 TL) - Toplam: 160 TL. Onaylıyor musunuz?' },
+    { direction: 'IN', kind: 'TEXT', text: '1 adet karışık pizza ve 1 coca cola istiyorum' },
+    { direction: 'OUT', kind: 'TEXT', text: 'Tabii! 1x Karışık Pizza (400 TL) ve 1x Coca Cola Şişe (80 TL) - Toplam: 480 TL. Onaylıyor musunuz?' },
     { direction: 'IN', kind: 'TEXT', text: 'Evet onaylıyorum' },
   ];
 
