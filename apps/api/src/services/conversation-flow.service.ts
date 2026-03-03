@@ -1138,7 +1138,18 @@ export class ConversationFlowService {
       });
     }
 
-    // No survey active — reset to IDLE and process as new order
+    const text = normalizeTr(message.text || '');
+
+    // If customer tries to cancel after order is confirmed — block it
+    if (text && this.isFullCancelIntent(text)) {
+      await this.sendText(
+        ctx,
+        '⚠️ Siparisiniz onaylandi ve hazirlaniyor. Bu asamada iptal yapilamaz.\nYardim icin *"destek"* yazabilirsiniz.',
+      );
+      return 'ORDER_CONFIRMED';
+    }
+
+    // Otherwise reset to IDLE and process as new order / greeting
     await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
     ctx.conversation.phase = 'IDLE';
     return this.handleIdle(ctx);
@@ -1379,7 +1390,7 @@ export class ConversationFlowService {
 
     await this.sendText(
       ctx,
-      `✅ *Siparisinia alindi!*\n\n` +
+      `✅ *Siparisiniz alindi!*\n\n` +
       `📦 Siparis No: #${pendingOrder.orderNumber || 0}\n` +
       `💳 Odeme: Kapida kredi karti\n` +
       `⏳ Restoran onayiniz bekleniyor...`,
@@ -2089,7 +2100,7 @@ export class ConversationFlowService {
     // Already paid online — nothing to change
     const wasOnline = await this.wasOriginalPaymentOnline(tenantId, activeOrder.id);
     if (wasOnline) {
-      await this.sendText(ctx, 'Siparisinia zaten online odeme ile onaylandi. ✅');
+      await this.sendText(ctx, 'Siparisiniz zaten online odeme ile onaylandi. ✅');
       return 'ORDER_CONFIRMED';
     }
 

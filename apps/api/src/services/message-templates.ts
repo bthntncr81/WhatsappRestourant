@@ -93,7 +93,7 @@ export const TEMPLATES = {
   // ==================== INACTIVITY TIMEOUT ====================
 
   inactivityWarning:
-    '⏳ Siparisinia hala devam ediyor mu?\n\nDevam etmek icin herhangi bir mesaj gonderin.\n1 dakika icerisinde yanit alinmazsa siparisiniz *iptal* edilecektir.',
+    '⏳ Siparisiniz hala devam ediyor mu?\n\nDevam etmek icin herhangi bir mesaj gonderin.\n1 dakika icerisinde yanit alinmazsa siparisiniz *iptal* edilecektir.',
 
   inactivityCancelled:
     '⏰ Uzun suredir yanit alinamadigi icin siparisiniz iptal edildi.\n\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
@@ -183,7 +183,7 @@ export const TEMPLATES = {
 
   cashConfirmed(orderNumber: number): string {
     return (
-      `✅ *Siparisinia alindi!*\n\n` +
+      `✅ *Siparisiniz alindi!*\n\n` +
       `📦 Siparis No: #${orderNumber}\n` +
       `💵 Odeme: Kapida nakit\n` +
       `⏳ Restoran onayiniz bekleniyor...`
@@ -201,16 +201,16 @@ export const TEMPLATES = {
   pendingConfirmation(orderNumber: number): string {
     return (
       `📦 Siparis No: #${orderNumber}\n` +
-      `⏳ Siparisinia restoran tarafindan onay bekliyor.\n` +
+      `⏳ Siparisiniz restoran tarafindan onay bekliyor.\n` +
       `Onaylaninca size bildirim gonderecegiz.`
     );
   },
 
   restaurantApproved(orderNumber: number): string {
     return (
-      `✅ *Siparisinia onaylandi!*\n\n` +
+      `✅ *Siparisiniz onaylandi!*\n\n` +
       `📦 Siparis No: #${orderNumber}\n` +
-      `🎉 Siparisinia hazirlaniyor!\n` +
+      `🎉 Siparisiniz hazirlaniyor!\n` +
       `⏱️ Tahmini hazirlık suresi: 25-30 dakika`
     );
   },
@@ -218,7 +218,7 @@ export const TEMPLATES = {
   // ==================== ORDER STATUS UPDATES ====================
   orderPreparing(orderNumber: number): string {
     return (
-      `👨‍🍳 *Siparisinia hazirlaniyor!*\n\n` +
+      `👨‍🍳 *Siparisiniz hazirlaniyor!*\n\n` +
       `📦 Siparis No: #${orderNumber}\n` +
       `⏱️ Tahmini sure: 25-30 dakika`
     );
@@ -226,7 +226,7 @@ export const TEMPLATES = {
 
   orderReady(orderNumber: number): string {
     return (
-      `🎉 *Siparisinia hazir!*\n\n` +
+      `🎉 *Siparisiniz hazir!*\n\n` +
       `📦 Siparis No: #${orderNumber}\n` +
       `🚀 Kurye yola cikmak uzere!`
     );
@@ -234,7 +234,7 @@ export const TEMPLATES = {
 
   orderDelivered(orderNumber: number): string {
     return (
-      `✅ *Siparisinia teslim edildi!*\n\n` +
+      `✅ *Siparisiniz teslim edildi!*\n\n` +
       `📦 Siparis No: #${orderNumber}\n` +
       `🍽️ Afiyet olsun!\n` +
       `Tekrar siparis icin urun yazabilirsiniz.`
@@ -243,7 +243,7 @@ export const TEMPLATES = {
 
   orderCancelledNotification(orderNumber: number): string {
     return (
-      `❌ *Siparisinia iptal edildi.*\n\n` +
+      `❌ *Siparisiniz iptal edildi.*\n\n` +
       `📦 Siparis No: #${orderNumber}\n` +
       `Yeni siparis icin urun yazabilirsiniz.`
     );
@@ -272,7 +272,7 @@ export const TEMPLATES = {
 
   additionReadyFoodOnly(nonReadyItemNames: string): string {
     return (
-      `⚠️ Siparisinia hazir durumunda oldugu icin sadece hazir urunler eklenebilir.\n` +
+      `⚠️ Siparisiniz hazir durumunda oldugu icin sadece hazir urunler eklenebilir.\n` +
       `Su urunler eklenemez: *${nonReadyItemNames}*\n\n` +
       `Lutfen sadece hazir urunler secin veya *"iptal"* yazin.`
     );
@@ -297,7 +297,7 @@ export const TEMPLATES = {
 
   orderRejected(orderNumber: number, reason: string): string {
     return (
-      `❌ *Siparisinia reddedildi.*\n\n` +
+      `❌ *Siparisiniz reddedildi.*\n\n` +
       `📦 Siparis No: #${orderNumber}\n` +
       `Neden: *${reason}*\n\n` +
       `Yeni siparis vermek icin urun adini yazabilirsiniz.`
@@ -347,10 +347,10 @@ export const TEMPLATES = {
   storeClosed: '⏰ Suanda kapaliyiz. Acildigimizda tekrar siparis verebilirsiniz.',
 
   // ==================== GENERAL ====================
-  orderCancelled: '🚫 Siparisinia iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
+  orderCancelled: '🚫 Siparisiniz iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
 
   orderConfirmedNewOrder:
-    'Siparisinia isleniyor! ⏳\nYeni siparis vermek icin urun yazabilirsiniz.',
+    'Siparisiniz isleniyor! ⏳\nYeni siparis vermek icin urun yazabilirsiniz.',
 
   clarificationFallback:
     'Anlayamadim. Siparis vermek icin urun adini yazin veya "menu" yazarak menuyu gorun.',
