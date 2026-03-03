@@ -90,6 +90,17 @@ export const TEMPLATES = {
     );
   },
 
+  // ==================== INACTIVITY TIMEOUT ====================
+
+  inactivityWarning:
+    '⏳ Siparisinia hala devam ediyor mu?\n\nDevam etmek icin herhangi bir mesaj gonderin.\n1 dakika icerisinde yanit alinmazsa siparisiniz *iptal* edilecektir.',
+
+  inactivityCancelled:
+    '⏰ Uzun suredir yanit alinamadigi icin siparisiniz iptal edildi.\n\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
+
+  inactivityResumed:
+    '✅ Siparisiniz devam ediyor. Kaldiginiz yerden devam edebilirsiniz.',
+
   // ==================== LOCATION ====================
   locationRequest:
     '📍 Teslimat icin konumunuzu gonderin.\nAsagidaki butona tiklayarak konum paylasabilirsiniz.',

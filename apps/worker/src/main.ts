@@ -1,5 +1,6 @@
 import { getConfig } from '@whatres/config';
 import { broadcastService } from '../../api/src/services/broadcast.service';
+import { inactivityTimeoutService } from '../../api/src/services/inactivity-timeout.service';
 import prisma from '../../api/src/db/prisma';
 
 const config = getConfig();
@@ -46,12 +47,30 @@ async function syncProfiles() {
   }
 }
 
+// Inactivity timeout processor: runs every 30 seconds
+const INACTIVITY_CHECK_INTERVAL_MS = 30_000;
+
+async function processInactivityTimeouts() {
+  try {
+    const warnings = await inactivityTimeoutService.sendInactivityWarnings();
+    const cancellations = await inactivityTimeoutService.cancelInactiveOrders();
+    if (warnings.warned > 0 || cancellations.cancelled > 0) {
+      console.log(
+        `Inactivity timeout: ${warnings.warned} warned, ${cancellations.cancelled} cancelled`,
+      );
+    }
+  } catch (err) {
+    console.error('Inactivity timeout processing error:', err);
+  }
+}
+
 async function main() {
   console.log('Worker is ready');
 
   // Start background loops
   setInterval(processCampaignSends, SEND_INTERVAL_MS);
   setInterval(syncProfiles, SYNC_INTERVAL_MS);
+  setInterval(processInactivityTimeouts, INACTIVITY_CHECK_INTERVAL_MS);
 
   // Run initial sync after 10 seconds
   setTimeout(syncProfiles, 10_000);

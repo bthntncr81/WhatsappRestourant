@@ -111,6 +111,19 @@ export class ConversationFlowService {
           return;
         }
       }
+      // Inactivity warning intercept: if customer responds while warned, clear warning and continue
+      if (conversation.flowSubState === 'INACTIVITY_WARNING') {
+        const { inactivityTimeoutService } = await import('./inactivity-timeout.service');
+        await inactivityTimeoutService.clearInactivityState(conversationId);
+        // Refresh conversation object since flowSubState/flowMetadata changed
+        const refreshed = await inboxService.getConversationRaw(tenantId, conversationId);
+        if (refreshed) {
+          ctx.conversation = refreshed;
+        }
+        await this.sendText(ctx, TEMPLATES.inactivityResumed);
+        // Fall through to normal phase handler — customer's message is not lost
+      }
+
       // Global reset command - works in any phase
       const RESET_KEYWORDS = ['sifirla', 'sıfırla', 'reset', 'bastan', 'baştan'];
       const normalizedText = normalizeTr(ctx.message.text || '');
