@@ -1140,13 +1140,34 @@ export class ConversationFlowService {
 
     const text = normalizeTr(message.text || '');
 
-    // If customer tries to cancel after order is confirmed — block it
+    // If customer tries to cancel — check order status first
     if (text && this.isFullCancelIntent(text)) {
-      await this.sendText(
-        ctx,
-        '⚠️ Siparisiniz onaylandi ve hazirlaniyor. Bu asamada iptal yapilamaz.\nYardim icin *"destek"* yazabilirsiniz.',
-      );
-      return 'ORDER_CONFIRMED';
+      const order = conversation.activeOrderId
+        ? await prisma.order.findFirst({
+            where: { id: conversation.activeOrderId, tenantId },
+          })
+        : null;
+
+      if (order) {
+        const cancelableStatuses = ['PENDING_CONFIRMATION'];
+        if (cancelableStatuses.includes(order.status)) {
+          // Order is still waiting for restaurant — allow cancel
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { status: 'CANCELLED' },
+          });
+          await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
+          await this.sendText(ctx, '🚫 Siparisiniz iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.');
+          return 'IDLE';
+        } else {
+          // Order already confirmed/preparing — block cancel
+          await this.sendText(
+            ctx,
+            '⚠️ Siparisiniz hazirlaniyor. Bu asamada iptal yapilamaz.\nYardim icin *"destek"* yazabilirsiniz.',
+          );
+          return 'ORDER_CONFIRMED';
+        }
+      }
     }
 
     // Otherwise reset to IDLE and process as new order / greeting
