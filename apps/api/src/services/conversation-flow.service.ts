@@ -526,6 +526,15 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
+    // Menu request — show menu media without touching the order
+    if (this.matchesKeyword(text, MENU_KEYWORDS)) {
+      const sent = await this.sendMenuMedia(ctx);
+      if (!sent) {
+        await this.sendText(ctx, TEMPLATES.menuNotAvailable);
+      }
+      return 'ORDER_COLLECTING';
+    }
+
     // Confirm order -> move to review (only if draft order exists with items)
     if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
       const order = await this.getActiveOrder(ctx);
@@ -628,6 +637,21 @@ export class ConversationFlowService {
     if (this.matchesKeyword(text, EDIT_KEYWORDS)) {
       await this.sendText(ctx, 'Siparisinizi degistirmek icin yeni urun yazin veya "iptal" yazin.');
       return 'ORDER_COLLECTING';
+    }
+
+    // Menu request — show menu media without touching the order
+    if (this.matchesKeyword(text, MENU_KEYWORDS)) {
+      const sent = await this.sendMenuMedia(ctx);
+      if (!sent) {
+        await this.sendText(ctx, TEMPLATES.menuNotAvailable);
+      }
+      // Re-send current order summary with buttons
+      const order = await this.getActiveOrder(ctx);
+      if (order && order.items.length > 0) {
+        const summary = this.buildOrderSummary(order);
+        await this.sendOrderConfirmButtons(ctx, summary);
+      }
+      return 'ORDER_REVIEW';
     }
 
     // Default: treat as new product or note — pass to NLU
