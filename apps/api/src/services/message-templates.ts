@@ -136,11 +136,16 @@ export const TEMPLATES = {
   addressConfirmation(address: string): string {
     return (
       `📍 Teslimat adresiniz:\n\n` +
-      `*${address}*\n\n` +
-      `Bu adres dogru mu?\n` +
-      `✅ _"evet"_ - Onayla\n` +
-      `✏️ _"hayir"_ - Tekrar yaz`
+      `*${address}*`
     );
+  },
+
+  addressConfirmButtons: {
+    body: 'Bu adres dogru mu?',
+    buttons: [
+      { id: 'address_confirm', title: 'Evet, Dogru' },
+      { id: 'address_retry', title: 'Hayir, Degistir' },
+    ],
   },
 
   addressRetry:
@@ -312,12 +317,22 @@ export const TEMPLATES = {
   newAddressRowTitle: 'Yeni Adres',
   newAddressRowDescription: 'Yeni konum gondererek adres girin',
 
-  askSaveAddress:
-    'Bu adresi kaydetmek ister misiniz?\n' +
-    '✅ _"evet"_ - Kaydet\n' +
-    '❌ _"hayir"_ - Kaydetme',
+  askSaveAddressButtons: {
+    body: 'Bu adresi kaydetmek ister misiniz?',
+    buttons: [
+      { id: 'save_address_yes', title: 'Evet, Kaydet' },
+      { id: 'save_address_no', title: 'Hayir' },
+    ],
+  },
 
-  askAddressName: 'Bu adrese bir isim verin (ornek: _Ev_, _Is_, _Annemin Evi_):',
+  askAddressNameButtons: {
+    body: 'Bu adrese bir isim verin:',
+    buttons: [
+      { id: 'addr_name_ev', title: 'Ev' },
+      { id: 'addr_name_is', title: 'Is' },
+      { id: 'addr_name_diger', title: 'Diger' },
+    ],
+  },
 
   addressSaved(name: string): string {
     return `✅ Adres *"${name}"* olarak kaydedildi.`;
