@@ -395,22 +395,23 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         @if (activeTab() === 'synonyms') {
           <div class="content-card">
             <div class="card-header">
-              <h2>Synonyms</h2>
-              @if (selectedVersion() && !selectedVersion()!.publishedAt) {
+              <h2>Esanlamlilar</h2>
+              @if (selectedVersion()) {
                 <button class="btn-primary" (click)="showSynonymForm.set(true)">
-                  <span>+</span> Add Synonym
+                  <span>+</span> Esanlamli Ekle
                 </button>
               }
             </div>
             <div class="card-content">
               @if (!selectedVersion()) {
                 <div class="empty-state">
-                  <p>Select a version to view synonyms.</p>
+                  <p>Esanlamlilari goruntulemek icin bir versiyon secin.</p>
                 </div>
               } @else if (synonyms().length === 0) {
                 <div class="empty-state">
                   <app-icon name="type" [size]="48" class="empty-icon"/>
-                  <p>No synonyms in this version yet.</p>
+                  <p>Bu versiyonda henuz esanlamli eklenmemis.</p>
+                  <p class="text-muted" style="margin-top: 8px; font-size: 13px;">Musterilerin kullandigi kisa isimleri ekleyin. Ornek: "kola" → "Coca Cola Sise"</p>
                 </div>
               } @else {
                 <div class="synonyms-list">
@@ -419,12 +420,10 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                       <span class="synonym-phrase">"{{ syn.phrase }}"</span>
                       <app-icon name="arrow-right" [size]="14" class="synonym-arrow"/>
                       <span class="synonym-target">
-                        {{ syn.itemName || syn.optionName || 'Unknown' }}
+                        {{ syn.itemName || syn.optionName || 'Bilinmiyor' }}
                       </span>
-                      <span class="synonym-weight text-muted">Weight: {{ syn.weight }}</span>
-                      @if (!selectedVersion()!.publishedAt) {
-                        <button class="btn-icon small danger" (click)="deleteSynonym(syn)"><app-icon name="x" [size]="16"/></button>
-                      }
+                      <span class="synonym-weight text-muted">Agirlik: {{ syn.weight }}</span>
+                      <button class="btn-icon small danger" (click)="deleteSynonym(syn)"><app-icon name="x" [size]="16"/></button>
                     </div>
                   }
                 </div>
@@ -437,30 +436,30 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
             <div class="modal-overlay" (click)="closeSynonymForm()">
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
-                  <h3>Add Synonym</h3>
+                  <h3>Esanlamli Ekle</h3>
                   <button class="btn-icon" (click)="closeSynonymForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveSynonym()">
                   <div class="form-group">
-                    <label>Phrase</label>
-                    <input type="text" [(ngModel)]="synonymForm.phrase" name="phrase" required />
+                    <label>Musterinin kullandigi ifade</label>
+                    <input type="text" [(ngModel)]="synonymForm.phrase" name="phrase" required placeholder="ornek: kola, su, cips" />
                   </div>
                   <div class="form-group">
-                    <label>Maps To Item</label>
+                    <label>Eslestigi menu urunu</label>
                     <select [(ngModel)]="synonymForm.mapsToItemId" name="mapsToItemId">
-                      <option [ngValue]="undefined">-- Select Item --</option>
+                      <option [ngValue]="undefined">-- Urun Secin --</option>
                       @for (item of items(); track item.id) {
                         <option [value]="item.id">{{ item.name }}</option>
                       }
                     </select>
                   </div>
                   <div class="form-group">
-                    <label>Weight</label>
+                    <label>Agirlik (oncelik)</label>
                     <input type="number" [(ngModel)]="synonymForm.weight" name="weight" min="1" />
                   </div>
                   <div class="modal-actions">
-                    <button type="button" class="btn-secondary" (click)="closeSynonymForm()">Cancel</button>
-                    <button type="submit" class="btn-primary">Save</button>
+                    <button type="button" class="btn-secondary" (click)="closeSynonymForm()">Iptal</button>
+                    <button type="submit" class="btn-primary">Kaydet</button>
                   </div>
                 </form>
               </div>
@@ -1151,7 +1150,7 @@ export class MenuComponent implements OnInit {
     { id: 'versions' as Tab, label: 'Versions', icon: 'clipboard' },
     { id: 'items' as Tab, label: 'Items', icon: 'utensils' },
     { id: 'options' as Tab, label: 'Options', icon: 'settings' },
-    { id: 'synonyms' as Tab, label: 'Synonyms', icon: 'type' },
+    { id: 'synonyms' as Tab, label: 'Esanlamlilar', icon: 'type' },
   ];
 
   ngOnInit(): void {
@@ -1445,7 +1444,7 @@ export class MenuComponent implements OnInit {
   }
 
   deleteSynonym(synonym: MenuSynonymDto): void {
-    if (!confirm(`Delete synonym "${synonym.phrase}"?`)) return;
+    if (!confirm(`"${synonym.phrase}" esanlamlisini silmek istediginize emin misiniz?`)) return;
 
     const versionId = this.selectedVersionId();
     if (!versionId) return;
