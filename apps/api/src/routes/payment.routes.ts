@@ -29,20 +29,24 @@ router.post(
       // Process payment result
       const result = await orderPaymentService.handlePaymentCallback(token);
 
-      // Trigger conversation flow update
-      await conversationFlowService.handlePaymentCompleted(
-        result.tenantId,
-        result.conversationId,
-        result.orderId,
-        result.success,
-      );
+      // Only trigger conversation flow if this is a NEW callback (not a duplicate)
+      if (!result.alreadyProcessed) {
+        await conversationFlowService.handlePaymentCompleted(
+          result.tenantId,
+          result.conversationId,
+          result.orderId,
+          result.success,
+        );
+      } else {
+        logger.info({ token: token.substring(0, 20) + '...' }, 'Skipping duplicate callback — already processed');
+      }
 
       // Return HTML page for customer (iyzico redirects browser here)
       const html = result.success
         ? `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Odeme Basarili</title></head>
            <body style="font-family:sans-serif;text-align:center;padding:50px">
            <h1>✅ Odemeniz Basariyla Alindi!</h1>
-           <p>WhatsApp'a donerek siparisinizia takip edebilirsiniz.</p>
+           <p>WhatsApp'a donerek siparisinizi takip edebilirsiniz.</p>
            </body></html>`
         : `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Odeme Basarisiz</title></head>
            <body style="font-family:sans-serif;text-align:center;padding:50px">

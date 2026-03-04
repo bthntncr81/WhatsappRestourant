@@ -130,6 +130,7 @@ export class OrderPaymentService {
     tenantId: string;
     conversationId: string;
     paymentId?: string;
+    alreadyProcessed?: boolean;
   }> {
     // Find payment by token
     const payment = await prisma.orderPayment.findFirst({
@@ -139,6 +140,22 @@ export class OrderPaymentService {
     if (!payment) {
       logger.error({ token }, 'Payment not found for callback token');
       throw new Error('Payment not found');
+    }
+
+    // Idempotency guard: skip if already processed
+    if (payment.status === 'SUCCESS' || payment.status === 'FAILED') {
+      logger.info(
+        { paymentId: payment.id, orderId: payment.orderId, status: payment.status },
+        'Payment callback already processed — skipping (idempotent)',
+      );
+      return {
+        success: payment.status === 'SUCCESS',
+        orderId: payment.orderId,
+        tenantId: payment.tenantId,
+        conversationId: payment.conversationId,
+        paymentId: payment.iyzicoPaymentId || undefined,
+        alreadyProcessed: true,
+      };
     }
 
     // Retrieve result from iyzico
