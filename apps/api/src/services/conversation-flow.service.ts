@@ -615,20 +615,88 @@ export class ConversationFlowService {
 
     // "X iptal" gibi urun cikarma ifadelerini NLU'ya gonder
     if (!this.isFullCancelIntent(text) && this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+      // Save order state before NLU processing (in case NLU incorrectly removes all items)
+      const orderBefore = await this.getActiveOrder(ctx);
+      const itemCountBefore = orderBefore?.items?.length || 0;
+      const savedItems = orderBefore?.items?.map((item: any) => ({
+        menuItemId: item.menuItemId,
+        menuItemName: item.menuItemName,
+        qty: item.qty,
+        unitPrice: item.unitPrice,
+        optionsJson: item.optionsJson,
+        extrasJson: item.extrasJson,
+        notes: item.notes,
+      })) || [];
+
       // Pass to NLU for item removal, then show updated summary
       const result = await nluOrchestratorService.processMessage(
         tenantId, conversationId, message.id, text,
       );
-      if (result.confirmationMessage) {
-        await this.sendText(ctx, result.confirmationMessage);
-      }
+
       const order = await this.getActiveOrder(ctx);
       if (order && order.items.length > 0) {
+        // Item successfully removed, show updated summary
+        if (result.confirmationMessage) {
+          await this.sendText(ctx, result.confirmationMessage);
+        }
         const summary = this.buildOrderSummary(order);
         await this.sendOrderConfirmButtons(ctx, summary);
         return 'ORDER_REVIEW';
       }
-      // All items removed
+
+      // All items removed — check if this was intended
+      if (itemCountBefore > 1) {
+        // NLU incorrectly removed all items when user only wanted partial removal
+        // Restore the draft order
+        logger.warn(
+          { tenantId, conversationId, text, itemCountBefore },
+          'NLU removed all items during partial removal request — restoring order'
+        );
+
+        // Re-create the draft order with saved items
+        const totalPrice = savedItems.reduce(
+          (sum: number, item: any) => sum + Number(item.unitPrice) * item.qty, 0
+        );
+        const restoredOrder = await prisma.order.create({
+          data: {
+            tenantId,
+            conversationId,
+            customerPhone: conversation.customerPhone,
+            status: 'DRAFT',
+            totalPrice,
+            notes: orderBefore?.notes || null,
+            items: {
+              create: savedItems.map((item: any, idx: number) => ({
+                tenantId,
+                menuItemId: item.menuItemId,
+                menuItemName: item.menuItemName,
+                qty: item.qty,
+                unitPrice: item.unitPrice,
+                optionsJson: item.optionsJson,
+                extrasJson: item.extrasJson,
+                notes: item.notes,
+                sortOrder: idx,
+              })),
+            },
+          },
+          include: { items: true },
+        });
+
+        // Update conversation to point to restored order
+        await inboxService.updateConversationPhase(
+          tenantId, conversationId, 'ORDER_REVIEW', restoredOrder.id,
+        );
+
+        await this.sendText(ctx, 'Hangi urunu siparisinizden cikaralim? Lutfen urun adini belirtin.');
+        const summary = this.buildOrderSummary(restoredOrder);
+        await this.sendOrderConfirmButtons(ctx, summary);
+        return 'ORDER_REVIEW';
+      }
+
+      // Single item order — removing it is legitimate full cancel
+      if (result.confirmationMessage) {
+        await this.sendText(ctx, result.confirmationMessage);
+      }
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
     }
@@ -2271,19 +2339,41 @@ export class ConversationFlowService {
   /**
    * Checks if user text is a FULL order cancellation intent vs item-level removal.
    * "iptal", "siparis iptal", "siparisi iptal et", "vazgec" → full cancel
-   * "salata iptal", "kolayi sil", "1 ayrani cikar" → item removal (NOT full cancel)
+   * "salata iptal", "kolayi sil", "1 ayrani cikar", "bunun icinden X iptal" → item removal (NOT full cancel)
    */
   private isFullCancelIntent(text: string): boolean {
     const words = text.split(/\s+/).filter(Boolean);
-    // Pure cancel keywords (1-2 word phrases)
+
+    // Item-level indicators → definitely NOT a full cancel
+    // Words that imply the user is referring to a specific item within the order
+    const itemLevelIndicators = [
+      'bunun', 'sunun', 'su', 'bu',          // "this", "that" (pointing to specific items)
+      'icinden', 'icerisinden',               // "from within" (partial removal)
+      'olani', 'olan', 'olanini',             // "the one that is" (specifying item)
+      'tane', 'tanesini', 'tanesi',           // "piece" (specific qty)
+      'birini', 'birisini',                   // "one of them"
+    ];
+
+    if (itemLevelIndicators.some(indicator => words.includes(indicator))) {
+      return false;
+    }
+
+    // If text has 4+ words and contains a cancel keyword, it's likely item-level
+    // (full cancel phrases are short: "iptal", "siparis iptal", "siparisi iptal et")
+    if (words.length >= 4 && CANCEL_KEYWORDS.some(k => text.includes(k))) {
+      return false;
+    }
+
+    // Pure cancel keywords (1-3 word phrases)
     const fullCancelPhrases = [
       'iptal', 'vazgec', 'istemiyorum', 'temizle',
       'siparis iptal', 'siparisi iptal', 'siparisi iptal et',
       'siparis sil', 'hepsini iptal', 'hepsini sil',
       'tum siparisi iptal', 'her seyi iptal',
+      'iptal et', 'iptal edelim', 'iptal ediyorum',
     ];
 
-    // Check if text exactly matches or is very close to a full cancel phrase
+    // Check if text exactly matches a full cancel phrase
     if (fullCancelPhrases.includes(text)) return true;
 
     // If there's only one word and it's a cancel keyword, it's full cancel

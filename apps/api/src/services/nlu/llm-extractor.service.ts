@@ -67,6 +67,20 @@ DEGISIKLIK KOMUTLARI (action alani):
   → O urun icin action: "keep" kullan AMA notes alanini doldur
   → Miktari (qty) mevcut siparisinla ayni tut, artirma
 
+KISMI URUN CIKARMA (COK ONEMLI):
+- Musteri sadece BIR urunu cikarma istiyorsa (orn: "pesto olani iptal edelim", "kolalari cikar", "bunun icinden X iptal"):
+  → SADECE o urunu action: "remove" yap
+  → Diger TUM mevcut urunleri action: "keep" ile birak
+  → ASLA diger urunlere dokunma!
+  Ornek: Mevcut siparis: Pesto, Besamel, Kavurma, 3x Su
+  Musteri: "pesto olani iptal edelim"
+  → Pesto: action: "remove"
+  → Besamel: action: "keep"
+  → Kavurma: action: "keep"
+  → Su: action: "keep"
+- Sadece "iptal", "vazgec", "istemiyorum" gibi GENEL iptal ifadeleri → TUM urunleri "remove" yap
+- "X iptal", "X cikar", "bunun icinden X iptal" gibi SPESIFIK ifadeler → SADECE X'i "remove" yap
+
 SELAMLAMA vs SIPARIS:
 - "merhaba", "selam", "iyi gunler", "nasilsiniz" gibi selamlasmalar:
   Eger SADECE selamlama varsa → items: [], confidence: 0.1, clarificationQuestion: null
