@@ -276,13 +276,19 @@ export class MenuCandidateService {
       }
 
       if (!synonymMatched) {
-        // Check individual synonym words (including stem matching)
+        // Check individual synonym words (including stem + fuzzy matching)
         const synWords = normalizedPhrase.split(/\s+/).filter((w) => w.length >= 3);
         const synExactMatches = synWords.filter((sw) => userWords.some((uw) => uw === sw));
         const synStemMatches = synWords.filter((sw) =>
-          userWords.some((uw) => turkishNlpService.stem(uw) === turkishNlpService.stem(sw))
+          userWords.some((uw) => uw !== sw && turkishNlpService.stem(uw) === turkishNlpService.stem(sw))
         );
-        const totalSynMatches = new Set([...synExactMatches, ...synStemMatches]).size;
+        // Fuzzy word matching for typos/suffix variations (e.g. "batuninki" ≈ "batununki")
+        const synFuzzyMatches = synWords.filter((sw) =>
+          sw.length >= 3 && userWords.some(
+            (uw) => uw !== sw && stringSimilarity.compareTwoStrings(uw, sw) > 0.7
+          )
+        );
+        const totalSynMatches = new Set([...synExactMatches, ...synStemMatches, ...synFuzzyMatches]).size;
 
         if (totalSynMatches > 0) {
           totalScore += 0.4 * synonym.weight * (totalSynMatches / synWords.length);
