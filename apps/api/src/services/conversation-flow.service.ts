@@ -591,7 +591,7 @@ export class ConversationFlowService {
     }
 
     // Handle confirm button
-    if (buttonId === 'confirm_order' || this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+    if (buttonId === 'confirm_order' || this.isConfirmIntent(text)) {
       return this.handleOrderConfirm(ctx);
     }
 
@@ -2304,6 +2304,38 @@ export class ConversationFlowService {
 
   private matchesKeyword(text: string, keywords: string[]): boolean {
     return keywords.some((kw) => text.includes(kw));
+  }
+
+  /**
+   * Determine if user text is a genuine order confirmation intent.
+   * Prevents false positives from ambiguous words like "olsun" (let it be),
+   * "iyi" (good), "guzel" (nice) that appear in food notes/instructions
+   * like "tuzu az olsun" (let the salt be low).
+   */
+  private isConfirmIntent(text: string): boolean {
+    const words = text.split(/\s+/).filter(Boolean);
+
+    // 4+ words → never a simple confirmation (too long)
+    if (words.length >= 4) return false;
+
+    // Single word → any confirm keyword is valid
+    if (words.length === 1) {
+      return CONFIRM_KEYWORDS.includes(words[0]);
+    }
+
+    // 2-3 words → only match "strong" (unambiguous) confirm keywords
+    // Ambiguous keywords that can appear in food notes:
+    //   "olsun" → "tuzu az olsun" (let the salt be low)
+    //   "tamam"  → "tamam ama..." (ok but...)
+    //   "iyi"    → "iyi pismiş olsun" (well cooked)
+    //   "guzel"  → "guzel pisirin" (cook it nicely)
+    const strongConfirmKeywords = [
+      'evet', 'onayla', 'tamamla', 'onayliyorum',
+      'harika', 'super', 'aynen', 'kesinlikle',
+      'dogru', 'mukemmel', 'mükemmel',
+    ];
+
+    return strongConfirmKeywords.some((kw) => words.includes(kw));
   }
 
   /**
