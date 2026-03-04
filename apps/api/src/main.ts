@@ -22,6 +22,7 @@ import { broadcastRouter } from './routes/broadcast.routes';
 import { menuMediaRouter } from './routes/menu-media.routes';
 import { webhookRouter } from './routes/webhook.routes';
 import { integrationRouter } from './routes/integration.routes';
+import { dashboardRouter } from './routes/dashboard.routes';
 import prisma from './db/prisma';
 import redis from './db/redis';
 
@@ -78,6 +79,7 @@ app.use(`${config.server.apiPrefix}/broadcast`, broadcastRouter);
 app.use(`${config.server.apiPrefix}/menu-media`, menuMediaRouter);
 app.use(`${config.server.apiPrefix}/webhooks`, webhookRouter);
 app.use(`${config.server.apiPrefix}/integrations`, integrationRouter);
+app.use(`${config.server.apiPrefix}/dashboard`, dashboardRouter);
 
 // 404 Handler
 app.use((req, res) => {
