@@ -59,6 +59,14 @@ model Tenant {
   // Menu media (images/PDFs for WhatsApp)
   menuMedia           MenuMedia[]
 
+  // HighFive POS integration
+  highfiveApiUrl       String?  // https://api.highfivepps.com
+  highfiveApiKey       String?  // API key for HighFive external API
+  highfiveLocationId   String?  // HighFive location ID
+  highfiveWebhookSecret String? // HMAC verification for incoming webhooks
+  highfiveLastMenuSync DateTime? // Last menu sync timestamp
+  highfiveMenuHash     String?   // Last known menu hash
+
   @@map("tenants")
 }
 
@@ -123,18 +131,19 @@ model MenuVersion {
 }
 
 model MenuItem {
-  id          String  @id @default(cuid())
-  tenantId    String
-  versionId   String
-  name        String
-  description String?
-  basePrice   Decimal @db.Decimal(10, 2)
-  category    String
-  isActive    Boolean @default(true)
-  isReadyFood Boolean @default(false)
-  sortOrder   Int     @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String  @id @default(cuid())
+  tenantId        String
+  versionId       String
+  name            String
+  description     String?
+  basePrice       Decimal @db.Decimal(10, 2)
+  category        String
+  isActive        Boolean @default(true)
+  isReadyFood     Boolean @default(false)
+  sortOrder       Int     @default(0)
+  externalItemId  String? // HighFive menuItemId
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   version      MenuVersion             @relation(fields: [versionId], references: [id], onDelete: Cascade)
@@ -356,6 +365,7 @@ model Order {
   paymentMethod   String?     // CASH, CARD, ONLINE
   parentOrderId   String?     // Self-relation for addition orders
   rejectionReason String?     // Reason text when restaurant rejects
+  externalOrderId String?     // HighFive order ID
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   confirmedAt     DateTime?

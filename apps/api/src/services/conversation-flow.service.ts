@@ -2296,6 +2296,20 @@ export class ConversationFlowService {
     // Otherwise, likely item-level removal (e.g., "salata iptal", "1 kola sil")
     return false;
   }
+
+  // ==================== EXTERNAL INTEGRATION HELPERS ====================
+
+  /**
+   * Send a status notification to customer via WhatsApp
+   * Called by webhook route when HighFive sends status updates
+   */
+  async sendStatusNotification(
+    tenantId: string,
+    conversationId: string,
+    message: string,
+  ): Promise<void> {
+    await whatsappService.sendText(tenantId, conversationId, message);
+  }
 }
 
 export const conversationFlowService = new ConversationFlowService();
