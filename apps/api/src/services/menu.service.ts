@@ -505,7 +505,8 @@ export class MenuService {
     versionId: string,
     dto: CreateMenuSynonymDto
   ): Promise<MenuSynonymDto> {
-    await this.verifyVersionEditable(tenantId, versionId);
+    // Synonyms can be added to published versions too (NLU tuning)
+    const isPublished = await this.verifyVersionExists(tenantId, versionId);
 
     const synonym = await prisma.menuSynonym.create({
       data: {
@@ -521,6 +522,11 @@ export class MenuService {
         option: true,
       },
     });
+
+    // Invalidate cache so NLU picks up the new synonym immediately
+    if (isPublished) {
+      await cacheService.invalidateMenu(tenantId);
+    }
 
     return {
       id: synonym.id,
@@ -541,7 +547,7 @@ export class MenuService {
     synonymId: string,
     dto: UpdateMenuSynonymDto
   ): Promise<MenuSynonymDto> {
-    await this.verifyVersionEditable(tenantId, versionId);
+    const isPublished = await this.verifyVersionExists(tenantId, versionId);
 
     const existing = await prisma.menuSynonym.findFirst({
       where: { id: synonymId, tenantId, versionId },
@@ -565,6 +571,11 @@ export class MenuService {
       },
     });
 
+    // Invalidate cache so NLU picks up the updated synonym immediately
+    if (isPublished) {
+      await cacheService.invalidateMenu(tenantId);
+    }
+
     return {
       id: synonym.id,
       tenantId: synonym.tenantId,
@@ -579,7 +590,7 @@ export class MenuService {
   }
 
   async deleteSynonym(tenantId: string, versionId: string, synonymId: string): Promise<void> {
-    await this.verifyVersionEditable(tenantId, versionId);
+    const isPublished = await this.verifyVersionExists(tenantId, versionId);
 
     const existing = await prisma.menuSynonym.findFirst({
       where: { id: synonymId, tenantId, versionId },
@@ -590,6 +601,11 @@ export class MenuService {
     }
 
     await prisma.menuSynonym.delete({ where: { id: synonymId } });
+
+    // Invalidate cache so NLU stops using the deleted synonym
+    if (isPublished) {
+      await cacheService.invalidateMenu(tenantId);
+    }
   }
 
   // ==================== EXPORT ====================
@@ -859,6 +875,23 @@ export class MenuService {
     if (version.publishedAt) {
       throw new AppError(400, 'VERSION_PUBLISHED', 'Cannot edit a published version');
     }
+  }
+
+  /**
+   * Verify version exists (without checking published status).
+   * Used for synonym operations which are allowed on published versions.
+   * Returns whether the version is published (for cache invalidation).
+   */
+  private async verifyVersionExists(tenantId: string, versionId: string): Promise<boolean> {
+    const version = await prisma.menuVersion.findFirst({
+      where: { id: versionId, tenantId },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'VERSION_NOT_FOUND', 'Menu version not found');
+    }
+
+    return !!version.publishedAt;
   }
 
   private mapItemToDto(item: any): MenuItemDto {
