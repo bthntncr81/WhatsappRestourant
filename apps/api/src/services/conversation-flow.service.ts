@@ -2301,7 +2301,7 @@ export class ConversationFlowService {
 
   /**
    * Send a status notification to customer via WhatsApp
-   * Called by webhook route when HighFive sends status updates
+   * Called by webhook route when POS sends status updates
    */
   async sendStatusNotification(
     tenantId: string,

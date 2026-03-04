@@ -4,7 +4,7 @@ import { menuService } from './menu.service';
 
 const logger = createLogger();
 
-interface HighFiveMenuItem {
+interface PosMenuItem {
   id: string;
   categoryId: string;
   name: string;
@@ -16,16 +16,16 @@ interface HighFiveMenuItem {
   modifiers: { id: string; name: string; price: number }[];
 }
 
-interface HighFiveCategory {
+interface PosCategory {
   id: string;
   name: string;
   icon: string | null;
   sortOrder: number;
 }
 
-interface HighFiveMenuResponse {
-  categories: HighFiveCategory[];
-  items: HighFiveMenuItem[];
+interface PosMenuResponse {
+  categories: PosCategory[];
+  items: PosMenuItem[];
   syncedAt: string;
   totalItems: number;
   totalCategories: number;
@@ -39,26 +39,26 @@ interface MenuSyncResult {
   categoriesFound: number;
 }
 
-export class HighFiveIntegrationService {
+export class PosIntegrationService {
   /**
-   * Pull menu from HighFive and sync to WhatRes
+   * Pull menu from POS and sync to WhatRes
    */
   async pullMenu(tenantId: string): Promise<MenuSyncResult> {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
     });
 
-    if (!tenant?.highfiveApiUrl || !tenant?.highfiveApiKey) {
-      throw new Error('HighFive API ayarları yapılandırılmamış');
+    if (!tenant?.posApiUrl || !tenant?.posApiKey) {
+      throw new Error('POS API ayarları yapılandırılmamış');
     }
 
-    const apiUrl = tenant.highfiveApiUrl.replace(/\/$/, '');
-    const locationParam = tenant.highfiveLocationId ? `?locationId=${tenant.highfiveLocationId}` : '';
+    const apiUrl = tenant.posApiUrl.replace(/\/$/, '');
+    const locationParam = tenant.posLocationId ? `?locationId=${tenant.posLocationId}` : '';
 
-    // Fetch menu from HighFive
+    // Fetch menu from POS
     const response = await fetch(`${apiUrl}/api/external/menu${locationParam}`, {
       headers: {
-        'X-API-Key': tenant.highfiveApiKey,
+        'X-API-Key': tenant.posApiKey,
         'Content-Type': 'application/json',
       },
       signal: AbortSignal.timeout(30000),
@@ -66,14 +66,14 @@ export class HighFiveIntegrationService {
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`HighFive menü çekme hatası: ${response.status} - ${error}`);
+      throw new Error(`POS menü çekme hatası: ${response.status} - ${error}`);
     }
 
-    const menuData: HighFiveMenuResponse = await response.json();
+    const menuData: PosMenuResponse = await response.json();
 
     logger.info(
       { tenantId, categories: menuData.totalCategories, items: menuData.totalItems },
-      'HighFive menü verisi alındı',
+      'POS menü verisi alındı',
     );
 
     // Create new WhatRes menu version
@@ -96,34 +96,34 @@ export class HighFiveIntegrationService {
 
     // Create items for each category
     for (const [categoryName, items] of categoryMap.entries()) {
-      for (const hfItem of items) {
+      for (const posItem of items) {
         // Create menu item
         const createdItem = await prisma.menuItem.create({
           data: {
             tenantId,
             versionId: version.id,
-            name: hfItem.name,
-            description: hfItem.description,
-            basePrice: hfItem.price,
+            name: posItem.name,
+            description: posItem.description,
+            basePrice: posItem.price,
             category: categoryName,
-            isActive: hfItem.available,
-            externalItemId: hfItem.id,
+            isActive: posItem.available,
+            externalItemId: posItem.id,
             sortOrder: itemsCreated,
           },
         });
         itemsCreated++;
 
         // Create modifiers as option group + options
-        if (hfItem.modifiers && hfItem.modifiers.length > 0) {
+        if (posItem.modifiers && posItem.modifiers.length > 0) {
           const group = await prisma.menuOptionGroup.create({
             data: {
               tenantId,
               versionId: version.id,
-              name: `${hfItem.name} Seçenekleri`,
+              name: `${posItem.name} Seçenekleri`,
               type: 'MULTI',
               required: false,
               minSelect: 0,
-              maxSelect: hfItem.modifiers.length,
+              maxSelect: posItem.modifiers.length,
             },
           });
           optionGroupsCreated++;
@@ -138,7 +138,7 @@ export class HighFiveIntegrationService {
           });
 
           // Create options
-          for (const mod of hfItem.modifiers) {
+          for (const mod of posItem.modifiers) {
             await prisma.menuOption.create({
               data: {
                 tenantId,
@@ -154,7 +154,7 @@ export class HighFiveIntegrationService {
         }
 
         // Auto-create synonyms for Turkish variations
-        const synonyms = this.generateSynonyms(hfItem.name);
+        const synonyms = this.generateSynonyms(posItem.name);
         for (const phrase of synonyms) {
           await prisma.menuSynonym.create({
             data: {
@@ -174,7 +174,7 @@ export class HighFiveIntegrationService {
 
     // Update last sync timestamp and hash
     const hashResponse = await fetch(`${apiUrl}/api/external/menu/hash`, {
-      headers: { 'X-API-Key': tenant.highfiveApiKey },
+      headers: { 'X-API-Key': tenant.posApiKey },
       signal: AbortSignal.timeout(10000),
     });
     const hashData = hashResponse.ok ? await hashResponse.json() : null;
@@ -182,14 +182,14 @@ export class HighFiveIntegrationService {
     await prisma.tenant.update({
       where: { id: tenantId },
       data: {
-        highfiveLastMenuSync: new Date(),
-        highfiveMenuHash: hashData?.hash || null,
+        posLastMenuSync: new Date(),
+        posMenuHash: hashData?.hash || null,
       },
     });
 
     logger.info(
       { tenantId, versionId: version.id, itemsCreated, optionGroupsCreated, optionsCreated },
-      'HighFive menü senkronizasyonu tamamlandı',
+      'POS menü senkronizasyonu tamamlandı',
     );
 
     return {
@@ -202,43 +202,43 @@ export class HighFiveIntegrationService {
   }
 
   /**
-   * Check if HighFive menu has changed since last sync
+   * Check if POS menu has changed since last sync
    */
   async checkMenuChanged(tenantId: string): Promise<boolean> {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
     });
 
-    if (!tenant?.highfiveApiUrl || !tenant?.highfiveApiKey) {
+    if (!tenant?.posApiUrl || !tenant?.posApiKey) {
       return false;
     }
 
     try {
-      const apiUrl = tenant.highfiveApiUrl.replace(/\/$/, '');
+      const apiUrl = tenant.posApiUrl.replace(/\/$/, '');
       const response = await fetch(`${apiUrl}/api/external/menu/hash`, {
-        headers: { 'X-API-Key': tenant.highfiveApiKey },
+        headers: { 'X-API-Key': tenant.posApiKey },
         signal: AbortSignal.timeout(10000),
       });
 
       if (!response.ok) return false;
 
       const data = await response.json();
-      return data.hash !== tenant.highfiveMenuHash;
+      return data.hash !== tenant.posMenuHash;
     } catch {
       return false;
     }
   }
 
   /**
-   * Push a WhatRes order to HighFive POS
+   * Push a WhatRes order to POS
    */
   async pushOrder(tenantId: string, orderId: string): Promise<void> {
     const tenant = await prisma.tenant.findUnique({
       where: { id: tenantId },
     });
 
-    if (!tenant?.highfiveApiUrl || !tenant?.highfiveApiKey) {
-      logger.warn({ tenantId }, 'HighFive entegrasyonu yapılandırılmamış, sipariş gönderilmiyor');
+    if (!tenant?.posApiUrl || !tenant?.posApiKey) {
+      logger.warn({ tenantId }, 'POS entegrasyonu yapılandırılmamış, sipariş gönderilmiyor');
       return;
     }
 
@@ -253,11 +253,11 @@ export class HighFiveIntegrationService {
 
     // Already pushed?
     if (order.externalOrderId) {
-      logger.info({ tenantId, orderId, externalOrderId: order.externalOrderId }, 'Sipariş zaten HighFive\'a gönderilmiş');
+      logger.info({ tenantId, orderId, externalOrderId: order.externalOrderId }, 'Sipariş zaten POS\'a gönderilmiş');
       return;
     }
 
-    // Map WhatRes items to HighFive format
+    // Map WhatRes items to POS format
     const items = [];
     for (const item of order.items) {
       // Find the menu item to get its externalItemId
@@ -301,7 +301,7 @@ export class HighFiveIntegrationService {
       return;
     }
 
-    const apiUrl = tenant.highfiveApiUrl.replace(/\/$/, '');
+    const apiUrl = tenant.posApiUrl.replace(/\/$/, '');
 
     const payload = {
       externalOrderId: order.id,
@@ -312,13 +312,13 @@ export class HighFiveIntegrationService {
       notes: order.notes || undefined,
       source: 'WHATSAPP',
       items,
-      locationId: tenant.highfiveLocationId || undefined,
+      locationId: tenant.posLocationId || undefined,
     };
 
     const response = await fetch(`${apiUrl}/api/external/orders`, {
       method: 'POST',
       headers: {
-        'X-API-Key': tenant.highfiveApiKey,
+        'X-API-Key': tenant.posApiKey,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -327,36 +327,34 @@ export class HighFiveIntegrationService {
 
     if (!response.ok) {
       const error = await response.text();
-      logger.error({ tenantId, orderId, status: response.status, error }, 'HighFive sipariş gönderme hatası');
-      throw new Error(`HighFive sipariş hatası: ${response.status} - ${error}`);
+      logger.error({ tenantId, orderId, status: response.status, error }, 'POS sipariş gönderme hatası');
+      throw new Error(`POS sipariş hatası: ${response.status} - ${error}`);
     }
 
     const result = await response.json();
 
-    // Save HighFive orderId
+    // Save POS orderId
     await prisma.order.update({
       where: { id: orderId },
       data: { externalOrderId: result.orderId },
     });
 
     logger.info(
-      { tenantId, orderId, highfiveOrderId: result.orderId, highfiveOrderNumber: result.orderNumber },
-      'Sipariş HighFive\'a başarıyla gönderildi',
+      { tenantId, orderId, posOrderId: result.orderId, posOrderNumber: result.orderNumber },
+      'Sipariş POS\'a başarıyla gönderildi',
     );
   }
 
   /**
-   * Handle order status update from HighFive webhook
+   * Handle order status update from POS webhook
    */
   async handleStatusUpdate(
     tenantId: string,
     externalOrderId: string,
     newStatus: string,
   ): Promise<{ orderId: string; conversationId: string; updatedStatus: string } | null> {
-    // Find WhatRes order by externalOrderId (which is the HighFive orderId)
-    // Wait - externalOrderId in WhatRes stores the HighFive orderId,
-    // but webhook sends the HighFive's order.externalOrderId which is WhatRes order.id
-    // So we search by order.id
+    // Find WhatRes order by externalOrderId (which is the POS orderId)
+    // or by order.id (POS sends back our externalOrderId which is WhatRes order.id)
     let order = await prisma.order.findFirst({
       where: { id: externalOrderId, tenantId },
     });
@@ -369,11 +367,11 @@ export class HighFiveIntegrationService {
     }
 
     if (!order) {
-      logger.warn({ tenantId, externalOrderId, newStatus }, 'HighFive webhook: Sipariş bulunamadı');
+      logger.warn({ tenantId, externalOrderId, newStatus }, 'POS webhook: Sipariş bulunamadı');
       return null;
     }
 
-    // Map HighFive status → WhatRes status
+    // Map POS status → WhatRes status
     const statusMap: Record<string, string> = {
       PENDING: 'PENDING_CONFIRMATION',
       CONFIRMED: 'CONFIRMED',
@@ -388,7 +386,7 @@ export class HighFiveIntegrationService {
 
     const whatresStatus = statusMap[newStatus.toUpperCase()];
     if (!whatresStatus) {
-      logger.warn({ tenantId, externalOrderId, newStatus }, 'Bilinmeyen HighFive status');
+      logger.warn({ tenantId, externalOrderId, newStatus }, 'Bilinmeyen POS status');
       return null;
     }
 
@@ -410,7 +408,7 @@ export class HighFiveIntegrationService {
 
     logger.info(
       { tenantId, orderId: order.id, from: currentStatus, to: whatresStatus },
-      'HighFive webhook: Sipariş durumu güncellendi',
+      'POS webhook: Sipariş durumu güncellendi',
     );
 
     return {
@@ -446,4 +444,4 @@ export class HighFiveIntegrationService {
   }
 }
 
-export const highfiveIntegrationService = new HighFiveIntegrationService();
+export const posIntegrationService = new PosIntegrationService();

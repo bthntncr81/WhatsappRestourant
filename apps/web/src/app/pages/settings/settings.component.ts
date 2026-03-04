@@ -8,6 +8,12 @@ import {
   WhatsAppTestConnectionDto,
 } from '../../services/whatsapp-config.service';
 import { MenuMediaService, MenuMediaDto } from '../../services/menu-media.service';
+import {
+  PosConfigService,
+  PosConfigDto,
+  PosTestConnectionDto as PosTestResult,
+  PosMenuSyncResultDto,
+} from '../../services/pos-config.service';
 import { IconComponent } from '../../shared/icon.component';
 
 @Component({
@@ -306,6 +312,105 @@ import { IconComponent } from '../../shared/icon.component';
           </div>
         </div>
 
+        <!-- POS Integration -->
+        <div class="settings-section">
+          <h2 class="section-title">POS Menu Entegrasyonu</h2>
+          <div class="settings-card">
+            <!-- Connection Status Banner -->
+            <div class="wa-status-banner" [ngClass]="posConfig()?.isConfigured ? 'connected' : 'disconnected'">
+              <span class="status-dot"></span>
+              <span class="status-text">{{ posConfig()?.isConfigured ? 'Bagli' : 'Bagli Degil' }}</span>
+              @if (posConfig()?.lastMenuSync) {
+                <span class="text-muted status-date">
+                  Son sync: {{ posConfig()!.lastMenuSync | date:'medium' }}
+                </span>
+              }
+            </div>
+
+            <!-- Webhook URL (shown only when config exists) -->
+            @if (posConfig()?.isConfigured) {
+              <div class="setting-item column">
+                <span class="setting-label">Webhook URL</span>
+                <span class="setting-description text-muted">
+                  POS sisteminizde bu URL'yi webhook olarak tanimlayabilirsiniz
+                </span>
+                <div class="copy-input">
+                  <input type="text" class="setting-input mono" [value]="posConfig()!.webhookUrl" readonly />
+                  <button class="btn-copy" (click)="copyToClipboard(posConfig()!.webhookUrl, 'posWebhook')">
+                    {{ copyFeedback() === 'posWebhook' ? 'Copied!' : 'Copy' }}
+                  </button>
+                </div>
+              </div>
+            }
+
+            <!-- POS Credentials Form -->
+            <form [formGroup]="posForm" (ngSubmit)="savePosConfig()">
+              <div class="setting-item column">
+                <span class="setting-label">API URL</span>
+                <span class="setting-description text-muted">
+                  POS sisteminizin API adresi
+                </span>
+                <input type="text" class="setting-input" formControlName="apiUrl"
+                       [placeholder]="posConfig()?.apiUrl || 'https://api.posmenunuz.com'" />
+              </div>
+              <div class="setting-item column">
+                <span class="setting-label">API Key</span>
+                <input type="password" class="setting-input" formControlName="apiKey"
+                       [placeholder]="posConfig()?.apiKey || 'API anahtarinizi girin'" />
+              </div>
+              <div class="setting-item column">
+                <span class="setting-label">Location ID <span class="text-muted">(opsiyonel)</span></span>
+                <input type="text" class="setting-input" formControlName="locationId"
+                       [placeholder]="posConfig()?.locationId || 'Birden fazla sube varsa giriniz'" />
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="setting-item action-row">
+                <div class="btn-group">
+                  <button type="submit" class="btn btn-primary" [disabled]="isPosSaving() || posForm.invalid">
+                    {{ isPosSaving() ? 'Kaydediliyor...' : 'Kaydet' }}
+                  </button>
+                  @if (posConfig()?.isConfigured) {
+                    <button type="button" class="btn btn-secondary" (click)="testPosConnection()" [disabled]="isPosTesting()">
+                      {{ isPosTesting() ? 'Test ediliyor...' : 'Baglantiyi Test Et' }}
+                    </button>
+                    <button type="button" class="btn btn-secondary" (click)="syncPosMenu()" [disabled]="isPosSyncing()">
+                      {{ isPosSyncing() ? 'Senkronize ediliyor...' : 'Menuyu Senkronize Et' }}
+                    </button>
+                  }
+                </div>
+              </div>
+            </form>
+
+            <!-- POS Test Result -->
+            @if (posTestResult()) {
+              <div class="test-result" [ngClass]="posTestResult()!.connected ? 'success' : 'error'">
+                <p class="test-message">{{ posTestResult()!.connected ? 'Baglanti basarili!' : 'Baglanti basarisiz' }}</p>
+                @if (posTestResult()!.lastUpdated) {
+                  <p class="test-detail">Son menu guncelleme: {{ posTestResult()!.lastUpdated | date:'medium' }}</p>
+                }
+              </div>
+            }
+
+            <!-- POS Sync Result -->
+            @if (posSyncResult()) {
+              <div class="test-result success">
+                <p class="test-message">{{ posSyncResult()!.message }}</p>
+                <p class="test-detail">
+                  {{ posSyncResult()!.categoriesFound }} kategori,
+                  {{ posSyncResult()!.itemsCreated }} urun,
+                  {{ posSyncResult()!.optionGroupsCreated }} opsiyon grubu
+                </p>
+              </div>
+            }
+
+            <!-- POS Error Message -->
+            @if (posError()) {
+              <div class="error-banner">{{ posError() }}</div>
+            }
+          </div>
+        </div>
+
         <!-- Menu Media Upload -->
         <div class="settings-section">
           <h2 class="section-title">Menu Gorselleri</h2>
@@ -574,6 +679,7 @@ export class SettingsComponent implements OnInit {
   private authService = inject(AuthService);
   private waConfigService = inject(WhatsAppConfigService);
   private menuMediaService = inject(MenuMediaService);
+  private posConfigService = inject(PosConfigService);
 
   isAdmin = this.authService.isAdmin;
 
@@ -585,6 +691,21 @@ export class SettingsComponent implements OnInit {
   errorMessage = signal<string | null>(null);
   copyFeedback = signal<string | null>(null);
   guideOpen = signal(false);
+
+  // POS Integration
+  posConfig = signal<PosConfigDto | null>(null);
+  isPosSaving = signal(false);
+  isPosTesting = signal(false);
+  isPosSyncing = signal(false);
+  posTestResult = signal<PosTestResult | null>(null);
+  posSyncResult = signal<PosMenuSyncResultDto | null>(null);
+  posError = signal<string | null>(null);
+
+  posForm = new FormGroup({
+    apiUrl: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    apiKey: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    locationId: new FormControl('', { nonNullable: true }),
+  });
 
   // Menu Media
   menuMedia = signal<MenuMediaDto[]>([]);
@@ -602,6 +723,7 @@ export class SettingsComponent implements OnInit {
   ngOnInit() {
     if (this.isAdmin()) {
       this.loadConfig();
+      this.loadPosConfig();
       this.loadMenuMedia();
     }
   }
@@ -710,6 +832,99 @@ export class SettingsComponent implements OnInit {
       case 'ERROR': return 'Error';
       default: return 'Not Connected';
     }
+  }
+
+  // ==================== POS Integration ====================
+
+  loadPosConfig() {
+    this.posConfigService.getConfig().subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.posConfig.set(res.data);
+          if (res.data.apiUrl) {
+            this.posForm.patchValue({
+              apiUrl: res.data.apiUrl,
+              apiKey: '',
+              locationId: res.data.locationId || '',
+            });
+          }
+        }
+      },
+      error: () => {
+        this.posError.set('POS ayarlari yuklenemedi');
+      },
+    });
+  }
+
+  savePosConfig() {
+    if (this.posForm.invalid) return;
+
+    this.isPosSaving.set(true);
+    this.posError.set(null);
+    this.posTestResult.set(null);
+    this.posSyncResult.set(null);
+
+    const formValue = this.posForm.getRawValue();
+    this.posConfigService.saveConfig(formValue).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.loadPosConfig();
+          this.posForm.patchValue({ apiKey: '' });
+        } else {
+          this.posError.set(res.error?.message || 'Kaydetme basarisiz');
+        }
+        this.isPosSaving.set(false);
+      },
+      error: (err) => {
+        this.posError.set(err.error?.error?.message || 'Kaydetme basarisiz');
+        this.isPosSaving.set(false);
+      },
+    });
+  }
+
+  testPosConnection() {
+    this.isPosTesting.set(true);
+    this.posTestResult.set(null);
+    this.posError.set(null);
+    this.posSyncResult.set(null);
+
+    this.posConfigService.testConnection().subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.posTestResult.set(res.data);
+        } else {
+          this.posError.set(res.error?.message || 'Baglanti testi basarisiz');
+        }
+        this.isPosTesting.set(false);
+      },
+      error: (err) => {
+        this.posError.set(err.error?.error?.message || 'Baglanti testi basarisiz');
+        this.isPosTesting.set(false);
+      },
+    });
+  }
+
+  syncPosMenu() {
+    this.isPosSyncing.set(true);
+    this.posSyncResult.set(null);
+    this.posError.set(null);
+    this.posTestResult.set(null);
+
+    this.posConfigService.syncMenu().subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.posSyncResult.set(res.data);
+          this.loadPosConfig(); // Refresh last sync time
+        } else {
+          this.posError.set(res.error?.message || 'Senkronizasyon basarisiz');
+        }
+        this.isPosSyncing.set(false);
+      },
+      error: (err) => {
+        this.posError.set(err.error?.error?.message || 'Senkronizasyon basarisiz');
+        this.isPosSyncing.set(false);
+      },
+    });
   }
 
   // ==================== Menu Media ====================

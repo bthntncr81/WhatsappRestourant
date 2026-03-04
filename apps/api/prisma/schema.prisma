@@ -59,13 +59,13 @@ model Tenant {
   // Menu media (images/PDFs for WhatsApp)
   menuMedia           MenuMedia[]
 
-  // HighFive POS integration
-  highfiveApiUrl       String?  // https://api.highfivepps.com
-  highfiveApiKey       String?  // API key for HighFive external API
-  highfiveLocationId   String?  // HighFive location ID
-  highfiveWebhookSecret String? // HMAC verification for incoming webhooks
-  highfiveLastMenuSync DateTime? // Last menu sync timestamp
-  highfiveMenuHash     String?   // Last known menu hash
+  // POS integration (tenant-specific)
+  posApiUrl       String?  // e.g. https://api.posmenunuz.com
+  posApiKey       String?  // API key for POS external API
+  posLocationId   String?  // POS location ID
+  posWebhookSecret String? // HMAC verification for incoming webhooks
+  posLastMenuSync DateTime? // Last menu sync timestamp
+  posMenuHash     String?   // Last known menu hash
 
   @@map("tenants")
 }
@@ -141,7 +141,7 @@ model MenuItem {
   isActive        Boolean @default(true)
   isReadyFood     Boolean @default(false)
   sortOrder       Int     @default(0)
-  externalItemId  String? // HighFive menuItemId
+  externalItemId  String? // POS menuItemId
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -365,7 +365,7 @@ model Order {
   paymentMethod   String?     // CASH, CARD, ONLINE
   parentOrderId   String?     // Self-relation for addition orders
   rejectionReason String?     // Reason text when restaurant rejects
-  externalOrderId String?     // HighFive order ID
+  externalOrderId String?     // POS order ID
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   confirmedAt     DateTime?

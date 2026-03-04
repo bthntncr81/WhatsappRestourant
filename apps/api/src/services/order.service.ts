@@ -13,7 +13,7 @@ import { chatbotService } from './chatbot.service';
 import { whatsappService } from './whatsapp.service';
 import { TEMPLATES } from './message-templates';
 import { orderPaymentService } from './order-payment.service';
-import { highfiveIntegrationService } from './highfive-integration.service';
+import { posIntegrationService } from './pos-integration.service';
 import { inboxService } from './inbox.service';
 
 const logger = createLogger();
@@ -163,9 +163,9 @@ export class OrderService {
       'Order set to PENDING_CONFIRMATION',
     );
 
-    // Push order to HighFive POS if integration is configured (non-blocking)
-    highfiveIntegrationService.pushOrder(tenantId, orderId).catch((err) => {
-      logger.error({ tenantId, orderId, error: err.message }, 'HighFive pushOrder failed');
+    // Push order to POS if integration is configured (non-blocking)
+    posIntegrationService.pushOrder(tenantId, orderId).catch((err) => {
+      logger.error({ tenantId, orderId, error: err.message }, 'POS pushOrder failed');
     });
 
     return this.mapToDto(updatedOrder);

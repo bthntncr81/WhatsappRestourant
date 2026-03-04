@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ApiResponse } from '@whatres/shared';
 import { requireAuth } from '../middleware/auth.middleware';
-import { highfiveIntegrationService } from '../services/highfive-integration.service';
+import { posIntegrationService } from '../services/pos-integration.service';
 import prisma from '../db/prisma';
 import { createLogger } from '../logger';
 
@@ -9,37 +9,37 @@ const router = Router();
 const logger = createLogger();
 
 /**
- * GET /integrations/highfive
- * Get HighFive integration settings
+ * GET /integrations/pos
+ * Get POS integration settings for current tenant
  */
 router.get(
-  '/highfive',
+  '/pos',
   requireAuth,
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
       const tenant = await prisma.tenant.findUnique({
         where: { id: req.tenantId! },
         select: {
-          highfiveApiUrl: true,
-          highfiveApiKey: true,
-          highfiveLocationId: true,
-          highfiveWebhookSecret: true,
-          highfiveLastMenuSync: true,
-          highfiveMenuHash: true,
+          posApiUrl: true,
+          posApiKey: true,
+          posLocationId: true,
+          posWebhookSecret: true,
+          posLastMenuSync: true,
+          posMenuHash: true,
         },
       });
 
       res.json({
         success: true,
         data: {
-          apiUrl: tenant?.highfiveApiUrl || null,
-          apiKey: tenant?.highfiveApiKey ? '***' + tenant.highfiveApiKey.slice(-6) : null,
-          locationId: tenant?.highfiveLocationId || null,
-          webhookSecret: tenant?.highfiveWebhookSecret ? '***configured***' : null,
-          lastMenuSync: tenant?.highfiveLastMenuSync?.toISOString() || null,
-          menuHash: tenant?.highfiveMenuHash || null,
-          isConfigured: !!(tenant?.highfiveApiUrl && tenant?.highfiveApiKey),
-          webhookUrl: `${process.env.APP_BASE_URL || 'https://posfixmenu.com'}${process.env.API_PREFIX || '/api'}/webhooks/highfive/${req.tenantId}`,
+          apiUrl: tenant?.posApiUrl || null,
+          apiKey: tenant?.posApiKey ? '***' + tenant.posApiKey.slice(-6) : null,
+          locationId: tenant?.posLocationId || null,
+          webhookSecret: tenant?.posWebhookSecret ? '***configured***' : null,
+          lastMenuSync: tenant?.posLastMenuSync?.toISOString() || null,
+          menuHash: tenant?.posMenuHash || null,
+          isConfigured: !!(tenant?.posApiUrl && tenant?.posApiKey),
+          webhookUrl: `${process.env.APP_BASE_URL || 'https://posfixmenu.com'}${process.env.API_PREFIX || '/api'}/webhooks/pos/${req.tenantId}`,
         },
       });
     } catch (error) {
@@ -49,11 +49,11 @@ router.get(
 );
 
 /**
- * PUT /integrations/highfive
- * Update HighFive integration settings
+ * PUT /integrations/pos
+ * Update POS integration settings for current tenant
  */
 router.put(
-  '/highfive',
+  '/pos',
   requireAuth,
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
@@ -62,14 +62,14 @@ router.put(
       await prisma.tenant.update({
         where: { id: req.tenantId! },
         data: {
-          highfiveApiUrl: apiUrl || null,
-          highfiveApiKey: apiKey || null,
-          highfiveLocationId: locationId || null,
-          highfiveWebhookSecret: webhookSecret || null,
+          posApiUrl: apiUrl || null,
+          posApiKey: apiKey || null,
+          posLocationId: locationId || null,
+          posWebhookSecret: webhookSecret || null,
         },
       });
 
-      logger.info({ tenantId: req.tenantId }, 'HighFive entegrasyon ayarları güncellendi');
+      logger.info({ tenantId: req.tenantId }, 'POS entegrasyon ayarları güncellendi');
 
       res.json({ success: true, data: { message: 'Ayarlar kaydedildi' } });
     } catch (error) {
@@ -79,11 +79,11 @@ router.put(
 );
 
 /**
- * POST /integrations/highfive/test
- * Test HighFive connection
+ * POST /integrations/pos/test
+ * Test POS connection for current tenant
  */
 router.post(
-  '/highfive/test',
+  '/pos/test',
   requireAuth,
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
@@ -91,18 +91,18 @@ router.post(
         where: { id: req.tenantId! },
       });
 
-      if (!tenant?.highfiveApiUrl || !tenant?.highfiveApiKey) {
+      if (!tenant?.posApiUrl || !tenant?.posApiKey) {
         return res.json({
           success: false,
-          error: { code: 'NOT_CONFIGURED', message: 'HighFive API ayarları yapılandırılmamış' },
+          error: { code: 'NOT_CONFIGURED', message: 'POS API ayarları yapılandırılmamış' },
         });
       }
 
-      const apiUrl = tenant.highfiveApiUrl.replace(/\/$/, '');
+      const apiUrl = tenant.posApiUrl.replace(/\/$/, '');
 
       const response = await fetch(`${apiUrl}/api/external/menu/hash`, {
         headers: {
-          'X-API-Key': tenant.highfiveApiKey,
+          'X-API-Key': tenant.posApiKey,
         },
         signal: AbortSignal.timeout(10000),
       });
@@ -122,7 +122,7 @@ router.post(
           success: false,
           error: {
             code: 'CONNECTION_FAILED',
-            message: `HighFive API yanıt verdi ama hata döndü: ${response.status}`,
+            message: `POS API yanıt verdi ama hata döndü: ${response.status}`,
           },
         });
       }
@@ -131,7 +131,7 @@ router.post(
         success: false,
         error: {
           code: 'CONNECTION_ERROR',
-          message: `HighFive API'ye bağlanılamadı: ${error.message}`,
+          message: `POS API'ye bağlanılamadı: ${error.message}`,
         },
       });
     }
@@ -139,15 +139,15 @@ router.post(
 );
 
 /**
- * POST /integrations/highfive/sync-menu
- * Sync menu from HighFive
+ * POST /integrations/pos/sync-menu
+ * Sync menu from POS for current tenant
  */
 router.post(
-  '/highfive/sync-menu',
+  '/pos/sync-menu',
   requireAuth,
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
-      const result = await highfiveIntegrationService.pullMenu(req.tenantId!);
+      const result = await posIntegrationService.pullMenu(req.tenantId!);
 
       res.json({
         success: true,
@@ -167,15 +167,15 @@ router.post(
 );
 
 /**
- * GET /integrations/highfive/menu-changed
- * Check if HighFive menu has changed
+ * GET /integrations/pos/menu-changed
+ * Check if POS menu has changed since last sync
  */
 router.get(
-  '/highfive/menu-changed',
+  '/pos/menu-changed',
   requireAuth,
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
-      const changed = await highfiveIntegrationService.checkMenuChanged(req.tenantId!);
+      const changed = await posIntegrationService.checkMenuChanged(req.tenantId!);
       res.json({ success: true, data: { changed } });
     } catch (error) {
       next(error);
