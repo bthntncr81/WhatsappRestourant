@@ -349,6 +349,7 @@ export class MenuCandidateService {
   private normalizeText(text: string): string {
     return text
       .toLowerCase()
+      .replace(/ı/g, 'i')   // Turkish dotless ı → i (before NFD, since ı doesn't decompose)
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
       .replace(/[^a-z0-9\s]/g, ' ') // Remove special chars

@@ -42,9 +42,16 @@ const SLANG_MAP: Record<string, string[]> = {
   pzza: ['pizza'],
   pizz: ['pizza'],
 
-  // Kola variants
-  cola: ['kola'],
-  coke: ['kola'],
+  // Kola / Coca Cola variants (bidirectional)
+  kola: ['cola', 'coca cola'],
+  cola: ['kola', 'coca cola'],
+  coke: ['kola', 'coca cola'],
+  'coca cola': ['kola', 'cola'],
+
+  // Fanta / Sprite / common drink brands
+  fanta: ['fanta'],
+  sprite: ['sprite'],
+  soda: ['soda'],
 
   // İçecek variants
   icck: ['icecek'],
