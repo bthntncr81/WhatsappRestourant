@@ -411,6 +411,37 @@ import { IconComponent } from '../../shared/icon.component';
           </div>
         </div>
 
+        <!-- Gel Al İndirim Ayarı -->
+        <div class="settings-section">
+          <h2 class="section-title">Gel Al Indirimi</h2>
+          <div class="settings-card">
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Gel Al Indirim Orani (%)</span>
+                <span class="setting-description text-muted">
+                  Gel al siparislerinde uygulanacak indirim yuzdesi. 0 veya bos birakilirsa indirim uygulanmaz.
+                </span>
+              </div>
+              <div class="pickup-discount-input">
+                <input type="number" class="setting-input" min="0" max="100" step="1"
+                       [value]="pickupDiscountPercent()"
+                       (input)="onPickupDiscountChange($event)" />
+                <span class="input-suffix">%</span>
+              </div>
+            </div>
+            <div class="setting-item action-row">
+              <button class="btn btn-primary" (click)="savePickupDiscount()" [disabled]="isSavingPickupDiscount()">
+                {{ isSavingPickupDiscount() ? 'Kaydediliyor...' : 'Kaydet' }}
+              </button>
+            </div>
+            @if (pickupDiscountSaved()) {
+              <div class="test-result success">
+                <p class="test-message">Indirim orani kaydedildi!</p>
+              </div>
+            }
+          </div>
+        </div>
+
         <!-- Menu Media Upload -->
         <div class="settings-section">
           <h2 class="section-title">Menu Gorselleri</h2>
@@ -672,6 +703,19 @@ import { IconComponent } from '../../shared/icon.component';
       }
       .btn-danger-icon { color: #ef4444; &:hover { background: rgba(239, 68, 68, 0.1); } }
       .media-empty { padding: var(--spacing-xl); text-align: center; font-size: 0.875rem; }
+      .pickup-discount-input {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-xs);
+      }
+      .pickup-discount-input input {
+        width: 80px;
+        text-align: center;
+      }
+      .input-suffix {
+        font-weight: 600;
+        color: var(--color-text-secondary);
+      }
     `,
   ],
 })
@@ -707,6 +751,11 @@ export class SettingsComponent implements OnInit {
     locationId: new FormControl('', { nonNullable: true }),
   });
 
+  // Pickup Discount
+  pickupDiscountPercent = signal<number>(0);
+  isSavingPickupDiscount = signal(false);
+  pickupDiscountSaved = signal(false);
+
   // Menu Media
   menuMedia = signal<MenuMediaDto[]>([]);
   isUploadingMedia = signal(false);
@@ -724,6 +773,7 @@ export class SettingsComponent implements OnInit {
     if (this.isAdmin()) {
       this.loadConfig();
       this.loadPosConfig();
+      this.loadPickupDiscount();
       this.loadMenuMedia();
     }
   }
@@ -923,6 +973,40 @@ export class SettingsComponent implements OnInit {
       error: (err) => {
         this.posError.set(err.error?.error?.message || 'Senkronizasyon basarisiz');
         this.isPosSyncing.set(false);
+      },
+    });
+  }
+
+  // ==================== Pickup Discount ====================
+
+  loadPickupDiscount() {
+    this.posConfigService.getPickupDiscount().subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.pickupDiscountPercent.set(res.data.pickupDiscountPercent || 0);
+        }
+      },
+    });
+  }
+
+  onPickupDiscountChange(event: Event) {
+    const value = parseInt((event.target as HTMLInputElement).value) || 0;
+    this.pickupDiscountPercent.set(Math.max(0, Math.min(100, value)));
+  }
+
+  savePickupDiscount() {
+    this.isSavingPickupDiscount.set(true);
+    this.pickupDiscountSaved.set(false);
+    this.posConfigService.savePickupDiscount(this.pickupDiscountPercent()).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.pickupDiscountSaved.set(true);
+          setTimeout(() => this.pickupDiscountSaved.set(false), 3000);
+        }
+        this.isSavingPickupDiscount.set(false);
+      },
+      error: () => {
+        this.isSavingPickupDiscount.set(false);
       },
     });
   }

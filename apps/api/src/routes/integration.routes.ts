@@ -183,4 +183,54 @@ router.get(
   },
 );
 
+/**
+ * GET /integrations/pickup-discount
+ * Get pickup discount percent for current tenant
+ */
+router.get(
+  '/pickup-discount',
+  requireAuth,
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { pickupDiscountPercent: true },
+      });
+
+      res.json({
+        success: true,
+        data: { pickupDiscountPercent: tenant?.pickupDiscountPercent || 0 },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * PUT /integrations/pickup-discount
+ * Update pickup discount percent for current tenant
+ */
+router.put(
+  '/pickup-discount',
+  requireAuth,
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { pickupDiscountPercent } = req.body;
+      const percent = Math.max(0, Math.min(100, parseInt(pickupDiscountPercent) || 0));
+
+      await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data: { pickupDiscountPercent: percent || null },
+      });
+
+      logger.info({ tenantId: req.tenantId, pickupDiscountPercent: percent }, 'Gel al indirim oranı güncellendi');
+
+      res.json({ success: true, data: { pickupDiscountPercent: percent } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 export const integrationRouter = router;

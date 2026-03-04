@@ -70,6 +70,9 @@ model Tenant {
   posLastMenuSync DateTime? // Last menu sync timestamp
   posMenuHash     String?   // Last known menu hash
 
+  // Pickup discount
+  pickupDiscountPercent Int?  // Gel al indirim yüzdesi (orn: 10 = %10)
+
   @@map("tenants")
 }
 
@@ -256,6 +259,7 @@ enum ConversationPhase {
   ADDITION_PROMPT
   ORDER_COLLECTING
   ORDER_REVIEW
+  DELIVERY_TYPE_SELECTION
   LOCATION_REQUEST
   ADDRESS_SELECTION
   ADDRESS_COLLECTION
@@ -367,6 +371,9 @@ model Order {
   deliveryAddress String?
   paymentMethod   String?     // CASH, CARD, ONLINE
   parentOrderId   String?     // Self-relation for addition orders
+  deliveryType    String?     // 'PICKUP' | 'DELIVERY'
+  discountPercent Int?        // Gel al indirimi yüzdesi
+  discountAmount  Decimal?    @db.Decimal(10, 2) // İndirim tutarı
   rejectionReason String?     // Reason text when restaurant rejects
   externalOrderId String?     // POS order ID
   createdAt       DateTime    @default(now())

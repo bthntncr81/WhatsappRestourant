@@ -305,7 +305,7 @@ export class PosIntegrationService {
 
     const payload = {
       externalOrderId: order.id,
-      type: 'DELIVERY',
+      type: order.deliveryType === 'PICKUP' ? 'TAKEAWAY' : 'DELIVERY',
       customerName: order.customerName || undefined,
       customerPhone: order.customerPhone || undefined,
       customerAddress: order.deliveryAddress || undefined,
@@ -313,6 +313,7 @@ export class PosIntegrationService {
       source: 'WHATSAPP',
       items,
       locationId: tenant.posLocationId || undefined,
+      discount: order.discountAmount ? Number(order.discountAmount) : undefined,
     };
 
     const response = await fetch(`${apiUrl}/api/external/orders`, {

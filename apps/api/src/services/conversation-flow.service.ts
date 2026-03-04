@@ -151,6 +151,9 @@ export class ConversationFlowService {
         case 'ORDER_REVIEW':
           nextPhase = await this.handleOrderReview(ctx);
           break;
+        case 'DELIVERY_TYPE_SELECTION':
+          nextPhase = await this.handleDeliveryTypeSelection(ctx);
+          break;
         case 'LOCATION_REQUEST':
           nextPhase = await this.handleLocationRequest(ctx);
           break;
@@ -816,8 +819,8 @@ export class ConversationFlowService {
       logger.warn({ err }, 'Upsell check failed, continuing normal flow');
     }
 
-    // No upsell -> proceed to address/location
-    return this.proceedToAddressFlow(ctx);
+    // No upsell -> proceed to delivery type selection
+    return this.proceedToDeliveryTypeSelection(ctx);
   }
 
   /**
@@ -961,6 +964,122 @@ export class ConversationFlowService {
       await this.sendText(ctx, 'Bu urun su anda musait degil. Baska bir urun denemek ister misiniz?');
       return 'IDLE';
     }
+  }
+
+  /**
+   * Show delivery type selection buttons (Gel Al / Paket Servis)
+   */
+  private async proceedToDeliveryTypeSelection(ctx: FlowContext): Promise<ConversationPhase> {
+    await whatsappService.sendInteractiveButtons(
+      ctx.tenantId,
+      ctx.conversationId,
+      'Siparişinizi nasıl almak istersiniz?',
+      [
+        { id: 'delivery_type_pickup', title: 'Gel Al' },
+        { id: 'delivery_type_delivery', title: 'Paket Servis' },
+      ],
+    );
+    return 'DELIVERY_TYPE_SELECTION';
+  }
+
+  /**
+   * DELIVERY_TYPE_SELECTION: Customer chooses Gel Al (pickup) or Paket Servis (delivery)
+   */
+  private async handleDeliveryTypeSelection(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, message, payload } = ctx;
+    const text = normalizeTr(message.text || '');
+    const buttonId = payload.interactive?.buttonReply?.id;
+
+    const order = await this.getActiveOrder(ctx);
+    if (!order || order.items.length === 0) {
+      await this.sendText(ctx, TEMPLATES.orderEmpty);
+      return 'IDLE';
+    }
+
+    // Cancel
+    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+      await this.cancelActiveOrder(ctx);
+      await this.sendText(ctx, TEMPLATES.orderCancelled);
+      return 'IDLE';
+    }
+
+    const isPickup = buttonId === 'delivery_type_pickup' || this.isPickupIntent(text);
+    const isDelivery = buttonId === 'delivery_type_delivery' || this.isDeliveryIntent(text);
+
+    if (isPickup) {
+      // Gel Al selected
+      const updateData: any = { deliveryType: 'PICKUP' };
+
+      // Apply pickup discount if configured
+      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (tenant?.pickupDiscountPercent && tenant.pickupDiscountPercent > 0) {
+        const totalPrice = Number(order.totalPrice);
+        const discountAmount = Math.round(totalPrice * tenant.pickupDiscountPercent) / 100;
+        const newTotal = totalPrice - discountAmount;
+        updateData.discountPercent = tenant.pickupDiscountPercent;
+        updateData.discountAmount = discountAmount;
+        updateData.totalPrice = newTotal;
+
+        await prisma.order.update({ where: { id: order.id }, data: updateData });
+        await this.sendText(
+          ctx,
+          `Gel al secildi! %${tenant.pickupDiscountPercent} indirim uygulandı (${discountAmount.toFixed(2)} TL indirim). Yeni toplam: ${newTotal.toFixed(2)} TL`,
+        );
+      } else {
+        await prisma.order.update({ where: { id: order.id }, data: updateData });
+        await this.sendText(ctx, 'Gel al secildi!');
+      }
+
+      // Skip address flow — go directly to payment
+      await this.sendPaymentButtons(ctx);
+      return 'PAYMENT_METHOD_SELECTION';
+    }
+
+    if (isDelivery) {
+      // Paket Servis selected
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { deliveryType: 'DELIVERY' },
+      });
+      // Continue to address flow
+      return this.proceedToAddressFlow(ctx);
+    }
+
+    // Mid-flow addition: customer wants to add more items
+    if (text) {
+      const added = await this.tryMidFlowAddition(ctx, text);
+      if (added) {
+        return this.proceedToDeliveryTypeSelection(ctx);
+      }
+    }
+
+    // Could not understand — re-send buttons
+    await whatsappService.sendInteractiveButtons(
+      ctx.tenantId,
+      ctx.conversationId,
+      'Lutfen "Gel Al" veya "Paket Servis" seceneklerinden birini secin:',
+      [
+        { id: 'delivery_type_pickup', title: 'Gel Al' },
+        { id: 'delivery_type_delivery', title: 'Paket Servis' },
+      ],
+    );
+    return 'DELIVERY_TYPE_SELECTION';
+  }
+
+  /**
+   * Check if text indicates pickup intent
+   */
+  private isPickupIntent(text: string): boolean {
+    const pickupKeywords = ['gel al', 'gelal', 'gelip', 'kendim', 'yerinde', 'gel alayim', 'geliyorum', 'gelin al'];
+    return pickupKeywords.some((kw) => text.includes(kw));
+  }
+
+  /**
+   * Check if text indicates delivery intent
+   */
+  private isDeliveryIntent(text: string): boolean {
+    const deliveryKeywords = ['paket', 'adrese', 'eve', 'teslimat', 'getirin', 'gonderin', 'kurye'];
+    return deliveryKeywords.some((kw) => text.includes(kw));
   }
 
   private async proceedToAddressFlow(ctx: FlowContext): Promise<ConversationPhase> {

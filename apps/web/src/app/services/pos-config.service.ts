@@ -91,4 +91,19 @@ export class PosConfigService {
       this.headers
     );
   }
+
+  getPickupDiscount(): Observable<ApiResponse<{ pickupDiscountPercent: number }>> {
+    return this.http.get<ApiResponse<{ pickupDiscountPercent: number }>>(
+      `${environment.apiBaseUrl}/integrations/pickup-discount`,
+      this.headers
+    );
+  }
+
+  savePickupDiscount(percent: number): Observable<ApiResponse<{ pickupDiscountPercent: number }>> {
+    return this.http.put<ApiResponse<{ pickupDiscountPercent: number }>>(
+      `${environment.apiBaseUrl}/integrations/pickup-discount`,
+      { pickupDiscountPercent: percent },
+      this.headers
+    );
+  }
 }
