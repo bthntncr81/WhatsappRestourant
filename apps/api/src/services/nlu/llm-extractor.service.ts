@@ -103,6 +103,16 @@ KISA CEVAPLAR (BAGLAM):
   ve musteri kisa cevap verdiyse (orn: "tavuk", "et", "acili")
   → Bu cevabi onceki sorunun baglaminda degerlendir
 
+ONAY CEVAPLARI (COK ONEMLI):
+- Eger onceki mesajda asistan bir urun hakkinda bilgi veya onay sorusu sormussa
+  (orn: "Napolitan menumuzde Makarna olarak var. ... Coca Cola Zero Sise 1 adet dogru mu?")
+  ve musteri "evet", "aynen", "tamam", "dogru" gibi onay kelimesiyle cevap verdiyse:
+  → Onceki mesajda BAHSEDILEN urunleri onayla (action: "add")
+  → Musteri onceki mesajdaki urunleri tekrar etse bile (orn: "evet makarna ve zero sise aynen") YENI urun EKLEME
+  → Onceki mesajda belirtilen URUNLERI sec, musterin tekrar ettigi kategori/tur isimlerini ayri urun olarak EKLEME
+  → Ornek: Asistan "Napolitan menumuzde Makarna olarak var" dediyse ve musteri "evet makarna" diyorsa → sadece Napolitan ekle, ayrica "High Five Makarna" gibi baska bir urun EKLEME
+  → confidence: 0.9
+
 ZORUNLU OPSIYONLAR:
 - Eger bir urunun zorunlu opsiyon grubu varsa ve musteri belirtmediyse:
   → clarificationQuestion ile sor (orn: "Et Doner mi Tavuk Doner mi istersiniz?")

@@ -1567,6 +1567,10 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
+    // Check if pickup order for correct payment location text
+    const order = await this.getActiveOrder(ctx);
+    const isPickup = order?.deliveryType === 'PICKUP';
+
     // Record cash payment
     await orderPaymentService.recordCashPayment(tenantId, orderId, conversationId);
 
@@ -1575,7 +1579,14 @@ export class ConversationFlowService {
       paymentMethod: 'CASH',
     });
 
-    await this.sendText(ctx, TEMPLATES.cashConfirmed(pendingOrder.orderNumber || 0));
+    const locationText = isPickup ? 'Kasada nakit' : 'Kapida nakit';
+    await this.sendText(
+      ctx,
+      `✅ *Siparisiniz alindi!*\n\n` +
+      `📦 Siparis No: #${pendingOrder.orderNumber || 0}\n` +
+      `💵 Odeme: ${locationText}\n` +
+      `⏳ Restoran onayiniz bekleniyor...`,
+    );
     await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
     return 'ORDER_CONFIRMED';
   }
@@ -1589,6 +1600,10 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
+    // Check if pickup order for correct payment location text
+    const order = await this.getActiveOrder(ctx);
+    const isPickup = order?.deliveryType === 'PICKUP';
+
     // Record as cash-like payment (no online processing needed)
     await orderPaymentService.recordCashPayment(tenantId, orderId, conversationId);
 
@@ -1596,11 +1611,12 @@ export class ConversationFlowService {
       paymentMethod: 'CREDIT_CARD',
     });
 
+    const locationText = isPickup ? 'Kasada kredi karti' : 'Kapida kredi karti';
     await this.sendText(
       ctx,
       `✅ *Siparisiniz alindi!*\n\n` +
       `📦 Siparis No: #${pendingOrder.orderNumber || 0}\n` +
-      `💳 Odeme: Kapida kredi karti\n` +
+      `💳 Odeme: ${locationText}\n` +
       `⏳ Restoran onayiniz bekleniyor...`,
     );
     await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
@@ -2139,13 +2155,32 @@ export class ConversationFlowService {
   }
 
   private async sendPaymentButtons(ctx: FlowContext): Promise<void> {
-    const tmpl = TEMPLATES.paymentMethodButtons;
-    await whatsappService.sendInteractiveButtons(
-      ctx.tenantId,
-      ctx.conversationId,
-      tmpl.body,
-      tmpl.buttons,
-    );
+    // Check if this is a pickup order to adjust button labels
+    const order = await this.getActiveOrder(ctx);
+    const isPickup = order?.deliveryType === 'PICKUP';
+
+    if (isPickup) {
+      // Pickup: kasada (at the counter)
+      await whatsappService.sendInteractiveButtons(
+        ctx.tenantId,
+        ctx.conversationId,
+        'Odeme yontemini secin:',
+        [
+          { id: 'pay_cash', title: 'Nakit (kasada)' },
+          { id: 'pay_card_door', title: 'Kart (kasada)' },
+          { id: 'pay_card_online', title: 'Online Kredi Karti' },
+        ],
+      );
+    } else {
+      // Delivery: kapida (at the door)
+      const tmpl = TEMPLATES.paymentMethodButtons;
+      await whatsappService.sendInteractiveButtons(
+        ctx.tenantId,
+        ctx.conversationId,
+        tmpl.body,
+        tmpl.buttons,
+      );
+    }
   }
 
   private async saveAddressAndProceed(ctx: FlowContext, name: string): Promise<ConversationPhase> {
