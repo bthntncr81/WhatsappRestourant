@@ -368,11 +368,24 @@ export class MenuCandidateService {
       return cached;
     }
 
-    // Fallback to building from DB
-    const latestPublished = await prisma.menuVersion.findFirst({
-      where: { tenantId, publishedAt: { not: null } },
-      orderBy: { publishedAt: 'desc' },
+    // Fallback to building from DB - check active version first
+    const tenantConfig = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { activeMenuVersionId: true },
     });
+
+    let latestPublished = null;
+    if (tenantConfig?.activeMenuVersionId) {
+      latestPublished = await prisma.menuVersion.findFirst({
+        where: { id: tenantConfig.activeMenuVersionId, tenantId, publishedAt: { not: null } },
+      });
+    }
+    if (!latestPublished) {
+      latestPublished = await prisma.menuVersion.findFirst({
+        where: { tenantId, publishedAt: { not: null } },
+        orderBy: { publishedAt: 'desc' },
+      });
+    }
 
     if (!latestPublished) {
       return null;

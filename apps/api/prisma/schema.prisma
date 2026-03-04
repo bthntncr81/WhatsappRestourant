@@ -59,6 +59,9 @@ model Tenant {
   // Menu media (images/PDFs for WhatsApp)
   menuMedia           MenuMedia[]
 
+  // Active menu version (explicitly chosen by user)
+  activeMenuVersionId String? // Which menu version the chatbot uses
+
   // POS integration (tenant-specific)
   posApiUrl       String?  // e.g. https://api.posmenunuz.com
   posApiKey       String?  // API key for POS external API

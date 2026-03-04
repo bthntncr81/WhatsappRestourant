@@ -97,12 +97,8 @@ export class MenuService {
       },
     });
 
-    // Update cache with canonical export
-    const canonicalMenu = await this.exportVersion(tenantId, versionId);
-    await cacheService.setPublishedMenu(tenantId, canonicalMenu);
-
-    // Build embedding index in background (non-blocking)
-    embeddingService.buildIndex(tenantId, canonicalMenu).catch(() => {});
+    // Auto-set as active version
+    await this.setActiveVersion(tenantId, versionId);
 
     return {
       id: updated.id,
@@ -112,6 +108,46 @@ export class MenuService {
       publishedAt: updated.publishedAt?.toISOString() || null,
       itemCount: updated._count.items,
     };
+  }
+
+  /**
+   * Set a specific published version as the active version (used by chatbot)
+   */
+  async setActiveVersion(tenantId: string, versionId: string): Promise<void> {
+    const version = await prisma.menuVersion.findFirst({
+      where: { id: versionId, tenantId },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'VERSION_NOT_FOUND', 'Menu version not found');
+    }
+
+    if (!version.publishedAt) {
+      throw new AppError(400, 'NOT_PUBLISHED', 'Only published versions can be set as active');
+    }
+
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { activeMenuVersionId: versionId },
+    });
+
+    // Update cache with this version's canonical export
+    const canonicalMenu = await this.exportVersion(tenantId, versionId);
+    await cacheService.setPublishedMenu(tenantId, canonicalMenu);
+
+    // Build embedding index in background (non-blocking)
+    embeddingService.buildIndex(tenantId, canonicalMenu).catch(() => {});
+  }
+
+  /**
+   * Get the active menu version ID for a tenant
+   */
+  async getActiveVersionId(tenantId: string): Promise<string | null> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { activeMenuVersionId: true },
+    });
+    return tenant?.activeMenuVersionId || null;
   }
 
   async getVersion(tenantId: string, versionId: string): Promise<MenuVersionDto> {
@@ -664,18 +700,35 @@ export class MenuService {
       return cached;
     }
 
-    // Find latest published version
-    const latestPublished = await prisma.menuVersion.findFirst({
-      where: { tenantId, publishedAt: { not: null } },
-      orderBy: { publishedAt: 'desc' },
+    // Check if tenant has an explicitly set active version
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { activeMenuVersionId: true },
     });
 
-    if (!latestPublished) {
+    let activeVersion = null;
+
+    if (tenant?.activeMenuVersionId) {
+      // Use the explicitly set active version
+      activeVersion = await prisma.menuVersion.findFirst({
+        where: { id: tenant.activeMenuVersionId, tenantId, publishedAt: { not: null } },
+      });
+    }
+
+    if (!activeVersion) {
+      // Fallback: Find latest published version
+      activeVersion = await prisma.menuVersion.findFirst({
+        where: { tenantId, publishedAt: { not: null } },
+        orderBy: { publishedAt: 'desc' },
+      });
+    }
+
+    if (!activeVersion) {
       return null;
     }
 
     // Export and cache
-    const menu = await this.exportVersion(tenantId, latestPublished.id);
+    const menu = await this.exportVersion(tenantId, activeVersion.id);
     await cacheService.setPublishedMenu(tenantId, menu);
 
     // Build embedding index in background (non-blocking)

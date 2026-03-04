@@ -132,6 +132,11 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                             Yayınla
                           </button>
                         }
+                        @if (v.publishedAt && v.id !== activeVersionId()) {
+                          <button class="btn-sm btn-active" (click)="setActiveVersion(v)">
+                            Aktif Yap
+                          </button>
+                        }
                         <button class="btn-sm" (click)="selectVersionAndSwitch(v)">
                           Düzenle
                         </button>
@@ -953,6 +958,12 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           color: white;
           border: none;
         }
+
+        &.btn-active {
+          background: var(--color-accent);
+          color: white;
+          border: none;
+        }
       }
 
       .btn-icon {
@@ -1105,13 +1116,8 @@ export class MenuComponent implements OnInit {
     this.versions().find((v) => v.id === this.selectedVersionId())
   );
 
-  // The active version = latest published (the one WhatsApp chatbot uses)
-  activeVersionId = computed(() => {
-    const published = this.versions()
-      .filter((v) => v.publishedAt)
-      .sort((a, b) => new Date(b.publishedAt!).getTime() - new Date(a.publishedAt!).getTime());
-    return published.length > 0 ? published[0].id : null;
-  });
+  // The active version = explicitly set by user (the one WhatsApp chatbot uses)
+  activeVersionId = signal<string | null>(null);
 
   // Computed
   itemsByCategory = computed(() => {
@@ -1155,6 +1161,15 @@ export class MenuComponent implements OnInit {
   loadData(): void {
     this.loading.set(true);
     this.error.set(null);
+
+    // Load active version ID
+    this.menuService.getActiveVersionId().subscribe({
+      next: (response) => {
+        if (response.success && response.data) {
+          this.activeVersionId.set(response.data.activeVersionId);
+        }
+      },
+    });
 
     this.menuService.getVersions().subscribe({
       next: (response) => {
@@ -1239,10 +1254,27 @@ export class MenuComponent implements OnInit {
           this.versions.update((versions) =>
             versions.map((v) => (v.id === version.id ? response.data! : v))
           );
+          // Publishing auto-sets as active
+          this.activeVersionId.set(version.id);
         }
       },
       error: (err) => {
         alert(err.error?.error?.message || 'Failed to publish version');
+      },
+    });
+  }
+
+  setActiveVersion(version: MenuVersionDto): void {
+    if (!confirm(`Version ${version.version} aktif yapılsın mı? WhatsApp chatbot bu versiyonu kullanacak.`)) return;
+
+    this.menuService.setActiveVersion(version.id).subscribe({
+      next: (response) => {
+        if (response.success && response.data) {
+          this.activeVersionId.set(response.data.activeVersionId);
+        }
+      },
+      error: (err) => {
+        alert(err.error?.error?.message || 'Failed to set active version');
       },
     });
   }

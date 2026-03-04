@@ -172,6 +172,38 @@ router.post(
 );
 
 /**
+ * POST /menu/versions/:versionId/set-active
+ * Set a published version as the active version (the one chatbot uses)
+ */
+router.post(
+  '/versions/:versionId/set-active',
+  async (req: Request, res: Response<ApiResponse<{ activeVersionId: string }>>, next: NextFunction) => {
+    try {
+      await menuService.setActiveVersion(req.tenantId!, req.params.versionId);
+      res.json({ success: true, data: { activeVersionId: req.params.versionId } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /menu/active-version
+ * Get the currently active version ID
+ */
+router.get(
+  '/active-version',
+  async (req: Request, res: Response<ApiResponse<{ activeVersionId: string | null }>>, next: NextFunction) => {
+    try {
+      const activeVersionId = await menuService.getActiveVersionId(req.tenantId!);
+      res.json({ success: true, data: { activeVersionId } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
  * GET /menu/versions/:versionId/export
  */
 router.get(

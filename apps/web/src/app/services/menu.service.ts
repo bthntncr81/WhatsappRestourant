@@ -203,6 +203,21 @@ export class MenuService {
     );
   }
 
+  setActiveVersion(versionId: string): Observable<ApiResponse<{ activeVersionId: string }>> {
+    return this.http.post<ApiResponse<{ activeVersionId: string }>>(
+      `${environment.apiBaseUrl}/menu/versions/${versionId}/set-active`,
+      {},
+      this.headers
+    );
+  }
+
+  getActiveVersionId(): Observable<ApiResponse<{ activeVersionId: string | null }>> {
+    return this.http.get<ApiResponse<{ activeVersionId: string | null }>>(
+      `${environment.apiBaseUrl}/menu/active-version`,
+      this.headers
+    );
+  }
+
   importMenu(data: unknown): Observable<ApiResponse<MenuImportResultDto>> {
     return this.http.post<ApiResponse<MenuImportResultDto>>(
       `${environment.apiBaseUrl}/menu/import`,
