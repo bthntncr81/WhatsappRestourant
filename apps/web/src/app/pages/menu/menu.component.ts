@@ -62,7 +62,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           >
             @for (v of versions(); track v.id) {
               <option [value]="v.id">
-                v{{ v.version }} {{ v.publishedAt ? '(Published)' : '(Draft)' }}
+                v{{ v.version }} {{ v.id === activeVersionId() ? '(Aktif)' : v.publishedAt ? '(Yayınlandı)' : '(Taslak)' }}
               </option>
             }
           </select>
@@ -106,29 +106,34 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
               } @else {
                 <div class="versions-list">
                   @for (v of versions(); track v.id) {
-                    <div class="version-item" [class.published]="v.publishedAt">
+                    <div class="version-item" [class.published]="v.publishedAt" [class.active-version]="v.id === activeVersionId()">
                       <div class="version-info">
                         <span class="version-number">Version {{ v.version }}</span>
                         <span class="version-meta text-muted">
                           {{ v.itemCount || 0 }} items •
                           Created {{ v.createdAt | date: 'short' }}
+                          @if (v.publishedAt) {
+                            • Published {{ v.publishedAt | date: 'short' }}
+                          }
                         </span>
                       </div>
                       <div class="version-status">
-                        @if (v.publishedAt) {
-                          <span class="status-badge published">Published</span>
+                        @if (v.id === activeVersionId()) {
+                          <span class="status-badge active">Aktif</span>
+                        } @else if (v.publishedAt) {
+                          <span class="status-badge published-old">Yayınlandı</span>
                         } @else {
-                          <span class="status-badge draft">Draft</span>
+                          <span class="status-badge draft">Taslak</span>
                         }
                       </div>
                       <div class="version-actions">
                         @if (!v.publishedAt) {
                           <button class="btn-sm btn-success" (click)="publishVersion(v)">
-                            Publish
+                            Yayınla
                           </button>
                         }
                         <button class="btn-sm" (click)="selectVersionAndSwitch(v)">
-                          Edit
+                          Düzenle
                         </button>
                       </div>
                     </div>
@@ -622,6 +627,11 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         to { transform: rotate(360deg); }
       }
 
+      @keyframes pulse-active {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+
       .error-alert {
         display: flex;
         align-items: center;
@@ -652,6 +662,12 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         &.published {
           border-color: var(--color-accent-success);
         }
+
+        &.active-version {
+          border-color: var(--color-primary);
+          background: color-mix(in srgb, var(--color-primary) 5%, var(--color-bg-tertiary));
+          box-shadow: 0 0 0 1px var(--color-primary);
+        }
       }
 
       .version-info {
@@ -675,9 +691,16 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         font-size: 0.75rem;
         font-weight: 600;
 
-        &.published {
-          background: var(--color-accent-success);
+        &.active {
+          background: var(--color-primary);
           color: white;
+          animation: pulse-active 2s ease-in-out infinite;
+        }
+
+        &.published-old {
+          background: var(--color-bg-elevated);
+          color: var(--color-text-secondary);
+          border: 1px solid var(--color-border);
         }
 
         &.draft {
@@ -1081,6 +1104,14 @@ export class MenuComponent implements OnInit {
   selectedVersion = computed(() =>
     this.versions().find((v) => v.id === this.selectedVersionId())
   );
+
+  // The active version = latest published (the one WhatsApp chatbot uses)
+  activeVersionId = computed(() => {
+    const published = this.versions()
+      .filter((v) => v.publishedAt)
+      .sort((a, b) => new Date(b.publishedAt!).getTime() - new Date(a.publishedAt!).getTime());
+    return published.length > 0 ? published[0].id : null;
+  });
 
   // Computed
   itemsByCategory = computed(() => {
