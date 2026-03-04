@@ -522,7 +522,10 @@ export class NluOrchestratorService {
         const existingItem = existingByKey ||
           [...existingItemsMap.values()].find((v) => v.menuItemId === item.menuItemId);
         if (existingItem) {
-          if (item.notes) {
+          if (item.notes === '__CLEAR__') {
+            // Special marker: clear notes from this item
+            existingItem.notes = null;
+          } else if (item.notes) {
             existingItem.notes = existingItem.notes
               ? `${existingItem.notes}, ${item.notes}`
               : item.notes;
@@ -562,7 +565,11 @@ export class NluOrchestratorService {
         where: { id: existingDraft.id },
         data: {
           totalPrice,
-          ...(extraction.orderNotes ? { notes: extraction.orderNotes } : {}),
+          ...(extraction.orderNotes === '__CLEAR__'
+            ? { notes: null }
+            : extraction.orderNotes
+              ? { notes: extraction.orderNotes }
+              : {}),
           items: {
             create: finalItems.map((item) => ({
               menuItemId: item.menuItemId,

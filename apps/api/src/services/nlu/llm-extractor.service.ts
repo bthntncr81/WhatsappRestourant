@@ -59,13 +59,25 @@ YANINDA / EK ISTEKLER:
 
 DEGISIKLIK KOMUTLARI (action alani):
 - "ekle", "bir de ... istiyorum", "... da ekle" → action: "add"
-- "cikar", "kaldir", "istemiyorum", "iptal" → action: "remove"
+- "cikar", "kaldir", "istemiyorum", "iptal" → action: "remove" (URUN cikarma)
 - Mevcut sipariste degisiklik yoksa → action: "keep"
 - Yeni siparis (mevcut siparis yoksa) → tum itemler action: "add"
 - ONEMLI: Mevcut bir urune not/ozellik eklenmek isteniyorsa:
   Ornek: "tavuk burgerde sogan olmasin", "donere bol sos", "lahmacuna ekstra acili"
   → O urun icin action: "keep" kullan AMA notes alanini doldur
   → Miktari (qty) mevcut siparisinla ayni tut, artirma
+
+NOT KALDIRMA / SILME (COK ONEMLI):
+- Musteri bir urunun notunu kaldirmak/silmek istiyorsa:
+  Ornek: "pestodaki notu kaldir", "notu sil", "notu kaldir yanlis olmus", "X'in notunu kaldir"
+  → O urun icin action: "keep" kullan
+  → notes alanina "__CLEAR__" yaz (bu ozel deger notu temizler)
+  → Miktari (qty) mevcut siparisinla ayni tut
+  → Diger urunlere dokunma (action: "keep", notlarini koru)
+- DIKKAT: "notu kaldir" ile "urunu kaldir" farkli seyler!
+  "pestodaki notu kaldir" → Pesto'nun NOTUNU sil (action: "keep", notes: "__CLEAR__")
+  "pestoyu kaldir" → Pesto URUNUNU cikar (action: "remove")
+- Siparis geneli notunu kaldirmak icin: orderNotes alanina "__CLEAR__" yaz
 
 KISMI URUN CIKARMA (COK ONEMLI):
 - Musteri sadece BIR urunu cikarma istiyorsa (orn: "pesto olani iptal edelim", "kolalari cikar", "bunun icinden X iptal"):
