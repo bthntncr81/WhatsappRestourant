@@ -60,7 +60,7 @@ export function requireRole(allowedRoles: MemberRole[]) {
         throw new AppError(
           403,
           'INSUFFICIENT_PERMISSIONS',
-          `Required role: ${allowedRoles.join(' or ')}. Your role: ${req.user.role}`
+          'You do not have permission to perform this action'
         );
       }
 
@@ -80,8 +80,16 @@ export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
       const payload = authService.verifyToken(token);
+      const headerTenantId = req.headers['x-tenant-id'] as string;
+
+      // Verify tenant mismatch (same check as requireAuth)
+      if (headerTenantId && headerTenantId !== payload.tenantId) {
+        // Silently ignore mismatched auth — treat as unauthenticated
+        return next();
+      }
+
       req.user = payload;
-      req.tenantId = (req.headers['x-tenant-id'] as string) || payload.tenantId;
+      req.tenantId = headerTenantId || payload.tenantId;
     }
     next();
   } catch {

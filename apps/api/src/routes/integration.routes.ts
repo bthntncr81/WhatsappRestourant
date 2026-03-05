@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ApiResponse } from '@whatres/shared';
-import { requireAuth } from '../middleware/auth.middleware';
+import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { posIntegrationService } from '../services/pos-integration.service';
 import prisma from '../db/prisma';
 import { createLogger } from '../logger';
@@ -55,6 +55,7 @@ router.get(
 router.put(
   '/pos',
   requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
       const { apiUrl, apiKey, locationId, webhookSecret } = req.body;
@@ -85,6 +86,7 @@ router.put(
 router.post(
   '/pos/test',
   requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
       const tenant = await prisma.tenant.findUnique({
@@ -145,6 +147,7 @@ router.post(
 router.post(
   '/pos/sync-menu',
   requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
       const result = await posIntegrationService.pullMenu(req.tenantId!);
@@ -214,6 +217,7 @@ router.get(
 router.put(
   '/pickup-discount',
   requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
   async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
     try {
       const { pickupDiscountPercent } = req.body;

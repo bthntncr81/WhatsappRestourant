@@ -22,12 +22,23 @@ export function errorHandler(logger: Logger): ErrorRequestHandler {
     res: Response<ApiResponse>,
     _next: NextFunction
   ) => {
+    // Sanitize body before logging — redact sensitive fields
+    const sanitizedBody = req.body ? { ...req.body } : undefined;
+    if (sanitizedBody) {
+      const sensitiveFields = ['password', 'token', 'secret', 'apiKey', 'accessToken', 'creditCard'];
+      for (const field of sensitiveFields) {
+        if (field in sanitizedBody) {
+          sanitizedBody[field] = '[REDACTED]';
+        }
+      }
+    }
+
     logger.error(
       {
         err,
         method: req.method,
         path: req.path,
-        body: req.body,
+        body: sanitizedBody,
         query: req.query,
       },
       'Unhandled error'

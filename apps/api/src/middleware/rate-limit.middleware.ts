@@ -16,7 +16,7 @@ export const authRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  validate: false, // Disable all validation for development
+  validate: { trustProxy: false, xForwardedForHeader: false },
 });
 
 /**
@@ -34,6 +34,6 @@ export const apiRateLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  validate: false, // Disable all validation for development
+  validate: { trustProxy: false, xForwardedForHeader: false },
 });
 

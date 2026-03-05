@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/auth.middleware';
+import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import prisma from '../db/prisma';
 import { ApiResponse } from '@whatres/shared';
 
 const router = Router();
 
 router.use(requireAuth);
+router.use(requireRole(['OWNER', 'ADMIN']));
 
 /**
  * GET /api/dashboard/stats
@@ -206,7 +207,12 @@ router.get('/stats', async (req: Request, res: Response<ApiResponse<any>>) => {
   } catch (error: any) {
     res.status(500).json({
       success: false,
-      error: { code: 'DASHBOARD_ERROR', message: error.message },
+      error: {
+        code: 'DASHBOARD_ERROR',
+        message: process.env.NODE_ENV === 'production'
+          ? 'An unexpected error occurred'
+          : error.message,
+      },
     });
   }
 });

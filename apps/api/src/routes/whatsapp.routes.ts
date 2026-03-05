@@ -239,24 +239,27 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     const { tenantId } = req.params;
     try {
-      // Verify webhook signature if tenant has appSecret configured
+      // Verify webhook signature — mandatory when tenant has appSecret configured
       const signature = req.headers['x-hub-signature-256'] as string | undefined;
       const rawBody = (req as any).rawBody as Buffer | undefined;
+      const tenantConfig = await whatsappConfigService.getDecryptedConfig(tenantId);
 
-      if (signature) {
-        const tenantConfig = await whatsappConfigService.getDecryptedConfig(tenantId);
-        if (tenantConfig?.appSecret) {
-          const result = verifyMetaSignature(signature, rawBody, tenantConfig.appSecret);
-          if (result === false) {
-            logger.warn(
-              { tenantId, hasRawBody: !!rawBody, signaturePrefix: signature.substring(0, 20) },
-              'Webhook signature verification failed',
-            );
-            return res.status(403).json({ success: false, error: 'Invalid signature' });
-          }
+      if (tenantConfig?.appSecret) {
+        // Tenant has appSecret configured — signature verification is mandatory
+        if (!signature) {
+          logger.warn({ tenantId }, 'Webhook rejected: missing signature header');
+          return res.status(403).json({ success: false, error: 'Missing signature' });
         }
-        // If no appSecret configured, skip verification (tenant hasn't set it up yet)
+        const result = verifyMetaSignature(signature, rawBody, tenantConfig.appSecret);
+        if (result === false) {
+          logger.warn(
+            { tenantId, hasRawBody: !!rawBody, signaturePrefix: signature.substring(0, 20) },
+            'Webhook signature verification failed',
+          );
+          return res.status(403).json({ success: false, error: 'Invalid signature' });
+        }
       }
+      // If no appSecret configured, allow (tenant hasn't completed setup yet)
 
       logger.info(
         { tenantId, body: JSON.stringify(req.body).substring(0, 200) },

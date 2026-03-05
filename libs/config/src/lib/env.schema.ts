@@ -27,7 +27,10 @@ export const envSchema = z.object({
     .default('debug'),
 
   // JWT
-  JWT_SECRET: z.string().default('your-super-secret-jwt-key-change-in-production'),
+  JWT_SECRET: z
+    .string()
+    .min(32, 'JWT_SECRET must be at least 32 characters')
+    .default('your-super-secret-jwt-key-change-in-production'),
   JWT_EXPIRES_IN: z.string().default('7d'),
 
   // OpenAI

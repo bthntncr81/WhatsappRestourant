@@ -196,12 +196,15 @@ export class AuthService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (jwt.sign as any)(payload, this.config.jwt.secret, {
       expiresIn: this.config.jwt.expiresIn,
+      algorithm: 'HS256',
     });
   }
 
   verifyToken(token: string): JwtPayload {
     try {
-      return jwt.verify(token, this.config.jwt.secret) as JwtPayload;
+      return jwt.verify(token, this.config.jwt.secret, {
+        algorithms: ['HS256'],
+      }) as JwtPayload;
     } catch {
       throw new AppError(401, 'INVALID_TOKEN', 'Invalid or expired token');
     }

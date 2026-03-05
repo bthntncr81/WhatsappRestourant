@@ -42,6 +42,11 @@ router.post(
       }
 
       // Return HTML page for customer (iyzico redirects browser here)
+      // Security: Set CSP and X-Content-Type-Options headers for inline HTML
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
+
       const html = result.success
         ? `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Odeme Basarili</title></head>
            <body style="font-family:sans-serif;text-align:center;padding:50px">
@@ -57,6 +62,9 @@ router.post(
       res.status(200).send(html);
     } catch (error) {
       logger.error({ error }, 'iyzico callback processing failed');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('X-Frame-Options', 'DENY');
       res.status(200).send(
         `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Hata</title></head>
          <body style="font-family:sans-serif;text-align:center;padding:50px">

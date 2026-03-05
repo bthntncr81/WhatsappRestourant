@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import prisma from '../db/prisma';
 import { posIntegrationService } from '../services/pos-integration.service';
 import { conversationFlowService } from '../services/conversation-flow.service';
@@ -70,7 +70,13 @@ router.post(
           .update(body)
           .digest('hex');
 
-        if (signature !== expectedSignature) {
+        // Use timing-safe comparison to prevent timing attacks
+        const expectedBuf = Buffer.from(expectedSignature, 'hex');
+        const signatureBuf = Buffer.from(signature, 'hex');
+        if (
+          expectedBuf.length !== signatureBuf.length ||
+          !timingSafeEqual(expectedBuf, signatureBuf)
+        ) {
           logger.warn({ tenantId }, 'POS webhook: Geçersiz imza');
           return res.status(401).json({ success: false, error: 'Invalid signature' });
         }

@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import path from 'path';
 import { getConfig } from '@whatres/config';
 import { createLogger } from './logger';
@@ -31,6 +32,14 @@ const logger = createLogger();
 
 const app = express();
 
+// Trust proxy (required for rate limiting behind reverse proxy)
+app.set('trust proxy', 1);
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Allow inline styles for payment callback pages
+}));
+
 // Middleware - capture raw body for webhook signature verification
 app.use(
   express.json({
@@ -45,9 +54,17 @@ app.use(
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger(logger));
 
-// CORS
+// CORS — validate origin before reflecting
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', config.server.corsOrigin);
+  const origin = req.headers.origin;
+  const allowedOrigins = config.server.corsOrigin.split(',').map((o: string) => o.trim());
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  } else if (allowedOrigins.includes('*')) {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenant-ID');
   res.header('Access-Control-Expose-Headers', 'X-Tenant-ID');
@@ -82,12 +99,12 @@ app.use(`${config.server.apiPrefix}/integrations`, integrationRouter);
 app.use(`${config.server.apiPrefix}/dashboard`, dashboardRouter);
 
 // 404 Handler
-app.use((req, res) => {
+app.use((_req, res) => {
   res.status(404).json({
     success: false,
     error: {
       code: 'NOT_FOUND',
-      message: `Route ${req.method} ${req.path} not found`,
+      message: 'The requested resource was not found',
     },
   });
 });
