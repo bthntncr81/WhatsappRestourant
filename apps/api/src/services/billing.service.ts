@@ -24,6 +24,45 @@ const logger = createLogger();
 // Trial period in days
 const TRIAL_DAYS = 14;
 
+/**
+ * Resolve the iyzico pricing plan reference code for a given (plan, cycle)
+ * pair from environment variables. These correspond to pricing plans
+ * created in the PLATFORM iyzico account (Otorder'ın hesabı).
+ *
+ * Env vars:
+ *   IYZICO_STARTER_MONTHLY_REF
+ *   IYZICO_STARTER_ANNUAL_REF
+ *   IYZICO_PRO_MONTHLY_REF
+ *   IYZICO_PRO_ANNUAL_REF
+ *
+ * If an ANNUAL ref is not set, we log a warning and fall back to the MONTHLY
+ * ref so sandbox setups with only one pricing plan per tier continue to work.
+ * Returns null for free plans (TRIAL) — they have no iyzico ref.
+ */
+function getPlanIyzicoRef(
+  planKey: SubscriptionPlan,
+  billingCycle: BillingCycle,
+): string | null {
+  if (planKey === 'TRIAL') return null;
+
+  const envKey = `IYZICO_${planKey}_${billingCycle}_REF`;
+  let ref = process.env[envKey];
+
+  if (!ref && billingCycle === 'ANNUAL') {
+    // Fallback to monthly ref if annual isn't configured — sandbox scenario
+    const monthlyKey = `IYZICO_${planKey}_MONTHLY_REF`;
+    ref = process.env[monthlyKey];
+    if (ref) {
+      logger.warn(
+        { planKey, billingCycle, fallbackKey: monthlyKey },
+        'ANNUAL iyzico ref not set, falling back to MONTHLY ref — tenant will be billed on the MONTHLY pricing plan',
+      );
+    }
+  }
+
+  return ref || null;
+}
+
 export class BillingService {
   // ==================== PLANS ====================
 
@@ -34,7 +73,7 @@ export class BillingService {
   getPlan(planKey: SubscriptionPlan): PlanDefinition {
     const plan = PLAN_DEFINITIONS[planKey];
     if (!plan) {
-      throw new AppError(404, 'PLAN_NOT_FOUND', `Plan not found: ${planKey}`);
+      throw new AppError(404, 'PLAN_NOT_FOUND', `Plan bulunamadı: ${planKey}`);
     }
     return plan;
   }
@@ -112,8 +151,17 @@ export class BillingService {
   ): Promise<{ success: boolean; subscription?: SubscriptionDto; checkoutFormContent?: string; error?: string }> {
     const plan = this.getPlan(dto.planKey);
 
-    if (plan.isFree || !plan.iyzicoRefCode) {
-      throw new AppError(400, 'INVALID_PLAN', 'This plan does not support paid subscription');
+    if (plan.isFree) {
+      throw new AppError(400, 'INVALID_PLAN', 'Deneme planı ödeme gerektirmez');
+    }
+
+    const iyzicoPlanRef = getPlanIyzicoRef(dto.planKey, dto.billingCycle);
+    if (!iyzicoPlanRef) {
+      throw new AppError(
+        500,
+        'IYZICO_PLAN_NOT_CONFIGURED',
+        `${dto.planKey} planı için ${dto.billingCycle === 'MONTHLY' ? 'aylık' : 'yıllık'} iyzico pricing plan yapılandırılmamış. IYZICO_${dto.planKey}_${dto.billingCycle}_REF env değişkenini ayarlayın.`,
+      );
     }
 
     // Get tenant for customer reference
@@ -143,7 +191,7 @@ export class BillingService {
     try {
       // Initialize subscription via platform iyzico
       const result = await iyzicoService.initializeSubscription({
-        pricingPlanRefCode: plan.iyzicoRefCode,
+        pricingPlanRefCode: iyzicoPlanRef,
         customerRefCode,
         email: dto.buyer.email,
         name: dto.buyer.name,
@@ -232,14 +280,23 @@ export class BillingService {
   ): Promise<{ success: boolean; checkoutFormContent?: string; token?: string; error?: string }> {
     const plan = this.getPlan(planKey);
 
-    if (plan.isFree || !plan.iyzicoRefCode) {
-      throw new AppError(400, 'INVALID_PLAN', 'This plan does not support paid subscription');
+    if (plan.isFree) {
+      throw new AppError(400, 'INVALID_PLAN', 'Deneme planı ödeme gerektirmez');
+    }
+
+    const iyzicoPlanRef = getPlanIyzicoRef(planKey, billingCycle);
+    if (!iyzicoPlanRef) {
+      throw new AppError(
+        500,
+        'IYZICO_PLAN_NOT_CONFIGURED',
+        `${planKey} planı için ${billingCycle === 'MONTHLY' ? 'aylık' : 'yıllık'} iyzico pricing plan yapılandırılmamış.`,
+      );
     }
 
     const customerRefCode = `CUST-${tenantId}`;
 
     const result = await iyzicoService.initializeSubscriptionCheckoutForm({
-      pricingPlanRefCode: plan.iyzicoRefCode,
+      pricingPlanRefCode: iyzicoPlanRef,
       customerRefCode,
       email: buyer.email,
       name: buyer.name,
@@ -255,7 +312,122 @@ export class BillingService {
       callbackUrl,
     });
 
+    // Persist a PENDING transaction so /api/billing/callback can look up
+    // the tenant + plan + cycle by the token once iyzico calls us back.
+    if (result.success && result.token) {
+      await prisma.billingTransaction.create({
+        data: {
+          tenantId,
+          type: 'SUBSCRIPTION_PAYMENT',
+          status: 'PENDING',
+          amount: billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.annualPrice,
+          currency: plan.currency,
+          plan: planKey,
+          billingCycle,
+          iyzicoConversationId: result.token,
+        },
+      });
+    }
+
     return result;
+  }
+
+  /**
+   * Idempotency guard for subscribe/checkout-form. Returns true if the tenant
+   * has started a subscription checkout within the last `windowSeconds`
+   * seconds and that transaction is still PENDING. Used to block double-click
+   * and replay attacks on the subscribe button.
+   */
+  async hasRecentPendingSubscription(tenantId: string, windowSeconds: number): Promise<boolean> {
+    const cutoff = new Date(Date.now() - windowSeconds * 1000);
+    const recent = await prisma.billingTransaction.findFirst({
+      where: {
+        tenantId,
+        type: 'SUBSCRIPTION_PAYMENT',
+        status: 'PENDING',
+        createdAt: { gte: cutoff },
+      },
+      select: { id: true },
+    });
+    return !!recent;
+  }
+
+  /**
+   * Complete a 3DS subscription checkout flow. Called from
+   * /api/billing/callback after iyzico POSTs the token back to us.
+   *
+   * Looks up the PENDING BillingTransaction by token, retrieves the
+   * subscription result from iyzico, and if successful, activates the
+   * subscription and marks the transaction SUCCESS.
+   *
+   * Idempotent: if the transaction is already SUCCESS/FAILED, returns
+   * immediately with the same result.
+   */
+  async completeSubscriptionCheckout(token: string): Promise<{
+    success: boolean;
+    alreadyProcessed?: boolean;
+    subscription?: SubscriptionDto;
+    error?: string;
+  }> {
+    const transaction = await prisma.billingTransaction.findFirst({
+      where: { iyzicoConversationId: token, type: 'SUBSCRIPTION_PAYMENT' },
+    });
+
+    if (!transaction) {
+      logger.warn({ token }, 'Subscription callback: no pending transaction for token');
+      return { success: false, error: 'Ödeme oturumu bulunamadı' };
+    }
+
+    // Idempotency guard — don't re-process
+    if (transaction.status === 'SUCCESS') {
+      const existing = await this.getSubscription(transaction.tenantId);
+      return { success: true, alreadyProcessed: true, subscription: existing || undefined };
+    }
+    if (transaction.status === 'FAILED') {
+      return { success: false, alreadyProcessed: true, error: transaction.errorMessage || 'Ödeme reddedildi' };
+    }
+
+    const result = await iyzicoService.retrieveSubscriptionCheckoutFormResult(token);
+
+    if (!result.success || result.subscriptionStatus !== 'ACTIVE' || !result.referenceCode) {
+      await prisma.billingTransaction.update({
+        where: { id: transaction.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: result.error || `Durum: ${result.subscriptionStatus || 'bilinmiyor'}`,
+          processedAt: new Date(),
+        },
+      });
+      return { success: false, error: result.error || 'Ödeme sonucu doğrulanamadı' };
+    }
+
+    if (!transaction.plan || !transaction.billingCycle) {
+      return { success: false, error: 'İşlem verisi eksik' };
+    }
+
+    const subscription = await this.activateSubscription(
+      transaction.tenantId,
+      transaction.plan,
+      transaction.billingCycle,
+      result.referenceCode,
+      result.parentReferenceCode || `CUST-${transaction.tenantId}`,
+    );
+
+    await prisma.billingTransaction.update({
+      where: { id: transaction.id },
+      data: {
+        status: 'SUCCESS',
+        iyzicoPaymentId: result.referenceCode,
+        processedAt: new Date(),
+      },
+    });
+
+    logger.info(
+      { tenantId: transaction.tenantId, plan: transaction.plan, subscriptionRef: result.referenceCode },
+      'Subscription activated via 3DS checkout form',
+    );
+
+    return { success: true, subscription };
   }
 
   /**
@@ -381,18 +553,20 @@ export class BillingService {
     }
 
     const newPlan = this.getPlan(newPlanKey);
+    const targetCycle = billingCycle || (subscription.billingCycle as BillingCycle);
+    const newIyzicoPlanRef = getPlanIyzicoRef(newPlanKey, targetCycle);
 
     // If upgrading from trial or has iyzico reference, need to go through payment flow
-    if (subscription.plan === 'TRIAL' || (newPlan.iyzicoRefCode && subscription.iyzicoSubscriptionRef)) {
+    if (subscription.plan === 'TRIAL' || (newIyzicoPlanRef && subscription.iyzicoSubscriptionRef)) {
       // For upgrades with existing subscription, use iyzico upgrade API
-      if (subscription.iyzicoSubscriptionRef && newPlan.iyzicoRefCode) {
+      if (subscription.iyzicoSubscriptionRef && newIyzicoPlanRef) {
         const result = await iyzicoService.upgradeSubscription(
           subscription.iyzicoSubscriptionRef,
-          newPlan.iyzicoRefCode,
+          newIyzicoPlanRef,
         );
 
         if (!result.success) {
-          throw new AppError(400, 'UPGRADE_FAILED', result.error || 'Failed to upgrade subscription');
+          throw new AppError(400, 'UPGRADE_FAILED', result.error || 'Abonelik yükseltilemedi');
         }
 
         // Update local subscription

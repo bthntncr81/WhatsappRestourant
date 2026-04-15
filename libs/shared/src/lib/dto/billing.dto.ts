@@ -29,10 +29,14 @@ export interface PlanDefinition {
   annualPrice: number;
   currency: string;
   isFree: boolean;
-  iyzicoRefCode: string | null; // iyzico pricing plan reference
   features: PlanFeatures;
   popular?: boolean;
 }
+
+// NOTE: iyzico pricing plan reference codes are intentionally NOT in this
+// shared DTO — they are a backend concern tied to the platform iyzico
+// account and should never leak to the frontend. Backend resolves them via
+// env vars (see apps/api/src/services/billing.service.ts → getPlanIyzicoRef).
 
 export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
   TRIAL: {
@@ -43,7 +47,6 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
     annualPrice: 0,
     currency: 'TRY',
     isFree: true,
-    iyzicoRefCode: null,
     features: {
       monthlyOrderLimit: 50,
       monthlyMessageLimit: 200,
@@ -65,7 +68,6 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
     annualPrice: 2990, // ~2 ay ücretsiz
     currency: 'TRY',
     isFree: false,
-    iyzicoRefCode: '832d1a63-24e0-4ef2-ace4-3f907ca53f95',
     features: {
       monthlyOrderLimit: 500,
       monthlyMessageLimit: 2000,
@@ -87,7 +89,6 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
     annualPrice: 7990, // ~2 ay ücretsiz
     currency: 'TRY',
     isFree: false,
-    iyzicoRefCode: '662d8855-7a32-4a17-83fb-3e4ef3dcaab1',
     popular: true,
     features: {
       monthlyOrderLimit: 2000,

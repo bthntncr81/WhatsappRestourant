@@ -480,6 +480,56 @@ export class IyzicoService {
   }
 
   /**
+   * Retrieve the result of a subscription Checkout Form flow by token.
+   * Called from our /api/billing/callback endpoint after iyzico POSTs back.
+   * Returns the subscription ref + customer ref so we can activate locally.
+   */
+  async retrieveSubscriptionCheckoutFormResult(token: string): Promise<{
+    success: boolean;
+    subscriptionStatus?: string;
+    referenceCode?: string;
+    parentReferenceCode?: string;
+    error?: string;
+  }> {
+    const body = {
+      locale: 'tr',
+      conversationId: generateConversationId(),
+      token,
+    };
+
+    interface RetrieveResponse {
+      referenceCode?: string;
+      parentReferenceCode?: string;
+      subscriptionStatus?: string;
+      status?: string;
+      data?: {
+        referenceCode?: string;
+        parentReferenceCode?: string;
+        subscriptionStatus?: string;
+      };
+    }
+
+    const result = await this.platformRequest<RetrieveResponse>(
+      'POST',
+      '/v2/subscription/checkoutform/auth',
+      body,
+    );
+
+    if (result.success && result.data) {
+      const nested = result.data.data;
+      const payload = nested || result.data;
+      return {
+        success: true,
+        subscriptionStatus: payload.subscriptionStatus,
+        referenceCode: payload.referenceCode,
+        parentReferenceCode: payload.parentReferenceCode,
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
+  /**
    * Get subscription details — platform iyzico
    */
   async getSubscription(subscriptionRefCode: string): Promise<{

@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { billingService } from '../services/billing.service';
 import { requireAuth } from '../middleware/auth.middleware';
 import { createLogger } from '../logger';
 import {
-  SubscribeWithNewCardDto,
   RegisterCardDto,
   CancelSubscriptionDto,
   SubscriptionPlan,
@@ -12,6 +12,67 @@ import {
 
 const logger = createLogger();
 const router = Router();
+
+// ==================== VALIDATION SCHEMAS ====================
+
+const buyerSchema = z.object({
+  email: z.string().email('Geçersiz e-posta adresi'),
+  name: z.string().min(1, 'Ad alanı boş olamaz').max(50),
+  surname: z.string().min(1, 'Soyad alanı boş olamaz').max(50),
+  gsmNumber: z
+    .string()
+    .min(10, 'Telefon numarası çok kısa')
+    .max(20, 'Telefon numarası çok uzun'),
+  identityNumber: z
+    .string()
+    .regex(/^\d{11}$/, 'TC Kimlik numarası 11 haneli olmalı'),
+  city: z.string().min(1, 'Şehir alanı boş olamaz').max(50),
+  country: z.string().min(1, 'Ülke alanı boş olamaz').max(50),
+  address: z.string().min(5, 'Adres çok kısa').max(500),
+  zipCode: z.string().min(1).max(10),
+});
+
+const checkoutFormSchema = z.object({
+  planKey: z.enum(['TRIAL', 'STARTER', 'PRO'], {
+    message: 'Geçersiz plan seçimi',
+  }),
+  billingCycle: z.enum(['MONTHLY', 'ANNUAL'], {
+    message: 'Geçersiz faturalama dönemi',
+  }),
+  buyer: buyerSchema,
+  callbackUrl: z.string().url('callbackUrl geçerli bir URL olmalı'),
+});
+
+const cancelSchema = z.object({
+  immediate: z.boolean().optional(),
+  reason: z.string().max(500).optional(),
+});
+
+const changePlanSchema = z.object({
+  newPlan: z.enum(['TRIAL', 'STARTER', 'PRO'], {
+    message: 'Geçersiz plan seçimi',
+  }),
+  billingCycle: z.enum(['MONTHLY', 'ANNUAL']).optional(),
+});
+
+/**
+ * Helper: format a Zod error as a user-friendly response body.
+ */
+function zodErrorResponse(error: z.ZodError) {
+  const first = error.issues[0];
+  const field = first?.path.join('.');
+  return {
+    success: false as const,
+    error: {
+      code: 'INVALID_REQUEST',
+      message: field ? `${field}: ${first.message}` : first?.message || 'Geçersiz istek',
+      issues: error.issues.map((i) => ({
+        path: i.path.join('.'),
+        message: i.message,
+      })),
+    },
+  };
+}
 
 // ==================== PUBLIC ROUTES ====================
 
@@ -28,6 +89,121 @@ router.get('/plans', async (req: Request, res: Response, next: NextFunction) => 
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// ==================== PUBLIC PAYMENT WEBHOOK & CALLBACK ====================
+// These must NOT require auth — iyzico is the caller, not our frontend.
+
+/**
+ * POST /api/billing/webhook/iyzico
+ * Receives recurring payment events from iyzico (subscription renewal success,
+ * failure, card update, etc.). Currently logs the payload structurally; full
+ * event handling (mark subscription UNPAID, notify user, etc.) is still TODO.
+ */
+router.post('/webhook/iyzico', async (req: Request, res: Response) => {
+  logger.info({ payload: req.body }, 'iyzico webhook received');
+  // Acknowledge quickly so iyzico doesn't retry. Actual event processing
+  // should eventually be handed to a queue worker.
+  res.json({ status: 'received' });
+});
+
+/**
+ * POST /api/billing/callback
+ * Handle 3DS subscription checkout-form callback from iyzico.
+ *
+ * iyzico POSTs to this endpoint with form-encoded { token } after the user
+ * completes the 3DS flow. We retrieve the subscription result server-side
+ * and return an HTML page that postMessages the parent window (the billing
+ * page opened the checkout in a popup).
+ *
+ * SECURITY: this endpoint is PUBLIC (iyzico is the caller, not our frontend).
+ * Never trust req.body blindly — always re-fetch the result from iyzico
+ * using the token. The token itself is an opaque one-time value.
+ */
+router.post('/callback', async (req: Request, res: Response) => {
+  const token = (req.body?.token as string | undefined)?.trim();
+  logger.info({ hasToken: Boolean(token) }, '3DS subscription callback received');
+
+  const html = (success: boolean, message: string) => `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>Ödeme Sonucu</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #f9fafb; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { background: #fff; border-radius: 16px; padding: 32px 40px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); text-align: center; max-width: 380px; }
+    .icon { font-size: 48px; margin-bottom: 16px; }
+    h2 { margin: 0 0 8px; font-size: 1.2rem; color: #111827; }
+    p { margin: 0; font-size: 0.9rem; color: #6b7280; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">${success ? '✓' : '✗'}</div>
+    <h2>${success ? 'Ödeme Başarılı' : 'Ödeme Başarısız'}</h2>
+    <p>${message}</p>
+  </div>
+  <script>
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({
+          type: 'WHATRES_BILLING_RESULT',
+          success: ${success},
+          message: ${JSON.stringify(message)}
+        }, '*');
+      }
+    } catch (e) {}
+    setTimeout(function () {
+      if (window.opener && !window.opener.closed) {
+        window.close();
+      } else {
+        window.location.href = '/billing?status=${success ? 'success' : 'failed'}';
+      }
+    }, 1500);
+  </script>
+</body>
+</html>`;
+
+  if (!token) {
+    logger.warn('3DS callback: missing token in body');
+    res.status(400).send(html(false, 'Token eksik — ödeme doğrulanamadı.'));
+    return;
+  }
+
+  try {
+    const result = await billingService.completeSubscriptionCheckout(token);
+    if (result.success) {
+      res.send(html(true, result.alreadyProcessed
+        ? 'Aboneliğiniz zaten aktif.'
+        : 'Aboneliğiniz başarıyla aktifleştirildi!'));
+    } else {
+      res.send(html(false, result.error || 'Ödeme tamamlanamadı.'));
+    }
+  } catch (error) {
+    logger.error({ error, token }, '3DS callback processing error');
+    res.send(html(false, 'İşlem sırasında bir hata oluştu. Lütfen destek ekibine ulaşın.'));
+  }
+});
+
+// Some integrations send GET instead of POST on the callback URL — support both.
+router.get('/callback', async (req: Request, res: Response) => {
+  const token = (req.query?.token as string | undefined)?.trim();
+  try {
+    const result = token
+      ? await billingService.completeSubscriptionCheckout(token)
+      : { success: false, error: 'Token eksik' };
+    res.send(`<!DOCTYPE html><html><body><script>
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: 'WHATRES_BILLING_RESULT', success: ${result.success}, message: ${JSON.stringify(result.error || '')} }, '*');
+        window.close();
+      } else {
+        window.location.href = '/billing?status=${result.success ? 'success' : 'failed'}';
+      }
+    </script></body></html>`);
+  } catch (error) {
+    logger.error({ error }, 'GET /callback error');
+    res.status(500).send('Internal error');
   }
 });
 
@@ -72,65 +248,56 @@ router.get('/subscription', async (req: Request, res: Response, next: NextFuncti
 
 /**
  * POST /api/billing/subscribe
- * Subscribe to a plan with new card
+ * DEPRECATED: direct card entry was moved to iyzico's hosted checkout form
+ * for PCI-DSS compliance. Frontend must use /subscribe/checkout-form.
  */
-router.post('/subscribe', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const tenantId = req.user!.tenantId;
-    const dto: SubscribeWithNewCardDto = req.body;
-
-    // Validate required fields
-    if (!dto.planKey || !dto.billingCycle || !dto.card || !dto.buyer) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'INVALID_REQUEST', message: 'Missing required fields' },
-      });
-    }
-
-    const result = await billingService.subscribeWithNewCard(tenantId, dto);
-
-    if (result.success) {
-      res.json({
-        success: true,
-        data: {
-          status: 'Success',
-          message: 'Subscription activated successfully',
-          subscription: result.subscription,
-        },
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: { code: 'PAYMENT_FAILED', message: result.error },
-      });
-    }
-  } catch (error) {
-    next(error);
-  }
+router.post('/subscribe', async (_req: Request, res: Response) => {
+  res.status(410).json({
+    success: false,
+    error: {
+      code: 'ENDPOINT_DEPRECATED',
+      message: 'Bu uç nokta kaldırıldı. Lütfen /api/billing/subscribe/checkout-form kullanın (3DS ile güvenli ödeme).',
+    },
+  });
 });
 
 /**
  * POST /api/billing/subscribe/checkout-form
- * Get checkout form for subscription (supports 3DS)
+ * Get iyzico checkout form for subscription (supports 3DS).
+ *
+ * Idempotency: if a PENDING subscription transaction was created in the
+ * last 60 seconds, reject the new request with 409 Conflict. Protects
+ * against double-click race conditions on the subscribe button.
  */
 router.post('/subscribe/checkout-form', async (req: Request, res: Response, next: NextFunction) => {
+  const parsed = checkoutFormSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json(zodErrorResponse(parsed.error));
+  }
+
   try {
     const tenantId = req.user!.tenantId;
-    const { planKey, billingCycle, buyer, callbackUrl } = req.body;
+    const { planKey, billingCycle, buyer, callbackUrl } = parsed.data;
 
-    if (!planKey || !billingCycle || !buyer || !callbackUrl) {
-      return res.status(400).json({
+    // Simple idempotency guard — block duplicate checkout attempts from the
+    // same tenant within 60s
+    const recent = await billingService.hasRecentPendingSubscription(tenantId, 60);
+    if (recent) {
+      return res.status(409).json({
         success: false,
-        error: { code: 'INVALID_REQUEST', message: 'Missing required fields' },
+        error: {
+          code: 'PAYMENT_IN_PROGRESS',
+          message: 'Yakın zamanda başlatılmış bir ödeme işlemi var. Lütfen önceki ödeme penceresini tamamlayın veya 1 dakika bekleyip tekrar deneyin.',
+        },
       });
     }
 
     const result = await billingService.getSubscriptionCheckoutForm(
       tenantId,
-      planKey as SubscriptionPlan,
-      billingCycle as BillingCycle,
+      planKey,
+      billingCycle,
       buyer,
-      callbackUrl
+      callbackUrl,
     );
 
     if (result.success) {
@@ -144,7 +311,7 @@ router.post('/subscribe/checkout-form', async (req: Request, res: Response, next
     } else {
       res.status(400).json({
         success: false,
-        error: { code: 'CHECKOUT_FORM_FAILED', message: result.error },
+        error: { code: 'CHECKOUT_FORM_FAILED', message: result.error || 'Ödeme formu oluşturulamadı' },
       });
     }
   } catch (error) {
@@ -157,9 +324,14 @@ router.post('/subscribe/checkout-form', async (req: Request, res: Response, next
  * Cancel subscription
  */
 router.post('/cancel', async (req: Request, res: Response, next: NextFunction) => {
+  const parsed = cancelSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json(zodErrorResponse(parsed.error));
+  }
+
   try {
     const tenantId = req.user!.tenantId;
-    const dto: CancelSubscriptionDto = req.body;
+    const dto = parsed.data;
 
     const subscription = await billingService.cancelSubscription(tenantId, {
       immediate: dto.immediate ?? false,
@@ -169,9 +341,9 @@ router.post('/cancel', async (req: Request, res: Response, next: NextFunction) =
     res.json({
       success: true,
       data: subscription,
-      message: dto.immediate 
-        ? 'Subscription cancelled immediately' 
-        : 'Subscription will be cancelled at end of billing period',
+      message: dto.immediate
+        ? 'Abonelik hemen iptal edildi'
+        : 'Abonelik, fatura döneminin sonunda iptal edilecek',
     });
   } catch (error) {
     next(error);
@@ -183,21 +355,19 @@ router.post('/cancel', async (req: Request, res: Response, next: NextFunction) =
  * Change subscription plan
  */
 router.post('/change-plan', async (req: Request, res: Response, next: NextFunction) => {
+  const parsed = changePlanSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json(zodErrorResponse(parsed.error));
+  }
+
   try {
     const tenantId = req.user!.tenantId;
-    const { newPlan, billingCycle } = req.body;
-
-    if (!newPlan) {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'INVALID_REQUEST', message: 'newPlan is required' },
-      });
-    }
+    const { newPlan, billingCycle } = parsed.data;
 
     const subscription = await billingService.changePlan(
       tenantId,
-      newPlan as SubscriptionPlan,
-      billingCycle as BillingCycle | undefined
+      newPlan,
+      billingCycle,
     );
 
     res.json({
@@ -339,76 +509,7 @@ router.get('/transactions', async (req: Request, res: Response, next: NextFuncti
   }
 });
 
-// ==================== WEBHOOK ROUTES ====================
-
-/**
- * POST /api/billing/webhook/iyzico
- * Handle iyzico webhook notifications
- */
-router.post('/webhook/iyzico', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const payload = req.body;
-    
-    logger.info({ payload }, 'Received iyzico webhook');
-
-    // TODO: Implement webhook handling for:
-    // - Subscription payment success/failure
-    // - Subscription cancellation
-    // - Subscription upgrade
-    // - Card updates
-
-    // For now, just acknowledge receipt
-    res.json({ status: 'received' });
-  } catch (error) {
-    logger.error({ error }, 'Webhook processing error');
-    next(error);
-  }
-});
-
-/**
- * POST /api/billing/callback
- * Handle 3DS callback from iyzico
- */
-router.post('/callback', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { paymentId, conversationId, mdStatus, status, token } = req.body;
-    
-    logger.info({ paymentId, conversationId, mdStatus, status }, '3DS callback received');
-
-    // TODO: Complete 3DS payment flow
-    // 1. Verify the callback
-    // 2. Update subscription status
-    // 3. Return HTML that posts message to parent window
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head><title>Ödeme Sonucu</title></head>
-      <body>
-        <script>
-          if (window.opener) {
-            window.opener.postMessage({
-              type: 'PAYMENT_RESULT',
-              success: ${status === 'success'},
-              paymentId: '${paymentId || ''}',
-              mdStatus: '${mdStatus || ''}'
-            }, '*');
-            window.close();
-          } else {
-            window.location.href = '/billing?status=${status === 'success' ? 'success' : 'failed'}';
-          }
-        </script>
-        <p>İşlem tamamlandı. Bu pencere otomatik olarak kapanacak...</p>
-      </body>
-      </html>
-    `;
-
-    res.send(html);
-  } catch (error) {
-    logger.error({ error }, '3DS callback error');
-    next(error);
-  }
-});
+// (webhook + callback routes are registered above, before requireAuth)
 
 export default router;
 

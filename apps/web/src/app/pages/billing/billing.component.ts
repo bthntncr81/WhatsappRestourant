@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -346,34 +346,12 @@ interface ComparisonRow {
               </div>
             </header>
 
-            <form (ngSubmit)="subscribe()" class="modal-form">
-              <div class="form-group-title">
-                <app-icon name="credit-card" [size]="14"/>
-                <span>Kart bilgileri</span>
-              </div>
-              <div class="form-group">
-                <label>Kart üzerindeki isim</label>
-                <input type="text" [(ngModel)]="cardForm.cardHolderName" name="cardHolderName" required placeholder="Ad Soyad">
-              </div>
-              <div class="form-group">
-                <label>Kart numarası</label>
-                <input type="text" [(ngModel)]="cardForm.cardNumber" name="cardNumber" required placeholder="5528 7900 0000 0008" maxlength="19">
-              </div>
-              <div class="form-row-3">
-                <div class="form-group">
-                  <label>Ay</label>
-                  <input type="text" [(ngModel)]="cardForm.expireMonth" name="expireMonth" required placeholder="12" maxlength="2">
-                </div>
-                <div class="form-group">
-                  <label>Yıl</label>
-                  <input type="text" [(ngModel)]="cardForm.expireYear" name="expireYear" required placeholder="2030" maxlength="4">
-                </div>
-                <div class="form-group">
-                  <label>CVC</label>
-                  <input type="text" [(ngModel)]="cardForm.cvc" name="cvc" required placeholder="123" maxlength="4">
-                </div>
-              </div>
+            <div class="secure-notice">
+              <app-icon name="lock" [size]="14"/>
+              <span>Kart bilgileriniz bir sonraki adımda iyzico'nun güvenli sayfasında alınır — Otorder hiçbir kart verisine erişmez.</span>
+            </div>
 
+            <form (ngSubmit)="startCheckout()" class="modal-form">
               <div class="form-group-title">
                 <app-icon name="user" [size]="14"/>
                 <span>Fatura bilgileri</span>
@@ -429,10 +407,10 @@ interface ComparisonRow {
                 <button type="submit" class="btn btn-primary" [disabled]="subscribing()">
                   @if (subscribing()) {
                     <span class="btn-spin"></span>
-                    İşleniyor…
+                    Yönlendiriliyor…
                   } @else {
-                    <app-icon name="credit-card" [size]="14"/>
-                    Ödeme yap
+                    <app-icon name="lock" [size]="14"/>
+                    Güvenli ödemeye devam et
                   }
                 </button>
               </div>
@@ -1034,6 +1012,21 @@ interface ComparisonRow {
       font-size: 0.85rem;
     }
 
+    .secure-notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      margin-bottom: 18px;
+      background: color-mix(in srgb, #10b981 10%, transparent);
+      border: 1px solid color-mix(in srgb, #10b981 30%, transparent);
+      border-radius: 10px;
+      color: var(--color-text-secondary);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+    .secure-notice app-icon { color: #10b981; flex-shrink: 0; margin-top: 2px; }
+
     .modal-form { display: flex; flex-direction: column; gap: 14px; }
 
     .form-group-title {
@@ -1165,7 +1158,7 @@ interface ComparisonRow {
     }
   `]
 })
-export class BillingComponent implements OnInit {
+export class BillingComponent implements OnInit, OnDestroy {
   private billingService = inject(BillingService);
   themeService = inject(ThemeService);
   authService = inject(AuthService);
@@ -1184,13 +1177,8 @@ export class BillingComponent implements OnInit {
 
   currentPlanKey = computed(() => this.overview()?.subscription?.plan ?? null);
 
-  cardForm = {
-    cardHolderName: '',
-    cardNumber: '',
-    expireMonth: '',
-    expireYear: '',
-    cvc: '',
-  };
+  private checkoutWindow: Window | null = null;
+  private messageHandler?: (event: MessageEvent) => void;
 
   buyerForm = {
     email: '',
@@ -1249,6 +1237,31 @@ export class BillingComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadData();
+
+    // Listen for postMessage from the iyzico checkout popup (via our /callback)
+    this.messageHandler = (event: MessageEvent) => {
+      const data = event.data as { type?: string; success?: boolean; message?: string } | null;
+      if (!data || data.type !== 'WHATRES_BILLING_RESULT') return;
+
+      this.subscribing.set(false);
+      if (data.success) {
+        this.closeSubscribeModal();
+        this.loadData();
+        this.dialog.success(data.message || 'Aboneliğiniz başarıyla aktifleştirildi!');
+      } else {
+        this.subscribeError.set(data.message || 'Ödeme tamamlanamadı');
+      }
+    };
+    window.addEventListener('message', this.messageHandler);
+  }
+
+  ngOnDestroy(): void {
+    if (this.messageHandler) {
+      window.removeEventListener('message', this.messageHandler);
+    }
+    if (this.checkoutWindow && !this.checkoutWindow.closed) {
+      this.checkoutWindow.close();
+    }
   }
 
   loadData(): void {
@@ -1305,29 +1318,39 @@ export class BillingComponent implements OnInit {
     this.subscribeError.set(null);
   }
 
-  subscribe(): void {
+  /**
+   * Start the 3DS checkout flow. Submits buyer info to the backend, gets
+   * iyzico's checkoutFormContent (an HTML snippet with embedded scripts),
+   * and opens it in a popup window. iyzico handles card entry and 3DS;
+   * the popup POSTs back to /api/billing/callback which in turn postMessages
+   * the result to this window.
+   *
+   * We DO NOT collect card details ourselves — this is required for PCI-DSS
+   * compliance. The Otorder API never sees the card number, CVC, or expiry.
+   */
+  startCheckout(): void {
     if (!this.selectedPlanData()) return;
 
     this.subscribing.set(true);
     this.subscribeError.set(null);
 
+    // Build absolute callback URL. iyzico requires a publicly reachable URL.
+    const callbackUrl = `${window.location.origin}/api/billing/callback`;
+
     this.billingService
-      .subscribe({
+      .getCheckoutForm({
         planKey: this.selectedPlanData()!.key,
         billingCycle: this.selectedCycle(),
-        card: this.cardForm,
         buyer: this.buyerForm,
-        saveCard: true,
+        callbackUrl,
       })
       .subscribe({
         next: (res) => {
-          this.subscribing.set(false);
-          if (res.success) {
-            this.closeSubscribeModal();
-            this.loadData();
-            this.dialog.success('Aboneliğiniz başarıyla aktifleştirildi!');
+          if (res.success && res.data?.checkoutFormContent) {
+            this.openCheckoutPopup(res.data.checkoutFormContent);
           } else {
-            this.subscribeError.set(res.error?.message || 'Ödeme işlemi başarısız');
+            this.subscribing.set(false);
+            this.subscribeError.set(res.error?.message || 'Ödeme sayfası oluşturulamadı');
           }
         },
         error: (err) => {
@@ -1335,5 +1358,67 @@ export class BillingComponent implements OnInit {
           this.subscribeError.set(err.error?.error?.message || 'Bir hata oluştu');
         },
       });
+  }
+
+  private openCheckoutPopup(checkoutFormContent: string): void {
+    const width = 600;
+    const height = 780;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+
+    this.checkoutWindow = window.open(
+      '',
+      'whatres-iyzico-checkout',
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`,
+    );
+
+    if (!this.checkoutWindow) {
+      this.subscribing.set(false);
+      this.subscribeError.set(
+        'Popup penceresi engellendi. Lütfen tarayıcınızın popup ayarlarını kontrol edin.',
+      );
+      return;
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>Güvenli Ödeme — iyzico</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; margin: 0; padding: 20px; background: #f9fafb; }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    .header { text-align: center; padding: 8px 0 16px; color: #111827; }
+    .header h1 { font-size: 1.1rem; margin: 0 0 4px; }
+    .header p { font-size: 0.85rem; color: #6b7280; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <h1>Güvenli Ödeme</h1>
+      <p>Kart bilgileriniz iyzico altyapısı üzerinden işlenir.</p>
+    </div>
+    <div id="iyzipay-checkout-form" class="responsive"></div>
+    ${checkoutFormContent}
+  </div>
+</body>
+</html>`;
+
+    this.checkoutWindow.document.open();
+    this.checkoutWindow.document.write(html);
+    this.checkoutWindow.document.close();
+
+    // Poll for popup close — if user closes without completing, reset state
+    const pollTimer = setInterval(() => {
+      if (this.checkoutWindow && this.checkoutWindow.closed) {
+        clearInterval(pollTimer);
+        this.checkoutWindow = null;
+        // If we never received a postMessage, revert the loading state
+        if (this.subscribing()) {
+          this.subscribing.set(false);
+        }
+      }
+    }, 500);
   }
 }
