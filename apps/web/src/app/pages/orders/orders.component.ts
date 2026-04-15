@@ -1,10 +1,14 @@
 import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { environment } from '../../../environments/environment';
+import { AuthService } from '../../services/auth.service';
 import { OrderService, OrderDto, OrderStatus, CustomerDetailDto } from '../../services/order.service';
 import { NotificationService } from '../../services/notification.service';
 import { IconComponent } from '../../shared/icon.component';
+import { DialogService } from '../../shared/dialog.service';
 
 @Component({
   selector: 'app-orders',
@@ -33,6 +37,17 @@ import { IconComponent } from '../../shared/icon.component';
             }
           </button>
           <button class="refresh-btn" (click)="loadOrders()"><app-icon name="refresh" [size]="14"/> Yenile</button>
+          <div class="busy-toggle" style="display: flex; align-items: center; gap: 8px; margin-left: 12px; padding: 4px 12px; border-radius: 8px; background: var(--color-bg-elevated); border: 1px solid var(--color-border);">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; white-space: nowrap;">
+              <input type="checkbox" [checked]="isBusy()" (change)="toggleBusy()" style="width: 16px; height: 16px; cursor: pointer;"/>
+              Yogun
+            </label>
+            @if (isBusy()) {
+              <input type="number" [value]="busyEstimate()" (change)="updateBusyEstimate($event)" placeholder="dk" min="5" max="120" step="5"
+                     style="width: 50px; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 12px; text-align: center;"/>
+              <span style="font-size: 11px; color: var(--color-text-muted);">dk</span>
+            }
+          </div>
         </div>
       </header>
 
@@ -85,6 +100,11 @@ import { IconComponent } from '../../shared/icon.component';
               <div class="order-customer">
                 <span class="customer-name">{{ order.customerName || 'Misafir' }}</span>
                 <span class="customer-phone">{{ order.customerPhone || '-' }}</span>
+                @if (order.deliveryType) {
+                  <span class="store-badge" [style.background]="order.deliveryType === 'PICKUP' ? 'rgba(34,197,94,0.15)' : 'rgba(59,130,246,0.15)'" [style.color]="order.deliveryType === 'PICKUP' ? '#22c55e' : '#3b82f6'">
+                    {{ order.deliveryType === 'PICKUP' ? 'Gel Al' : 'Teslimat' }}
+                  </span>
+                }
                 @if (order.storeName) {
                   <span class="store-badge"><app-icon name="store" [size]="12"/> {{ order.storeName }}</span>
                 }
@@ -296,6 +316,15 @@ import { IconComponent } from '../../shared/icon.component';
                     <div class="address-card">
                       <div class="address-name-panel">{{ addr.name }}</div>
                       <div class="address-text">{{ addr.address }}</div>
+                      @if (addr.lat && addr.lng) {
+                        <a
+                          [href]="'https://maps.google.com/?q=' + addr.lat + ',' + addr.lng"
+                          target="_blank"
+                          style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--color-accent-primary); text-decoration: none; margin-top: 4px;"
+                        >
+                          <app-icon name="map-pin" [size]="12"/> Haritada Gör
+                        </a>
+                      }
                     </div>
                   }
                 </div>
@@ -309,6 +338,11 @@ import { IconComponent } from '../../shared/icon.component';
                     <div class="history-order">
                       <div class="history-header">
                         <span class="history-number">#{{ histOrder.orderNumber || '---' }}</span>
+                        @if (histOrder.deliveryType) {
+                          <span style="font-size: 10px; padding: 1px 6px; border-radius: 3px;" [style.background]="histOrder.deliveryType === 'PICKUP' ? 'rgba(34,197,94,0.2)' : 'rgba(59,130,246,0.2)'" [style.color]="histOrder.deliveryType === 'PICKUP' ? '#22c55e' : '#3b82f6'">
+                            {{ histOrder.deliveryType === 'PICKUP' ? 'Gel Al' : 'Teslimat' }}
+                          </span>
+                        }
                         <span class="status-badge small" [class]="histOrder.status.toLowerCase()">
                           {{ getStatusLabel(histOrder.status) }}
                         </span>
@@ -1107,12 +1141,19 @@ import { IconComponent } from '../../shared/icon.component';
 })
 export class OrdersComponent implements OnInit, OnDestroy {
   private orderService = inject(OrderService);
+  private http = inject(HttpClient);
+  private authService = inject(AuthService);
   notificationService = inject(NotificationService);
+  private dialog = inject(DialogService);
 
   private allOrders = signal<OrderDto[]>([]);
   loading = signal(false);
   statusFilter = signal<OrderStatus | null>(null);
   hasNewPending = signal(false);
+
+  // Busy mode
+  isBusy = signal(false);
+  busyEstimate = signal<number | null>(null);
 
   orders = computed(() => {
     const all = this.allOrders();
@@ -1152,6 +1193,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadOrders();
+    this.loadBusyStatus();
     this.startPolling();
 
     // Unlock audio on first user interaction
@@ -1235,6 +1277,41 @@ export class OrdersComponent implements OnInit, OnDestroy {
     this.knownOrderItemCounts = new Map(fetched.map(o => [o.id, o.items.length]));
   }
 
+  // ==================== BUSY MODE ====================
+
+  private get busyHeaders() { return { headers: this.authService.getAuthHeaders() }; }
+
+  loadBusyStatus(): void {
+    this.http.get<any>(`${environment.apiBaseUrl}/integrations/busy-status`, this.busyHeaders).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.isBusy.set(res.data.isBusy);
+          this.busyEstimate.set(res.data.busyEstimateMinutes);
+        }
+      },
+    });
+  }
+
+  toggleBusy(): void {
+    const newBusy = !this.isBusy();
+    this.isBusy.set(newBusy);
+    this.http.put<any>(`${environment.apiBaseUrl}/integrations/busy-status`, {
+      isBusy: newBusy,
+      busyEstimateMinutes: this.busyEstimate(),
+    }, this.busyHeaders).subscribe();
+  }
+
+  updateBusyEstimate(event: Event): void {
+    const val = Number((event.target as HTMLInputElement).value);
+    this.busyEstimate.set(val || null);
+    this.http.put<any>(`${environment.apiBaseUrl}/integrations/busy-status`, {
+      isBusy: this.isBusy(),
+      busyEstimateMinutes: val || null,
+    }, this.busyHeaders).subscribe();
+  }
+
+  // ==================== ORDERS ====================
+
   loadOrders(): void {
     this.loading.set(true);
 
@@ -1307,7 +1384,7 @@ export class OrdersComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         console.error('Reject failed:', err);
-        alert(err.error?.error?.message || 'Ret işlemi başarısız oldu');
+        this.dialog.error(err.error?.error?.message || 'Ret işlemi başarısız oldu');
       },
     });
   }
@@ -1350,15 +1427,21 @@ export class OrdersComponent implements OnInit, OnDestroy {
 
   reprintKitchen(order: OrderDto): void {
     this.orderService.reprintOrder(order.id, 'KITCHEN').subscribe({
-      next: () => alert('Mutfak fişi yazdırma kuyruğuna eklendi'),
-      error: (err) => console.error('Reprint failed:', err),
+      next: () => this.dialog.success('Mutfak fişi yazdırma kuyruğuna eklendi'),
+      error: (err) => {
+        console.error('Reprint failed:', err);
+        this.dialog.error('Mutfak fişi kuyruğa eklenemedi');
+      },
     });
   }
 
   reprintCourier(order: OrderDto): void {
     this.orderService.reprintOrder(order.id, 'COURIER').subscribe({
-      next: () => alert('Kurye fişi yazdırma kuyruğuna eklendi'),
-      error: (err) => console.error('Reprint failed:', err),
+      next: () => this.dialog.success('Kurye fişi yazdırma kuyruğuna eklendi'),
+      error: (err) => {
+        console.error('Reprint failed:', err);
+        this.dialog.error('Kurye fişi kuyruğa eklenemedi');
+      },
     });
   }
 

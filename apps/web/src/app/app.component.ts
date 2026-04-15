@@ -4,12 +4,13 @@ import { CommonModule } from '@angular/common';
 import { ShellComponent } from './layout/shell/shell.component';
 import { AuthService } from './services/auth.service';
 import { ThemeService } from './services/theme.service';
+import { DialogHostComponent } from './shared/dialog-host.component';
 import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, ShellComponent, CommonModule],
+  imports: [RouterOutlet, ShellComponent, CommonModule, DialogHostComponent],
   template: `
     @if (authService.isAuthenticated()) {
       @if (isStandalonePage()) {
@@ -22,6 +23,7 @@ import { filter } from 'rxjs/operators';
     } @else {
       <router-outlet />
     }
+    <app-dialog-host/>
   `,
   styles: [
     `

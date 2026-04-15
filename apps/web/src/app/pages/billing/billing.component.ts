@@ -12,6 +12,7 @@ import {
 import { ThemeService } from '../../services/theme.service';
 import { AuthService } from '../../services/auth.service';
 import { IconComponent } from '../../shared/icon.component';
+import { DialogService } from '../../shared/dialog.service';
 
 interface ComparisonRow {
   label: string;
@@ -1169,6 +1170,7 @@ export class BillingComponent implements OnInit {
   themeService = inject(ThemeService);
   authService = inject(AuthService);
   private router = inject(Router);
+  private dialog = inject(DialogService);
 
   loading = signal(true);
   overview = signal<BillingOverviewDto | null>(null);
@@ -1323,7 +1325,7 @@ export class BillingComponent implements OnInit {
           if (res.success) {
             this.closeSubscribeModal();
             this.loadData();
-            alert('Aboneliğiniz başarıyla aktifleştirildi!');
+            this.dialog.success('Aboneliğiniz başarıyla aktifleştirildi!');
           } else {
             this.subscribeError.set(res.error?.message || 'Ödeme işlemi başarısız');
           }

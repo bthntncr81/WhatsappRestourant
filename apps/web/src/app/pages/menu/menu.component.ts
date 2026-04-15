@@ -11,6 +11,7 @@ import {
   CanonicalMenuExport,
 } from '../../services/menu.service';
 import { IconComponent } from '../../shared/icon.component';
+import { DialogService } from '../../shared/dialog.service';
 
 type Tab = 'versions' | 'items' | 'options' | 'synonyms';
 
@@ -120,6 +121,9 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                       <div class="version-status">
                         @if (v.id === activeVersionId()) {
                           <span class="status-badge active">Aktif</span>
+                          @if (v.publishedAt) {
+                            <span class="status-badge published-old">Yayınlandı</span>
+                          }
                         } @else if (v.publishedAt) {
                           <span class="status-badge published-old">Yayınlandı</span>
                         } @else {
@@ -140,6 +144,11 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                         <button class="btn-sm" (click)="selectVersionAndSwitch(v)">
                           Düzenle
                         </button>
+                        @if (v.id !== activeVersionId()) {
+                          <button class="btn-sm btn-danger" (click)="deleteVersion(v)">
+                            Sil
+                          </button>
+                        }
                       </div>
                     </div>
                   }
@@ -1098,6 +1107,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
 })
 export class MenuComponent implements OnInit {
   private menuService = inject(MenuService);
+  private dialog = inject(DialogService);
 
   // State
   loading = signal(true);
@@ -1239,13 +1249,17 @@ export class MenuComponent implements OnInit {
         }
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to create version');
+        this.dialog.error(err.error?.error?.message || 'Versiyon oluşturulamadı');
       },
     });
   }
 
-  publishVersion(version: MenuVersionDto): void {
-    if (!confirm(`Publish version ${version.version}?`)) return;
+  async publishVersion(version: MenuVersionDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `v${version.version} yayınlansın mı?`,
+      { title: 'Versiyon yayınla', confirmText: 'Yayınla', variant: 'info' },
+    );
+    if (!ok) return;
 
     this.menuService.publishVersion(version.id).subscribe({
       next: (response) => {
@@ -1253,18 +1267,21 @@ export class MenuComponent implements OnInit {
           this.versions.update((versions) =>
             versions.map((v) => (v.id === version.id ? response.data! : v))
           );
-          // Publishing auto-sets as active
           this.activeVersionId.set(version.id);
         }
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to publish version');
+        this.dialog.error(err.error?.error?.message || 'Versiyon yayınlanamadı');
       },
     });
   }
 
-  setActiveVersion(version: MenuVersionDto): void {
-    if (!confirm(`Version ${version.version} aktif yapılsın mı? WhatsApp chatbot bu versiyonu kullanacak.`)) return;
+  async setActiveVersion(version: MenuVersionDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `v${version.version} aktif yapılsın mı? WhatsApp chatbot bu versiyonu kullanacak.`,
+      { title: 'Aktif versiyon değiştir', confirmText: 'Aktif yap', variant: 'info' },
+    );
+    if (!ok) return;
 
     this.menuService.setActiveVersion(version.id).subscribe({
       next: (response) => {
@@ -1273,7 +1290,22 @@ export class MenuComponent implements OnInit {
         }
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to set active version');
+        this.dialog.error(err.error?.error?.message || 'Aktif versiyon değiştirilemedi');
+      },
+    });
+  }
+
+  async deleteVersion(version: MenuVersionDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `v${version.version} silinsin mi? Bu işlem geri alınamaz.`,
+      { title: 'Versiyon sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
+
+    this.menuService.deleteVersion(version.id).subscribe({
+      next: () => this.loadData(),
+      error: (err) => {
+        this.dialog.error(err.error?.error?.message || 'Versiyon silinemedi');
       },
     });
   }
@@ -1315,13 +1347,17 @@ export class MenuComponent implements OnInit {
         }
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to save item');
+        this.dialog.error(err.error?.error?.message || 'Ürün kaydedilemedi');
       },
     });
   }
 
-  deleteItem(item: MenuItemDto): void {
-    if (!confirm(`Delete "${item.name}"?`)) return;
+  async deleteItem(item: MenuItemDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `"${item.name}" ürünü silinsin mi?`,
+      { title: 'Ürünü sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
 
     const versionId = this.selectedVersionId();
     if (!versionId) return;
@@ -1331,7 +1367,7 @@ export class MenuComponent implements OnInit {
         this.items.update((items) => items.filter((i) => i.id !== item.id));
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to delete item');
+        this.dialog.error(err.error?.error?.message || 'Ürün silinemedi');
       },
     });
   }
@@ -1354,13 +1390,17 @@ export class MenuComponent implements OnInit {
         }
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to save option group');
+        this.dialog.error(err.error?.error?.message || 'Opsiyon grubu kaydedilemedi');
       },
     });
   }
 
-  deleteOptionGroup(group: MenuOptionGroupDto): void {
-    if (!confirm(`Delete group "${group.name}"?`)) return;
+  async deleteOptionGroup(group: MenuOptionGroupDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `"${group.name}" opsiyon grubu silinsin mi?`,
+      { title: 'Grup sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
 
     const versionId = this.selectedVersionId();
     if (!versionId) return;
@@ -1370,7 +1410,7 @@ export class MenuComponent implements OnInit {
         this.optionGroups.update((groups) => groups.filter((g) => g.id !== group.id));
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to delete option group');
+        this.dialog.error(err.error?.error?.message || 'Opsiyon grubu silinemedi');
       },
     });
   }
@@ -1399,23 +1439,25 @@ export class MenuComponent implements OnInit {
         this.closeOptionForm();
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to save option');
+        this.dialog.error(err.error?.error?.message || 'Opsiyon kaydedilemedi');
       },
     });
   }
 
-  deleteOption(option: MenuOptionDto): void {
-    if (!confirm(`Delete option "${option.name}"?`)) return;
+  async deleteOption(option: MenuOptionDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `"${option.name}" opsiyonu silinsin mi?`,
+      { title: 'Opsiyon sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
 
     const versionId = this.selectedVersionId();
     if (!versionId) return;
 
     this.menuService.deleteOption(versionId, option.id).subscribe({
-      next: () => {
-        this.loadVersionData();
-      },
+      next: () => this.loadVersionData(),
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to delete option');
+        this.dialog.error(err.error?.error?.message || 'Opsiyon silinemedi');
       },
     });
   }
@@ -1438,13 +1480,17 @@ export class MenuComponent implements OnInit {
         }
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to save synonym');
+        this.dialog.error(err.error?.error?.message || 'Eşanlamlı kaydedilemedi');
       },
     });
   }
 
-  deleteSynonym(synonym: MenuSynonymDto): void {
-    if (!confirm(`"${synonym.phrase}" esanlamlisini silmek istediginize emin misiniz?`)) return;
+  async deleteSynonym(synonym: MenuSynonymDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `"${synonym.phrase}" eşanlamlısı silinsin mi?`,
+      { title: 'Eşanlamlı sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
 
     const versionId = this.selectedVersionId();
     if (!versionId) return;
@@ -1454,7 +1500,7 @@ export class MenuComponent implements OnInit {
         this.synonyms.update((syns) => syns.filter((s) => s.id !== synonym.id));
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to delete synonym');
+        this.dialog.error(err.error?.error?.message || 'Eşanlamlı silinemedi');
       },
     });
   }
@@ -1466,25 +1512,28 @@ export class MenuComponent implements OnInit {
   }
 
   doImport(): void {
+    let data: unknown;
     try {
-      const data = JSON.parse(this.importJson);
-      this.menuService.importMenu(data).subscribe({
-        next: (response) => {
-          if (response.success && response.data) {
-            alert(
-              `Imported successfully!\nVersion: ${response.data.version}\nItems: ${response.data.itemsCreated}\nOption Groups: ${response.data.optionGroupsCreated}`
-            );
-            this.showImportModal.set(false);
-            this.loadData();
-          }
-        },
-        error: (err) => {
-          alert(err.error?.error?.message || 'Failed to import');
-        },
-      });
+      data = JSON.parse(this.importJson);
     } catch {
-      alert('Invalid JSON format');
+      this.dialog.error('Geçersiz JSON formatı');
+      return;
     }
+
+    this.menuService.importMenu(data as CanonicalMenuExport).subscribe({
+      next: (response) => {
+        if (response.success && response.data) {
+          this.dialog.success(
+            `İçe aktarım tamam — v${response.data.version}: ${response.data.itemsCreated} ürün, ${response.data.optionGroupsCreated} grup`,
+          );
+          this.showImportModal.set(false);
+          this.loadData();
+        }
+      },
+      error: (err) => {
+        this.dialog.error(err.error?.error?.message || 'İçe aktarım başarısız');
+      },
+    });
   }
 
   handleExport(): void {
@@ -1505,7 +1554,7 @@ export class MenuComponent implements OnInit {
         }
       },
       error: (err) => {
-        alert(err.error?.error?.message || 'Failed to export');
+        this.dialog.error(err.error?.error?.message || 'Dışa aktarım başarısız');
       },
     });
   }

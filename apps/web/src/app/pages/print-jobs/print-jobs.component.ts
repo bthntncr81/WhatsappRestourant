@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrderService, PrintJobDto, PrintJobStatus } from '../../services/order.service';
 import { IconComponent } from '../../shared/icon.component';
+import { DialogService } from '../../shared/dialog.service';
 
 @Component({
   selector: 'app-print-jobs',
@@ -779,6 +780,7 @@ pnpm dev</pre>
 })
 export class PrintJobsComponent implements OnInit {
   private orderService = inject(OrderService);
+  private dialog = inject(DialogService);
 
   jobs = signal<PrintJobDto[]>([]);
   loading = signal(false);
@@ -847,32 +849,36 @@ export class PrintJobsComponent implements OnInit {
     this.viewingJob.set(null);
   }
 
-  cancelJob(job: PrintJobDto): void {
-    if (confirm(`#${job.payloadJson.orderNumber} numaralı yazdırma işini durdurmak istediğinize emin misiniz?`)) {
-      this.orderService.cancelPrintJob(job.id).subscribe({
-        next: () => {
-          this.loadJobs();
-        },
-        error: (err) => {
-          console.error('Cancel failed:', err);
-          alert('İşlem durdurulamadı: ' + (err.error?.error?.message || err.message));
-        },
-      });
-    }
+  async cancelJob(job: PrintJobDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `#${job.payloadJson.orderNumber} numaralı yazdırma işini durdurmak istediğinize emin misiniz?`,
+      { title: 'Yazdırma işini durdur', confirmText: 'Durdur', variant: 'warning' },
+    );
+    if (!ok) return;
+
+    this.orderService.cancelPrintJob(job.id).subscribe({
+      next: () => this.loadJobs(),
+      error: (err) => {
+        console.error('Cancel failed:', err);
+        this.dialog.error('İşlem durdurulamadı: ' + (err.error?.error?.message || err.message));
+      },
+    });
   }
 
-  deleteJob(job: PrintJobDto): void {
-    if (confirm(`#${job.payloadJson.orderNumber} numaralı yazdırma işini silmek istediğinize emin misiniz?`)) {
-      this.orderService.deletePrintJob(job.id).subscribe({
-        next: () => {
-          this.loadJobs();
-        },
-        error: (err) => {
-          console.error('Delete failed:', err);
-          alert('İşlem silinemedi: ' + (err.error?.error?.message || err.message));
-        },
-      });
-    }
+  async deleteJob(job: PrintJobDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `#${job.payloadJson.orderNumber} numaralı yazdırma işini silmek istediğinize emin misiniz?`,
+      { title: 'Yazdırma işini sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
+
+    this.orderService.deletePrintJob(job.id).subscribe({
+      next: () => this.loadJobs(),
+      error: (err) => {
+        console.error('Delete failed:', err);
+        this.dialog.error('İşlem silinemedi: ' + (err.error?.error?.message || err.message));
+      },
+    });
   }
 }
 

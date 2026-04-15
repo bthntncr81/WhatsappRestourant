@@ -1,6 +1,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { FormsModule, ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
+import { environment } from '../../../environments/environment';
 import { AuthService } from '../../services/auth.service';
 import {
   WhatsAppConfigService,
@@ -15,6 +17,7 @@ import {
   PosMenuSyncResultDto,
 } from '../../services/pos-config.service';
 import { IconComponent } from '../../shared/icon.component';
+import { DialogService } from '../../shared/dialog.service';
 
 @Component({
   selector: 'app-settings',
@@ -411,6 +414,103 @@ import { IconComponent } from '../../shared/icon.component';
           </div>
         </div>
 
+        <!-- Çalışma Saatleri -->
+        <div class="settings-section">
+          <h2 class="section-title">Calisma Saatleri</h2>
+          <div class="settings-card">
+            <div class="setting-item column">
+              <span class="setting-description text-muted">
+                Calisma saatleri disinda gelen siparislerde musteri bilgilendirilir.
+              </span>
+            </div>
+            @for (day of weekDays; track day.key) {
+              <div class="setting-item" style="gap: 8px; align-items: center;">
+                <label style="width: 90px; font-size: 13px; font-weight: 500;">{{ day.label }}</label>
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer;">
+                  <input type="checkbox" [checked]="!isDayClosed(day.key)" (change)="toggleDayClosed(day.key)"/>
+                  Acik
+                </label>
+                @if (!isDayClosed(day.key)) {
+                  <input type="time" [value]="getDayOpen(day.key)" (change)="setDayTime(day.key, 'open', $event)"
+                         style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 12px;"/>
+                  <span style="font-size: 12px;">-</span>
+                  <input type="time" [value]="getDayClose(day.key)" (change)="setDayTime(day.key, 'close', $event)"
+                         style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 12px;"/>
+                }
+              </div>
+            }
+            <div class="setting-item action-row">
+              <button class="btn btn-primary" (click)="saveWorkingHours()" [disabled]="isSavingHours()">
+                {{ isSavingHours() ? 'Kaydediliyor...' : 'Kaydet' }}
+              </button>
+            </div>
+            @if (hoursSaved()) {
+              <div class="test-result success">
+                <p class="test-message">Calisma saatleri kaydedildi!</p>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Google Maps API -->
+        <div class="settings-section">
+          <h2 class="section-title">Google Maps API</h2>
+          <div class="settings-card">
+            <div class="setting-item column">
+              <span class="setting-label">API Key</span>
+              <span class="setting-description text-muted">
+                Konum servisleri icin gerekli. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: var(--color-accent-primary);">Google Cloud Console</a> > Credentials > Create Credentials > API Key ile olusturun. Geocoding API ve Maps JavaScript API aktif olmali.
+              </span>
+              <input type="text" class="setting-input" [value]="googleMapsKey()" (input)="googleMapsKey.set($any($event.target).value)" placeholder="AIzaSy..."/>
+            </div>
+            <div class="setting-item action-row">
+              <button class="btn btn-primary" (click)="saveGoogleMaps()" [disabled]="isSavingGoogleMaps()">
+                {{ isSavingGoogleMaps() ? 'Kaydediliyor...' : 'Kaydet' }}
+              </button>
+            </div>
+            @if (googleMapsSaved()) {
+              <div class="test-result success">
+                <p class="test-message">Google Maps API key kaydedildi!</p>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- iyzico Ödeme Ayarları -->
+        <div class="settings-section">
+          <h2 class="section-title">iyzico Odeme Ayarlari</h2>
+          <div class="settings-card">
+            <div class="setting-item">
+              <div class="setting-info">
+                <span class="setting-label">Mod</span>
+                <span class="setting-description text-muted">Test (sandbox) veya Production (canli)</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn" [class.btn-primary]="iyzicoMode() === 'test'" [class.btn-secondary]="iyzicoMode() !== 'test'" (click)="iyzicoMode.set('test')">Test</button>
+                <button class="btn" [class.btn-primary]="iyzicoMode() === 'prod'" [class.btn-secondary]="iyzicoMode() !== 'prod'" (click)="iyzicoMode.set('prod')">Production</button>
+              </div>
+            </div>
+            <div class="setting-item column">
+              <span class="setting-label">API Key</span>
+              <input type="text" class="setting-input" [value]="iyzicoApiKey()" (input)="iyzicoApiKey.set($any($event.target).value)" placeholder="sandbox-xxxx veya prod API key"/>
+            </div>
+            <div class="setting-item column">
+              <span class="setting-label">Secret Key</span>
+              <input type="password" class="setting-input" [value]="iyzicoSecretKey()" (input)="iyzicoSecretKey.set($any($event.target).value)" placeholder="***"/>
+            </div>
+            <div class="setting-item action-row">
+              <button class="btn btn-primary" (click)="saveIyzico()" [disabled]="isSavingIyzico()">
+                {{ isSavingIyzico() ? 'Kaydediliyor...' : 'Kaydet' }}
+              </button>
+            </div>
+            @if (iyzicoSaved()) {
+              <div class="test-result success">
+                <p class="test-message">iyzico ayarlari kaydedildi! ({{ iyzicoMode() === 'prod' ? 'CANLI' : 'TEST' }} mod)</p>
+              </div>
+            }
+          </div>
+        </div>
+
         <!-- Gel Al İndirim Ayarı -->
         <div class="settings-section">
           <h2 class="section-title">Gel Al Indirimi</h2>
@@ -437,6 +537,40 @@ import { IconComponent } from '../../shared/icon.component';
             @if (pickupDiscountSaved()) {
               <div class="test-result success">
                 <p class="test-message">Indirim orani kaydedildi!</p>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Sipariş Bildirim Telefonları -->
+        <div class="settings-section">
+          <h2 class="section-title">Siparis Bildirim Telefonlari</h2>
+          <div class="settings-card">
+            <div class="setting-item column">
+              <span class="setting-label">WhatsApp Bildirim Numaralari</span>
+              <span class="setting-description text-muted">
+                Yeni siparis geldiginde bu numaralara WhatsApp ile bildirim gonderilir (urunler, fiyat, konum linki).
+              </span>
+            </div>
+
+            @for (phone of notifyPhones(); track $index) {
+              <div class="setting-item" style="gap: 8px;">
+                <input type="tel" class="setting-input" [value]="phone"
+                       (input)="updateNotifyPhone($index, $event)"
+                       placeholder="905xxxxxxxxx" style="flex: 1;" />
+                <button class="btn btn-danger" style="padding: 6px 12px;" (click)="removeNotifyPhone($index)">Sil</button>
+              </div>
+            }
+
+            <div class="setting-item action-row" style="gap: 8px;">
+              <button class="btn btn-secondary" (click)="addNotifyPhone()">+ Numara Ekle</button>
+              <button class="btn btn-primary" (click)="saveNotifyPhones()" [disabled]="isSavingNotifyPhones()">
+                {{ isSavingNotifyPhones() ? 'Kaydediliyor...' : 'Kaydet' }}
+              </button>
+            </div>
+            @if (notifyPhonesSaved()) {
+              <div class="test-result success">
+                <p class="test-message">Bildirim numaralari kaydedildi!</p>
               </div>
             }
           </div>
@@ -720,10 +854,12 @@ import { IconComponent } from '../../shared/icon.component';
   ],
 })
 export class SettingsComponent implements OnInit {
+  private http = inject(HttpClient);
   private authService = inject(AuthService);
   private waConfigService = inject(WhatsAppConfigService);
   private menuMediaService = inject(MenuMediaService);
   private posConfigService = inject(PosConfigService);
+  private dialog = inject(DialogService);
 
   isAdmin = this.authService.isAdmin;
 
@@ -756,6 +892,37 @@ export class SettingsComponent implements OnInit {
   isSavingPickupDiscount = signal(false);
   pickupDiscountSaved = signal(false);
 
+  // Working Hours
+  workingHours = signal<any>({});
+  isSavingHours = signal(false);
+  hoursSaved = signal(false);
+  weekDays = [
+    { key: 'mon', label: 'Pazartesi' },
+    { key: 'tue', label: 'Sali' },
+    { key: 'wed', label: 'Carsamba' },
+    { key: 'thu', label: 'Persembe' },
+    { key: 'fri', label: 'Cuma' },
+    { key: 'sat', label: 'Cumartesi' },
+    { key: 'sun', label: 'Pazar' },
+  ];
+
+  // Google Maps
+  googleMapsKey = signal('');
+  isSavingGoogleMaps = signal(false);
+  googleMapsSaved = signal(false);
+
+  // iyzico
+  iyzicoApiKey = signal('');
+  iyzicoSecretKey = signal('');
+  iyzicoMode = signal<'test' | 'prod'>('test');
+  isSavingIyzico = signal(false);
+  iyzicoSaved = signal(false);
+
+  // Order Notification Phones
+  notifyPhones = signal<string[]>([]);
+  isSavingNotifyPhones = signal(false);
+  notifyPhonesSaved = signal(false);
+
   // Menu Media
   menuMedia = signal<MenuMediaDto[]>([]);
   isUploadingMedia = signal(false);
@@ -774,6 +941,10 @@ export class SettingsComponent implements OnInit {
       this.loadConfig();
       this.loadPosConfig();
       this.loadPickupDiscount();
+      this.loadWorkingHours();
+      this.loadGoogleMaps();
+      this.loadIyzico();
+      this.loadNotifyPhones();
       this.loadMenuMedia();
     }
   }
@@ -844,10 +1015,12 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  disconnectWhatsApp() {
-    if (!confirm('Are you sure you want to disconnect WhatsApp? This will remove your configuration.')) {
-      return;
-    }
+  async disconnectWhatsApp(): Promise<void> {
+    const ok = await this.dialog.confirm(
+      'WhatsApp bağlantısını kesmek istediğinize emin misiniz? Mevcut yapılandırmanız silinecek.',
+      { title: 'WhatsApp bağlantısını kes', confirmText: 'Bağlantıyı kes', variant: 'danger' },
+    );
+    if (!ok) return;
 
     this.waConfigService.deleteConfig().subscribe({
       next: () => {
@@ -1011,6 +1184,189 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  // ==================== Working Hours ====================
+
+  loadWorkingHours() {
+    this.http.get<any>(`${environment.apiBaseUrl}/integrations/working-hours`, { headers: this.authService.getAuthHeaders() }).subscribe({
+      next: (res) => {
+        if (res.success && res.data?.workingHours) {
+          this.workingHours.set(res.data.workingHours);
+        } else {
+          // Default: Mon-Sat 10:00-22:00, Sun closed
+          this.workingHours.set({
+            mon: { open: '10:00', close: '22:00' }, tue: { open: '10:00', close: '22:00' },
+            wed: { open: '10:00', close: '22:00' }, thu: { open: '10:00', close: '22:00' },
+            fri: { open: '10:00', close: '22:00' }, sat: { open: '10:00', close: '22:00' },
+            sun: { open: '10:00', close: '22:00' }, closed: [],
+          });
+        }
+      },
+    });
+  }
+
+  isDayClosed(day: string): boolean {
+    return (this.workingHours()?.closed || []).includes(day);
+  }
+
+  getDayOpen(day: string): string {
+    return this.workingHours()?.[day]?.open || '10:00';
+  }
+
+  getDayClose(day: string): string {
+    return this.workingHours()?.[day]?.close || '22:00';
+  }
+
+  toggleDayClosed(day: string): void {
+    const wh = { ...this.workingHours() };
+    const closed: string[] = [...(wh.closed || [])];
+    if (closed.includes(day)) {
+      wh.closed = closed.filter((d: string) => d !== day);
+      if (!wh[day]) wh[day] = { open: '10:00', close: '22:00' };
+    } else {
+      wh.closed = [...closed, day];
+    }
+    this.workingHours.set(wh);
+  }
+
+  setDayTime(day: string, field: 'open' | 'close', event: Event): void {
+    const val = (event.target as HTMLInputElement).value;
+    const wh = { ...this.workingHours() };
+    if (!wh[day]) wh[day] = { open: '10:00', close: '22:00' };
+    wh[day] = { ...wh[day], [field]: val };
+    this.workingHours.set(wh);
+  }
+
+  saveWorkingHours() {
+    this.isSavingHours.set(true);
+    this.hoursSaved.set(false);
+    this.http.put<any>(
+      `${environment.apiBaseUrl}/integrations/working-hours`,
+      { workingHours: this.workingHours() },
+      { headers: this.authService.getAuthHeaders() }
+    ).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.hoursSaved.set(true);
+          setTimeout(() => this.hoursSaved.set(false), 3000);
+        }
+        this.isSavingHours.set(false);
+      },
+      error: () => this.isSavingHours.set(false),
+    });
+  }
+
+  // ==================== Google Maps ====================
+
+  loadGoogleMaps() {
+    this.http.get<any>(`${environment.apiBaseUrl}/integrations/google-maps`, { headers: this.authService.getAuthHeaders() }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.googleMapsKey.set(res.data.apiKey || '');
+        }
+      },
+    });
+  }
+
+  saveGoogleMaps() {
+    this.isSavingGoogleMaps.set(true);
+    this.googleMapsSaved.set(false);
+    this.http.put<any>(
+      `${environment.apiBaseUrl}/integrations/google-maps`,
+      { apiKey: this.googleMapsKey() },
+      { headers: this.authService.getAuthHeaders() }
+    ).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.googleMapsSaved.set(true);
+          setTimeout(() => this.googleMapsSaved.set(false), 3000);
+        }
+        this.isSavingGoogleMaps.set(false);
+      },
+      error: () => this.isSavingGoogleMaps.set(false),
+    });
+  }
+
+  // ==================== iyzico ====================
+
+  loadIyzico() {
+    this.http.get<any>(`${environment.apiBaseUrl}/integrations/iyzico`, { headers: this.authService.getAuthHeaders() }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.iyzicoApiKey.set(res.data.apiKey || '');
+          this.iyzicoSecretKey.set(res.data.secretKey || '');
+          this.iyzicoMode.set(res.data.mode || 'test');
+        }
+      },
+    });
+  }
+
+  saveIyzico() {
+    this.isSavingIyzico.set(true);
+    this.iyzicoSaved.set(false);
+    this.http.put<any>(
+      `${environment.apiBaseUrl}/integrations/iyzico`,
+      { apiKey: this.iyzicoApiKey(), secretKey: this.iyzicoSecretKey(), mode: this.iyzicoMode() },
+      { headers: this.authService.getAuthHeaders() }
+    ).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.iyzicoSaved.set(true);
+          setTimeout(() => this.iyzicoSaved.set(false), 3000);
+        }
+        this.isSavingIyzico.set(false);
+      },
+      error: () => this.isSavingIyzico.set(false),
+    });
+  }
+
+  // ==================== Order Notification Phones ====================
+
+  loadNotifyPhones() {
+    this.http.get<any>(`${environment.apiBaseUrl}/integrations/order-notify-phones`, { headers: this.authService.getAuthHeaders() }).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.notifyPhones.set(res.data.phones || []);
+        }
+      },
+    });
+  }
+
+  addNotifyPhone() {
+    this.notifyPhones.update(phones => [...phones, '']);
+  }
+
+  removeNotifyPhone(index: number) {
+    this.notifyPhones.update(phones => phones.filter((_, i) => i !== index));
+  }
+
+  updateNotifyPhone(index: number, event: Event) {
+    const value = (event.target as HTMLInputElement).value;
+    this.notifyPhones.update(phones => phones.map((p, i) => i === index ? value : p));
+  }
+
+  saveNotifyPhones() {
+    this.isSavingNotifyPhones.set(true);
+    this.notifyPhonesSaved.set(false);
+    const phones = this.notifyPhones().filter(p => p.trim().length > 0);
+    this.http.put<any>(
+      `${environment.apiBaseUrl}/integrations/order-notify-phones`,
+      { phones },
+      { headers: this.authService.getAuthHeaders() }
+    ).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.notifyPhones.set(res.data.phones);
+          this.notifyPhonesSaved.set(true);
+          setTimeout(() => this.notifyPhonesSaved.set(false), 3000);
+        }
+        this.isSavingNotifyPhones.set(false);
+      },
+      error: () => {
+        this.isSavingNotifyPhones.set(false);
+      },
+    });
+  }
+
   // ==================== Menu Media ====================
 
   loadMenuMedia() {
@@ -1058,14 +1414,19 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  deleteMedia(mediaId: string) {
-    if (!confirm('Bu dosyayi silmek istediginizden emin misiniz?')) return;
+  async deleteMedia(mediaId: string): Promise<void> {
+    const ok = await this.dialog.confirm(
+      'Bu dosyayı silmek istediğinize emin misiniz?',
+      { title: 'Dosyayı sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
+
     this.menuMediaService.deleteMedia(mediaId).subscribe({
       next: () => {
         this.menuMedia.update((list) => list.filter((m) => m.id !== mediaId));
       },
       error: (err) => {
-        this.mediaError.set(err.error?.error?.message || 'Silme basarisiz');
+        this.mediaError.set(err.error?.error?.message || 'Silme başarısız');
       },
     });
   }

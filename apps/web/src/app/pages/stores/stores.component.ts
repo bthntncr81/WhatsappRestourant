@@ -10,6 +10,7 @@ import {
 } from '../../services/store.service';
 import { environment } from '../../../environments/environment';
 import { IconComponent } from '../../shared/icon.component';
+import { DialogService } from '../../shared/dialog.service';
 
 @Component({
   selector: 'app-stores',
@@ -642,6 +643,7 @@ import { IconComponent } from '../../shared/icon.component';
 export class StoresComponent implements OnInit, OnDestroy {
   private storeService = inject(StoreService);
   private ngZone = inject(NgZone);
+  private dialog = inject(DialogService);
 
   stores = signal<StoreDto[]>([]);
   loading = signal(false);
@@ -834,13 +836,20 @@ export class StoresComponent implements OnInit, OnDestroy {
     });
   }
 
-  deleteStore(store: StoreDto): void {
-    if (confirm(`"${store.name}" şubesini silmek istediğinize emin misiniz?`)) {
-      this.storeService.deleteStore(store.id).subscribe({
-        next: () => this.loadStores(),
-        error: (err) => console.error('Delete store failed:', err),
-      });
-    }
+  async deleteStore(store: StoreDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      `"${store.name}" şubesi silinsin mi?`,
+      { title: 'Şubeyi sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
+
+    this.storeService.deleteStore(store.id).subscribe({
+      next: () => this.loadStores(),
+      error: (err) => {
+        console.error('Delete store failed:', err);
+        this.dialog.error(err.error?.error?.message || 'Şube silinemedi');
+      },
+    });
   }
 
   // ==================== RULE CRUD ====================
@@ -895,13 +904,20 @@ export class StoresComponent implements OnInit, OnDestroy {
     }
   }
 
-  deleteRule(rule: DeliveryRuleDto): void {
-    if (confirm('Bu teslimat kuralını silmek istediğinize emin misiniz?')) {
-      this.storeService.deleteDeliveryRule(rule.id).subscribe({
-        next: () => this.loadStores(),
-        error: (err) => console.error('Delete rule failed:', err),
-      });
-    }
+  async deleteRule(rule: DeliveryRuleDto): Promise<void> {
+    const ok = await this.dialog.confirm(
+      'Bu teslimat kuralı silinsin mi?',
+      { title: 'Teslimat kuralı sil', confirmText: 'Sil', variant: 'danger' },
+    );
+    if (!ok) return;
+
+    this.storeService.deleteDeliveryRule(rule.id).subscribe({
+      next: () => this.loadStores(),
+      error: (err) => {
+        console.error('Delete rule failed:', err);
+        this.dialog.error(err.error?.error?.message || 'Kural silinemedi');
+      },
+    });
   }
 
   // ==================== GEO TEST ====================
