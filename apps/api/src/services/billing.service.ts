@@ -141,8 +141,8 @@ export class BillingService {
     });
 
     try {
-      // Initialize subscription via iyzico
-      const result = await iyzicoService.initializeSubscription(tenantId, {
+      // Initialize subscription via platform iyzico
+      const result = await iyzicoService.initializeSubscription({
         pricingPlanRefCode: plan.iyzicoRefCode,
         customerRefCode,
         email: dto.buyer.email,
@@ -238,7 +238,7 @@ export class BillingService {
 
     const customerRefCode = `CUST-${tenantId}`;
 
-    const result = await iyzicoService.initializeSubscriptionCheckoutForm(tenantId, {
+    const result = await iyzicoService.initializeSubscriptionCheckoutForm({
       pricingPlanRefCode: plan.iyzicoRefCode,
       customerRefCode,
       email: buyer.email,
@@ -335,9 +335,9 @@ export class BillingService {
       throw new AppError(400, 'ALREADY_CANCELLED', 'Subscription is already cancelled');
     }
 
-    // Cancel via iyzico if there's a subscription reference
+    // Cancel via platform iyzico if there's a subscription reference
     if (subscription.iyzicoSubscriptionRef) {
-      const result = await iyzicoService.cancelSubscription(tenantId, subscription.iyzicoSubscriptionRef);
+      const result = await iyzicoService.cancelSubscription(subscription.iyzicoSubscriptionRef);
       if (!result.success) {
         logger.warn({ tenantId, error: result.error }, 'Failed to cancel subscription in iyzico');
         // Continue with local cancellation anyway
@@ -387,9 +387,8 @@ export class BillingService {
       // For upgrades with existing subscription, use iyzico upgrade API
       if (subscription.iyzicoSubscriptionRef && newPlan.iyzicoRefCode) {
         const result = await iyzicoService.upgradeSubscription(
-          tenantId,
           subscription.iyzicoSubscriptionRef,
-          newPlan.iyzicoRefCode
+          newPlan.iyzicoRefCode,
         );
 
         if (!result.success) {
@@ -516,7 +515,7 @@ export class BillingService {
   }
 
   async registerCard(tenantId: string, dto: RegisterCardDto): Promise<StoredCardDto> {
-    const result = await iyzicoService.storeCard(tenantId, {
+    const result = await iyzicoService.storeCard({
       email: dto.buyer.email,
       externalId: tenantId,
       card: {
@@ -563,8 +562,8 @@ export class BillingService {
       throw new AppError(404, 'CARD_NOT_FOUND', 'Card not found');
     }
 
-    // Delete from iyzico
-    const result = await iyzicoService.deleteCard(tenantId, card.cardUserKey, card.cardToken);
+    // Delete from platform iyzico
+    const result = await iyzicoService.deleteCard(card.cardUserKey, card.cardToken);
     if (!result.success) {
       logger.warn({ tenantId, cardId, error: result.error }, 'Failed to delete card from iyzico');
     }

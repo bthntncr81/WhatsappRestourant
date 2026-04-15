@@ -5,6 +5,20 @@ import prisma from '../db/prisma';
 const logger = createLogger();
 
 // ==================== CONFIGURATION ====================
+//
+// Iki farklı iyzico hesabı vardır:
+//
+//   1. PLATFORM HESABI — Otorder (SaaS sağlayıcısı) şirketinin iyzico hesabı.
+//      Kullanım: tenant'ların Otorder'a ödediği abonelik ücretleri (STARTER/PRO)
+//      ve kayıtlı abonelik kartları. Tek hesap; env üzerinden okunur.
+//
+//   2. TENANT HESABI — Her restoranın kendi iyzico hesabı. Ayarlar sayfasından
+//      girilir (tenant.iyzicoApiKey/SecretKey). Kullanım: restoranın müşterileri
+//      tarafından yapılan sipariş ödemeleri. Restoran ödemesiz dönemi de olabilir,
+//      bu durumda order payment çağrıları 400 döner.
+//
+// Bu iki akışı KESİNLİKLE birbirine karıştırmayın — subscription metodları
+// platform config kullanır, order-payment metodları tenant config kullanır.
 
 const IYZICO_SANDBOX_URL = 'https://sandbox-api.iyzipay.com';
 const IYZICO_PROD_URL = 'https://api.iyzipay.com';
@@ -13,56 +27,56 @@ interface IyzicoConfig {
   apiKey: string;
   secretKey: string;
   baseUrl: string;
-  source: 'tenant' | 'env';
+  source: 'platform' | 'tenant';
 }
 
 /**
- * Read iyzico credentials from environment variables.
- * Used as the fallback when a tenant has not configured their own keys.
- * No hardcoded sandbox values — set IYZICO_API_KEY/IYZICO_SECRET_KEY in .env.
+ * Platform iyzico config — env üzerinden okunur. Abonelik ödemeleri için.
+ *
+ * @throws Error eğer IYZICO_API_KEY / IYZICO_SECRET_KEY env değişkenleri yoksa
  */
-function getEnvConfig(): IyzicoConfig {
+function getPlatformIyzicoConfig(): IyzicoConfig {
+  const apiKey = process.env.IYZICO_API_KEY;
+  const secretKey = process.env.IYZICO_SECRET_KEY;
+
+  if (!apiKey || !secretKey) {
+    throw new Error(
+      'Platform iyzico yapılandırması eksik: IYZICO_API_KEY ve IYZICO_SECRET_KEY env değişkenlerini ayarlayın',
+    );
+  }
+
   return {
-    apiKey: process.env.IYZICO_API_KEY || '',
-    secretKey: process.env.IYZICO_SECRET_KEY || '',
+    apiKey,
+    secretKey,
     baseUrl: process.env.IYZICO_BASE_URL || IYZICO_SANDBOX_URL,
-    source: 'env',
+    source: 'platform',
   };
 }
 
 /**
- * Resolve iyzico config for a tenant.
- * Preference order:
- *   1. Tenant-level keys from Settings (tenant.iyzicoApiKey/SecretKey). baseUrl
- *      is derived from tenant.iyzicoMode ('test' → sandbox, 'prod' → prod)
- *      so test/prod keys can never be paired with the wrong endpoint.
- *   2. Environment fallback (process.env.IYZICO_*).
+ * Tenant iyzico config — DB üzerinden okunur. Sipariş ödemeleri için.
+ * baseUrl mode'dan türetilir, iyzicoBaseUrl kolonu yoksayılır.
  *
- * Throws if neither tenant nor env provides usable credentials — this is a
- * hard error rather than a silent sandbox fallback, to catch misconfiguration.
+ * @throws Error eğer tenant iyzico bilgileri Ayarlar'dan girilmemişse
  */
-async function resolveIyzicoConfig(tenantId: string): Promise<IyzicoConfig> {
+async function getTenantIyzicoConfig(tenantId: string): Promise<IyzicoConfig> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { iyzicoApiKey: true, iyzicoSecretKey: true, iyzicoMode: true },
   });
 
-  if (tenant?.iyzicoApiKey && tenant?.iyzicoSecretKey) {
-    return {
-      apiKey: tenant.iyzicoApiKey,
-      secretKey: tenant.iyzicoSecretKey,
-      baseUrl: tenant.iyzicoMode === 'prod' ? IYZICO_PROD_URL : IYZICO_SANDBOX_URL,
-      source: 'tenant',
-    };
-  }
-
-  const env = getEnvConfig();
-  if (!env.apiKey || !env.secretKey) {
+  if (!tenant?.iyzicoApiKey || !tenant?.iyzicoSecretKey) {
     throw new Error(
-      'iyzico yapılandırması eksik: ne tenant anahtarları ne de IYZICO_API_KEY/IYZICO_SECRET_KEY env değişkenleri bulundu',
+      'Bu işletme için iyzico yapılandırması yapılmamış. Ayarlar sayfasından iyzico API bilgilerini girin.',
     );
   }
-  return env;
+
+  return {
+    apiKey: tenant.iyzicoApiKey,
+    secretKey: tenant.iyzicoSecretKey,
+    baseUrl: tenant.iyzicoMode === 'prod' ? IYZICO_PROD_URL : IYZICO_SANDBOX_URL,
+    source: 'tenant',
+  };
 }
 
 // ==================== HELPER FUNCTIONS ====================
@@ -176,21 +190,44 @@ function generateConversationId(): string {
 
 export class IyzicoService {
   constructor() {
-    logger.info('Iyzico service initialized (tenant-scoped)');
+    logger.info('Iyzico service initialized (platform + tenant split)');
   }
 
   /**
-   * Make authenticated request to iyzico API using the tenant's own
-   * credentials (or env fallback). Every call site MUST pass a tenantId —
-   * we no longer cache a single env-based config.
+   * Abonelik ve kart saklama çağrıları için — platform iyzico hesabı kullanılır.
    */
-  private async request<T>(
+  private async platformRequest<T>(
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: Record<string, unknown>,
+  ): Promise<{ success: boolean; data?: T; error?: string; errorCode?: string }> {
+    return this.doRequest<T>(getPlatformIyzicoConfig(), method, path, body);
+  }
+
+  /**
+   * Sipariş ödemeleri için — tenant'ın kendi iyzico hesabı kullanılır.
+   * Tenant'ın Ayarlar'dan iyzico girdisi yapmış olması gerekir.
+   */
+  private async tenantRequest<T>(
     tenantId: string,
     method: 'GET' | 'POST' | 'DELETE',
     path: string,
-    body?: Record<string, unknown>
+    body?: Record<string, unknown>,
   ): Promise<{ success: boolean; data?: T; error?: string; errorCode?: string }> {
-    const config = await resolveIyzicoConfig(tenantId);
+    const config = await getTenantIyzicoConfig(tenantId);
+    return this.doRequest<T>(config, method, path, body, tenantId);
+  }
+
+  /**
+   * Ortak HTTP çağrı — tam oluşturulmuş bir config ile iyzico'ya istek yollar.
+   */
+  private async doRequest<T>(
+    config: IyzicoConfig,
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: Record<string, unknown>,
+    tenantId?: string,
+  ): Promise<{ success: boolean; data?: T; error?: string; errorCode?: string }> {
     const url = `${config.baseUrl}${path}`;
     const requestBody = body ? JSON.stringify(body) : '';
 
@@ -198,11 +235,11 @@ export class IyzicoService {
       config.apiKey,
       config.secretKey,
       path,
-      requestBody
+      requestBody,
     );
 
     const headers: Record<string, string> = {
-      'Authorization': authorization,
+      Authorization: authorization,
       'x-iyzi-rnd': randomKey,
       'Content-Type': 'application/json',
     };
@@ -259,9 +296,9 @@ export class IyzicoService {
   // ==================== SUBSCRIPTION API ====================
 
   /**
-   * Initialize subscription with new card (NON-3DS)
+   * Initialize subscription with new card (NON-3DS) — platform iyzico
    */
-  async initializeSubscription(tenantId: string, params: {
+  async initializeSubscription(params: {
     pricingPlanRefCode: string;
     customerRefCode: string;
     email: string;
@@ -342,7 +379,7 @@ export class IyzicoService {
       };
     }
 
-    const result = await this.request<SubscriptionInitResponse>(tenantId, 'POST', '/v2/subscription/initialize', body);
+    const result = await this.platformRequest<SubscriptionInitResponse>('POST', '/v2/subscription/initialize', body);
 
     if (result.success && result.data) {
       // iyzico returns nested data in some responses (data.data)
@@ -363,9 +400,9 @@ export class IyzicoService {
   }
 
   /**
-   * Initialize subscription with Checkout Form (supports 3DS)
+   * Initialize subscription with Checkout Form (supports 3DS) — platform iyzico
    */
-  async initializeSubscriptionCheckoutForm(tenantId: string, params: {
+  async initializeSubscriptionCheckoutForm(params: {
     pricingPlanRefCode: string;
     customerRefCode: string;
     email: string;
@@ -420,11 +457,11 @@ export class IyzicoService {
       },
     };
 
-    const result = await this.request<{
+    const result = await this.platformRequest<{
       checkoutFormContent: string;
       token: string;
       tokenExpireTime: number;
-    }>(tenantId, 'POST', '/v2/subscription/checkoutform/initialize', body);
+    }>('POST', '/v2/subscription/checkoutform/initialize', body);
 
     if (result.success && result.data) {
       return {
@@ -443,9 +480,9 @@ export class IyzicoService {
   }
 
   /**
-   * Get subscription details
+   * Get subscription details — platform iyzico
    */
-  async getSubscription(tenantId: string, subscriptionRefCode: string): Promise<{
+  async getSubscription(subscriptionRefCode: string): Promise<{
     success: boolean;
     subscription?: {
       referenceCode: string;
@@ -458,7 +495,7 @@ export class IyzicoService {
     };
     error?: string;
   }> {
-    const result = await this.request<{
+    const result = await this.platformRequest<{
       data: {
         referenceCode: string;
         subscriptionStatus: string;
@@ -468,7 +505,7 @@ export class IyzicoService {
         trialDays: number;
         trialEndDate?: number;
       };
-    }>(tenantId, 'GET', `/v2/subscription/${subscriptionRefCode}`);
+    }>('GET', `/v2/subscription/${subscriptionRefCode}`);
 
     if (result.success && result.data) {
       return {
@@ -489,9 +526,9 @@ export class IyzicoService {
   }
 
   /**
-   * Cancel subscription
+   * Cancel subscription — platform iyzico
    */
-  async cancelSubscription(tenantId: string, subscriptionRefCode: string): Promise<{
+  async cancelSubscription(subscriptionRefCode: string): Promise<{
     success: boolean;
     error?: string;
   }> {
@@ -501,18 +538,17 @@ export class IyzicoService {
       subscriptionReferenceCode: subscriptionRefCode,
     };
 
-    const result = await this.request(tenantId, 'POST', '/v2/subscription/cancel', body);
+    const result = await this.platformRequest('POST', '/v2/subscription/cancel', body);
     return { success: result.success, error: result.error };
   }
 
   /**
-   * Upgrade/change subscription plan
+   * Upgrade/change subscription plan — platform iyzico
    */
   async upgradeSubscription(
-    tenantId: string,
     subscriptionRefCode: string,
     newPricingPlanRefCode: string,
-    resetRecurrenceCount: boolean = true
+    resetRecurrenceCount: boolean = true,
   ): Promise<{
     success: boolean;
     newSubscriptionRefCode?: string;
@@ -528,9 +564,9 @@ export class IyzicoService {
       resetRecurrenceCount,
     };
 
-    const result = await this.request<{
+    const result = await this.platformRequest<{
       data: { referenceCode: string };
-    }>(tenantId, 'POST', '/v2/subscription/upgrade', body);
+    }>('POST', '/v2/subscription/upgrade', body);
 
     if (result.success && result.data) {
       return {
@@ -545,7 +581,7 @@ export class IyzicoService {
   // ==================== CHECKOUT FORM (Order Payments) ====================
 
   /**
-   * Initialize checkout form for one-time order payment
+   * Initialize checkout form for one-time order payment — tenant iyzico
    */
   async initializeCheckoutForm(tenantId: string, params: {
     price: string;
@@ -625,7 +661,7 @@ export class IyzicoService {
       })),
     };
 
-    const result = await this.request<{
+    const result = await this.tenantRequest<{
       token: string;
       checkoutFormContent: string;
       paymentPageUrl: string;
@@ -644,7 +680,7 @@ export class IyzicoService {
   }
 
   /**
-   * Retrieve checkout form payment result
+   * Retrieve checkout form payment result — tenant iyzico
    */
   async retrieveCheckoutFormResult(tenantId: string, token: string): Promise<{
     success: boolean;
@@ -658,7 +694,7 @@ export class IyzicoService {
       token,
     };
 
-    const result = await this.request<{
+    const result = await this.tenantRequest<{
       paymentStatus: string;
       paymentId: string;
       price: number;
@@ -680,9 +716,10 @@ export class IyzicoService {
   // ==================== CARD STORAGE API ====================
 
   /**
-   * Store a card without making a payment
+   * Store a card without making a payment — platform iyzico
+   * (platform hesabında saklanır, abonelik kartları için kullanılır)
    */
-  async storeCard(tenantId: string, params: {
+  async storeCard(params: {
     email: string;
     externalId: string; // tenantId
     card: {
@@ -717,7 +754,7 @@ export class IyzicoService {
       },
     };
 
-    const result = await this.request<{
+    const result = await this.platformRequest<{
       cardToken: string;
       cardUserKey: string;
       cardAssociation: string;
@@ -725,7 +762,7 @@ export class IyzicoService {
       cardBankName: string;
       binNumber: string;
       lastFourDigits: string;
-    }>(tenantId, 'POST', '/cardstorage/card', body);
+    }>('POST', '/cardstorage/card', body);
 
     if (result.success && result.data) {
       return {
@@ -744,9 +781,9 @@ export class IyzicoService {
   }
 
   /**
-   * Delete a stored card
+   * Delete a stored card — platform iyzico
    */
-  async deleteCard(tenantId: string, cardUserKey: string, cardToken: string): Promise<{
+  async deleteCard(cardUserKey: string, cardToken: string): Promise<{
     success: boolean;
     error?: string;
   }> {
@@ -757,14 +794,14 @@ export class IyzicoService {
       cardToken,
     };
 
-    const result = await this.request(tenantId, 'DELETE', '/cardstorage/card', body);
+    const result = await this.platformRequest('DELETE', '/cardstorage/card', body);
     return { success: result.success, error: result.error };
   }
 
   /**
-   * Get stored cards for a user
+   * Get stored cards for a user — platform iyzico
    */
-  async getStoredCards(tenantId: string, cardUserKey: string): Promise<{
+  async getStoredCards(cardUserKey: string): Promise<{
     success: boolean;
     cards?: Array<{
       cardToken: string;
@@ -784,7 +821,7 @@ export class IyzicoService {
       cardUserKey,
     };
 
-    const result = await this.request<{
+    const result = await this.platformRequest<{
       cardDetails: Array<{
         cardToken: string;
         cardAlias: string;
@@ -795,7 +832,7 @@ export class IyzicoService {
         lastFourDigits: string;
         cardType: string;
       }>;
-    }>(tenantId, 'POST', '/cardstorage/cards', body);
+    }>('POST', '/cardstorage/cards', body);
 
     if (result.success && result.data) {
       return {
@@ -808,9 +845,9 @@ export class IyzicoService {
   }
 
   /**
-   * Update subscription card (for card updates)
+   * Update subscription card (for card updates) — platform iyzico
    */
-  async updateSubscriptionCard(tenantId: string, params: {
+  async updateSubscriptionCard(params: {
     customerRefCode: string;
     subscriptionRefCode?: string;
     callbackUrl: string;
@@ -828,11 +865,11 @@ export class IyzicoService {
       ...(params.subscriptionRefCode && { subscriptionReferenceCode: params.subscriptionRefCode }),
     };
 
-    const result = await this.request<{
+    const result = await this.platformRequest<{
       checkoutFormContent: string;
       token: string;
       tokenExpireTime: number;
-    }>(tenantId, 'POST', '/v2/subscription/card-update/checkoutform/initialize', body);
+    }>('POST', '/v2/subscription/card-update/checkoutform/initialize', body);
 
     if (result.success && result.data) {
       return {
@@ -846,9 +883,9 @@ export class IyzicoService {
   }
 
   /**
-   * Retry failed subscription payment
+   * Retry failed subscription payment — platform iyzico
    */
-  async retrySubscriptionPayment(tenantId: string, subscriptionRefCode: string): Promise<{
+  async retrySubscriptionPayment(subscriptionRefCode: string): Promise<{
     success: boolean;
     error?: string;
   }> {
@@ -858,12 +895,13 @@ export class IyzicoService {
       subscriptionReferenceCode: subscriptionRefCode,
     };
 
-    const result = await this.request(tenantId, 'POST', '/v2/subscription/operation/retry', body);
+    const result = await this.platformRequest('POST', '/v2/subscription/operation/retry', body);
     return { success: result.success, error: result.error };
   }
 
   /**
-   * Cancel/refund a payment by paymentId
+   * Cancel/refund an order payment by paymentId — tenant iyzico
+   * (tenant'ın kendi iyzico hesabı üzerinden yapılmış bir ödemeyi iade eder)
    */
   async cancelPayment(tenantId: string, paymentId: string, ip: string = '85.34.78.112'): Promise<{ success: boolean; error?: string }> {
     try {
@@ -874,7 +912,7 @@ export class IyzicoService {
         ip,
       };
 
-      const result = await this.request(tenantId, 'POST', '/payment/cancel', body);
+      const result = await this.tenantRequest(tenantId, 'POST', '/payment/cancel', body);
 
       if (result.success) {
         return { success: true };
