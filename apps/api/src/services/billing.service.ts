@@ -142,7 +142,7 @@ export class BillingService {
 
     try {
       // Initialize subscription via iyzico
-      const result = await iyzicoService.initializeSubscription({
+      const result = await iyzicoService.initializeSubscription(tenantId, {
         pricingPlanRefCode: plan.iyzicoRefCode,
         customerRefCode,
         email: dto.buyer.email,
@@ -238,7 +238,7 @@ export class BillingService {
 
     const customerRefCode = `CUST-${tenantId}`;
 
-    const result = await iyzicoService.initializeSubscriptionCheckoutForm({
+    const result = await iyzicoService.initializeSubscriptionCheckoutForm(tenantId, {
       pricingPlanRefCode: plan.iyzicoRefCode,
       customerRefCode,
       email: buyer.email,
@@ -337,7 +337,7 @@ export class BillingService {
 
     // Cancel via iyzico if there's a subscription reference
     if (subscription.iyzicoSubscriptionRef) {
-      const result = await iyzicoService.cancelSubscription(subscription.iyzicoSubscriptionRef);
+      const result = await iyzicoService.cancelSubscription(tenantId, subscription.iyzicoSubscriptionRef);
       if (!result.success) {
         logger.warn({ tenantId, error: result.error }, 'Failed to cancel subscription in iyzico');
         // Continue with local cancellation anyway
@@ -387,6 +387,7 @@ export class BillingService {
       // For upgrades with existing subscription, use iyzico upgrade API
       if (subscription.iyzicoSubscriptionRef && newPlan.iyzicoRefCode) {
         const result = await iyzicoService.upgradeSubscription(
+          tenantId,
           subscription.iyzicoSubscriptionRef,
           newPlan.iyzicoRefCode
         );
@@ -515,7 +516,7 @@ export class BillingService {
   }
 
   async registerCard(tenantId: string, dto: RegisterCardDto): Promise<StoredCardDto> {
-    const result = await iyzicoService.storeCard({
+    const result = await iyzicoService.storeCard(tenantId, {
       email: dto.buyer.email,
       externalId: tenantId,
       card: {
@@ -563,7 +564,7 @@ export class BillingService {
     }
 
     // Delete from iyzico
-    const result = await iyzicoService.deleteCard(card.cardUserKey, card.cardToken);
+    const result = await iyzicoService.deleteCard(tenantId, card.cardUserKey, card.cardToken);
     if (!result.success) {
       logger.warn({ tenantId, cardId, error: result.error }, 'Failed to delete card from iyzico');
     }

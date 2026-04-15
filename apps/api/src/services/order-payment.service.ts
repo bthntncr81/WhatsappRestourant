@@ -67,7 +67,7 @@ export class OrderPaymentService {
     }
 
     // Initialize checkout form
-    const result = await iyzicoService.initializeCheckoutForm({
+    const result = await iyzicoService.initializeCheckoutForm(tenantId, {
       price: totalPrice.toFixed(2),
       paidPrice: totalPrice.toFixed(2),
       basketId: orderId,
@@ -159,7 +159,7 @@ export class OrderPaymentService {
     }
 
     // Retrieve result from iyzico
-    const result = await iyzicoService.retrieveCheckoutFormResult(token);
+    const result = await iyzicoService.retrieveCheckoutFormResult(payment.tenantId, token);
 
     if (result.success && result.paymentStatus === 'SUCCESS') {
       // Update payment as successful
@@ -286,7 +286,7 @@ export class OrderPaymentService {
       return;
     }
 
-    const result = await iyzicoService.cancelPayment(payment.iyzicoPaymentId);
+    const result = await iyzicoService.cancelPayment(tenantId, payment.iyzicoPaymentId);
 
     if (result.success) {
       await prisma.orderPayment.update({
@@ -330,7 +330,7 @@ export class OrderPaymentService {
       price: (item.unitPrice * item.qty).toFixed(2),
     }));
 
-    const result = await iyzicoService.initializeCheckoutForm({
+    const result = await iyzicoService.initializeCheckoutForm(tenantId, {
       price: amount.toFixed(2),
       paidPrice: amount.toFixed(2),
       basketId: `${orderId}-add`,

@@ -38,11 +38,11 @@ export const envSchema = z.object({
   OPENAI_ORG_ID: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-5.2'),
 
-  // iyzico Payment
-  IYZICO_API_KEY: z.string().default('sandbox-ifkcjkaPdtshoWkt36gjOwpZ9Z5XsUZM'),
-  IYZICO_SECRET_KEY: z.string().default('sandbox-0PfKYCdPshA2ZhqfdGq6JxfB5dXQWeqa'),
-  IYZICO_BASE_URL: z.string().default('https://sandbox-api.iyzipay.com'),
-  IYZICO_PRODUCT_REF_CODE: z.string().default('4703db20-26dc-45e9-968b-aa0f0ee93b60'),
+  // iyzico Payment — fallback when tenant has not configured its own keys in
+  // Settings. No defaults: prod must set these via env or tenant-level config.
+  IYZICO_API_KEY: z.string().optional(),
+  IYZICO_SECRET_KEY: z.string().optional(),
+  IYZICO_BASE_URL: z.string().optional(),
 
   // Encryption (for per-tenant WhatsApp credential storage)
   ENCRYPTION_KEY: z.string().optional(), // 32-byte hex key for AES-256-GCM
