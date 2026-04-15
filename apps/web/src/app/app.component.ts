@@ -42,7 +42,7 @@ export class AppComponent {
   isStandalonePage = signal(false);
   
   // Pages that should render without shell (no sidebar/topbar)
-  private standaloneRoutes = ['/billing'];
+  private standaloneRoutes = ['/billing', '/onboarding'];
   
   constructor() {
     this.router.events.pipe(

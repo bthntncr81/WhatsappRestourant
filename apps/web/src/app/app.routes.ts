@@ -77,6 +77,12 @@ export const routes: Routes = [
     canActivate: [roleGuard(['OWNER', 'ADMIN'])],
   },
   {
+    path: 'onboarding',
+    loadComponent: () =>
+      import('./pages/onboarding/onboarding.component').then((m) => m.OnboardingComponent),
+    canActivate: [roleGuard(['OWNER', 'ADMIN'])],
+  },
+  {
     path: 'surveys',
     loadComponent: () =>
       import('./pages/surveys/surveys.component').then((m) => m.SurveysComponent),

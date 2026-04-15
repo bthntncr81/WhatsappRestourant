@@ -416,8 +416,8 @@ export class RegisterComponent {
       .subscribe({
         next: (response) => {
           if (response.success) {
-            // Redirect to billing/plans page after registration
-            this.router.navigate(['/billing']);
+            // Redirect to onboarding wizard after registration
+            this.router.navigate(['/onboarding']);
           } else {
             this.error.set(response.error?.message || 'Registration failed');
           }

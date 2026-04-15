@@ -109,6 +109,22 @@ router.post('/webhook/iyzico', async (req: Request, res: Response) => {
 });
 
 /**
+ * HTML-escape user-supplied or backend-supplied strings before embedding
+ * them in the callback response HTML. Defensive against XSS — even though
+ * messages today come from trusted backend code, a future change that pipes
+ * user content through would not be exploitable. (Security audit 2026-04-15
+ * finding #4.)
+ */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * POST /api/billing/callback
  * Handle 3DS subscription checkout-form callback from iyzico.
  *
@@ -120,12 +136,18 @@ router.post('/webhook/iyzico', async (req: Request, res: Response) => {
  * SECURITY: this endpoint is PUBLIC (iyzico is the caller, not our frontend).
  * Never trust req.body blindly — always re-fetch the result from iyzico
  * using the token. The token itself is an opaque one-time value.
+ *
+ * XSS defence: all user-visible strings are HTML-escaped before being
+ * interpolated into the response body. postMessage uses JSON.stringify
+ * which escapes quotes and special chars safely inside a script context.
  */
 router.post('/callback', async (req: Request, res: Response) => {
   const token = (req.body?.token as string | undefined)?.trim();
   logger.info({ hasToken: Boolean(token) }, '3DS subscription callback received');
 
-  const html = (success: boolean, message: string) => `<!DOCTYPE html>
+  const html = (success: boolean, message: string) => {
+    const safeMessage = escapeHtml(message);
+    return `<!DOCTYPE html>
 <html lang="tr">
 <head>
   <meta charset="utf-8">
@@ -142,15 +164,15 @@ router.post('/callback', async (req: Request, res: Response) => {
   <div class="card">
     <div class="icon">${success ? '✓' : '✗'}</div>
     <h2>${success ? 'Ödeme Başarılı' : 'Ödeme Başarısız'}</h2>
-    <p>${message}</p>
+    <p>${safeMessage}</p>
   </div>
   <script>
     try {
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage({
           type: 'WHATRES_BILLING_RESULT',
-          success: ${success},
-          message: ${JSON.stringify(message)}
+          success: ${success ? 'true' : 'false'},
+          message: ${JSON.stringify(message.slice(0, 500))}
         }, '*');
       }
     } catch (e) {}
@@ -164,6 +186,7 @@ router.post('/callback', async (req: Request, res: Response) => {
   </script>
 </body>
 </html>`;
+  };
 
   if (!token) {
     logger.warn('3DS callback: missing token in body');
@@ -193,9 +216,10 @@ router.get('/callback', async (req: Request, res: Response) => {
     const result = token
       ? await billingService.completeSubscriptionCheckout(token)
       : { success: false, error: 'Token eksik' };
+    const errMsg = (result.error || '').slice(0, 500);
     res.send(`<!DOCTYPE html><html><body><script>
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'WHATRES_BILLING_RESULT', success: ${result.success}, message: ${JSON.stringify(result.error || '')} }, '*');
+        window.opener.postMessage({ type: 'WHATRES_BILLING_RESULT', success: ${result.success ? 'true' : 'false'}, message: ${JSON.stringify(errMsg)} }, '*');
         window.close();
       } else {
         window.location.href = '/billing?status=${result.success ? 'success' : 'failed'}';

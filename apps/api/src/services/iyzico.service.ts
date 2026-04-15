@@ -82,15 +82,14 @@ async function getTenantIyzicoConfig(tenantId: string): Promise<IyzicoConfig> {
 // ==================== HELPER FUNCTIONS ====================
 
 /**
- * Generate random string for iyzico auth
+ * Generate cryptographically secure random string for iyzico auth.
+ * MUST use crypto.randomBytes — Math.random is predictable and would allow
+ * an attacker observing a few HMAC requests to forge subsequent signatures.
+ * (Security audit 2026-04-15 finding #1.)
  */
 function generateRandomString(length: number): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  // Each byte → 2 hex chars; ask for ceil(length/2) bytes, then trim.
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
 }
 
 /**
