@@ -111,6 +111,26 @@ export class MenuService {
   }
 
   /**
+   * Delete a menu version and all its items, option groups, options, synonyms
+   */
+  async deleteVersion(tenantId: string, versionId: string): Promise<void> {
+    const version = await prisma.menuVersion.findFirst({
+      where: { id: versionId, tenantId },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'VERSION_NOT_FOUND', 'Menu version not found');
+    }
+
+    // Delete in order: synonyms, options, option groups, items, then version
+    await prisma.menuSynonym.deleteMany({ where: { versionId, tenantId } });
+    await prisma.menuOption.deleteMany({ where: { versionId, tenantId } });
+    await prisma.menuOptionGroup.deleteMany({ where: { versionId, tenantId } });
+    await prisma.menuItem.deleteMany({ where: { versionId, tenantId } });
+    await prisma.menuVersion.delete({ where: { id: versionId } });
+  }
+
+  /**
    * Set a specific published version as the active version (used by chatbot)
    */
   async setActiveVersion(tenantId: string, versionId: string): Promise<void> {

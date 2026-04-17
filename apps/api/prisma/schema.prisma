@@ -70,8 +70,28 @@ model Tenant {
   posLastMenuSync DateTime? // Last menu sync timestamp
   posMenuHash     String?   // Last known menu hash
 
+  // Working hours (JSON: {"mon":{"open":"10:00","close":"22:00"},"tue":...,"closed":["sun"]})
+  workingHours Json?
+
   // Pickup discount
   pickupDiscountPercent Int?  // Gel al indirim yüzdesi (orn: 10 = %10)
+
+  // Order notification phones (WhatsApp)
+  orderNotifyPhones String[] @default([])
+
+  // Google Maps
+  googleMapsApiKey  String?
+
+  // iyzico Payment
+  iyzicoApiKey      String?
+  iyzicoSecretKey   String?
+  iyzicoBaseUrl     String?  // https://api.iyzipay.com (prod) or https://sandbox-api.iyzipay.com (test)
+  iyzicoMode        String   @default("test") // "test" or "prod"
+
+  // Busy mode
+  isBusy              Boolean @default(false)
+  busyEstimateMinutes Int?    // Tahmini teslimat süresi (dakika)
+  busyMessage         String? // Opsiyonel özel mesaj
 
   @@map("tenants")
 }

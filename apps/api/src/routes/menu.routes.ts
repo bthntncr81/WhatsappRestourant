@@ -204,6 +204,26 @@ router.get(
 );
 
 /**
+ * DELETE /menu/versions/:versionId
+ * Delete a menu version (cannot delete active version)
+ */
+router.delete(
+  '/versions/:versionId',
+  async (req: Request, res: Response<ApiResponse<void>>, next: NextFunction) => {
+    try {
+      const activeVersionId = await menuService.getActiveVersionId(req.tenantId!);
+      if (req.params.versionId === activeVersionId) {
+        throw new AppError(400, 'CANNOT_DELETE_ACTIVE', 'Aktif versiyon silinemez');
+      }
+      await menuService.deleteVersion(req.tenantId!, req.params.versionId);
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
  * GET /menu/versions/:versionId/export
  */
 router.get(

@@ -312,7 +312,7 @@ export class PosIntegrationService {
       notes: order.notes || undefined,
       source: 'WHATSAPP',
       items,
-      locationId: tenant.posLocationId || undefined,
+      // locationId is auto-resolved from IntegrationPartner in POS API
       discount: order.discountAmount ? Number(order.discountAmount) : undefined,
     };
 

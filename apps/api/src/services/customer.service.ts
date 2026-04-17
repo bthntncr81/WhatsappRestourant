@@ -102,6 +102,7 @@ export class CustomerService {
       orderNumber: o.orderNumber,
       status: o.status,
       totalPrice: Number(o.totalPrice),
+      deliveryType: o.deliveryType,
       deliveryAddress: o.deliveryAddress,
       paymentMethod: o.paymentMethod,
       items: o.items.map(item => ({

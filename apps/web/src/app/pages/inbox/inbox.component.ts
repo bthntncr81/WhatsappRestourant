@@ -133,6 +133,16 @@ import { IconComponent } from '../../shared/icon.component';
                 <span class="chat-user-phone text-muted">
                   {{ selectedConversation()!.customerPhone }}
                 </span>
+                @if (selectedConversation()!.customerLat && selectedConversation()!.customerLng) {
+                  <a
+                    [href]="'https://maps.google.com/?q=' + selectedConversation()!.customerLat + ',' + selectedConversation()!.customerLng"
+                    target="_blank"
+                    class="location-link"
+                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--color-accent-primary); text-decoration: none;"
+                  >
+                    <app-icon name="map-pin" [size]="12"/> Konumu Gör
+                  </a>
+                }
               </div>
             </div>
             <div class="chat-actions">

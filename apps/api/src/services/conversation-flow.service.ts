@@ -306,6 +306,45 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
+    // Check working hours and busy mode
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { isBusy: true, busyEstimateMinutes: true, busyMessage: true, workingHours: true },
+    });
+
+    // Working hours check
+    if (tenant?.workingHours) {
+      const wh = tenant.workingHours as any;
+      const now = new Date();
+      const trTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Istanbul' }));
+      const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      const today = dayNames[trTime.getDay()];
+      const currentTime = `${String(trTime.getHours()).padStart(2, '0')}:${String(trTime.getMinutes()).padStart(2, '0')}`;
+
+      const closedDays: string[] = wh.closed || [];
+      if (closedDays.includes(today)) {
+        const nextOpen = this.getNextOpenDay(wh, today);
+        await this.sendText(ctx, `⏰ Bugun kapali gunumuz. ${nextOpen}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
+        return 'IDLE';
+      }
+
+      const daySchedule = wh[today];
+      if (daySchedule?.open && daySchedule?.close) {
+        if (currentTime < daySchedule.open || currentTime >= daySchedule.close) {
+          await this.sendText(ctx, `⏰ Su an siparis alamiyoruz. Bugunun calisma saati: ${daySchedule.open} - ${daySchedule.close}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
+          return 'IDLE';
+        }
+      }
+    }
+
+    // Busy mode check
+    if (tenant?.isBusy) {
+      const estimate = tenant.busyEstimateMinutes ? `Tahmini teslimat suresi: ~${tenant.busyEstimateMinutes} dakika.` : '';
+      const custom = tenant.busyMessage || '';
+      const busyText = `⚠️ Su an yogun bir donemimiz var. ${estimate} ${custom}\n\nSiparis vermeye devam edebilirsiniz.`.trim();
+      await this.sendText(ctx, busyText);
+    }
+
     // Handle reorder list selection (sub-state)
     if (ctx.conversation.flowSubState === 'REORDER_LIST_SHOWN') {
       const listReplyId = ctx.payload.interactive?.listReply?.id;
@@ -453,6 +492,27 @@ export class ConversationFlowService {
       const parentOrderId = parentMeta.parentOrderId;
 
       if (parentOrderId && message.kind === 'TEXT' && text) {
+        // Check if user is confirming/acknowledging the addition (e.g. "tamamdır", "tamam", "ok")
+        // Don't send to NLU - just acknowledge and clear sub-state
+        if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { flowSubState: null, flowMetadata: null },
+          });
+          await this.sendText(ctx, 'Tamam, ekleme kaydedildi! Baska bir istegininiz olursa yazabilirsiniz.');
+          return 'ORDER_COLLECTING';
+        }
+
+        // Check if user wants to cancel/undo the addition
+        if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { flowSubState: null, flowMetadata: null },
+          });
+          await this.sendText(ctx, 'Ekleme iptal edildi. Baska bir istegininiz var mi?');
+          return 'ORDER_COLLECTING';
+        }
+
         const addResult = await nluOrchestratorService.processMessage(
           tenantId, conversationId, message.id, text,
         );
@@ -2142,6 +2202,38 @@ export class ConversationFlowService {
 
   private async sendText(ctx: FlowContext, text: string): Promise<void> {
     await whatsappService.sendText(ctx.tenantId, ctx.conversationId, text);
+  }
+
+  private formatWorkingHours(wh: any): string {
+    const dayLabels: Record<string, string> = {
+      mon: 'Pazartesi', tue: 'Sali', wed: 'Carsamba', thu: 'Persembe',
+      fri: 'Cuma', sat: 'Cumartesi', sun: 'Pazar',
+    };
+    const closedDays: string[] = wh.closed || [];
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    return days.map(d => {
+      if (closedDays.includes(d)) return `${dayLabels[d]}: Kapali`;
+      const s = wh[d];
+      if (s?.open && s?.close) return `${dayLabels[d]}: ${s.open} - ${s.close}`;
+      return `${dayLabels[d]}: -`;
+    }).join('\n');
+  }
+
+  private getNextOpenDay(wh: any, currentDay: string): string {
+    const dayLabels: Record<string, string> = {
+      mon: 'Pazartesi', tue: 'Sali', wed: 'Carsamba', thu: 'Persembe',
+      fri: 'Cuma', sat: 'Cumartesi', sun: 'Pazar',
+    };
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    const closedDays: string[] = wh.closed || [];
+    const startIdx = days.indexOf(currentDay);
+    for (let i = 1; i <= 7; i++) {
+      const nextDay = days[(startIdx + i) % 7];
+      if (!closedDays.includes(nextDay) && wh[nextDay]?.open) {
+        return `Bir sonraki acilis: ${dayLabels[nextDay]} ${wh[nextDay].open}`;
+      }
+    }
+    return '';
   }
 
   private async sendOrderConfirmButtons(ctx: FlowContext, summaryText: string): Promise<void> {

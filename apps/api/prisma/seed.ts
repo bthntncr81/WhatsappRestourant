@@ -150,33 +150,21 @@ async function main() {
 
   const menuItems = [
     // Pizza
-    { name: 'Margherita', category: 'Pizza', basePrice: 300, description: 'Domates sos, mozzarella, taze fesleğen. İtalyan klasiği!' },
-    { name: 'Marinara', category: 'Pizza', basePrice: 250, description: 'Domates sos, sarımsak. Peynir sevmeyenler için sade lezzet!' },
-    { name: 'Acılı', category: 'Pizza', basePrice: 400, description: 'Domates sos, mozzarella, sucuk, jalapeno, kırmızı biber. Cesurlar için!' },
+    { name: 'Margherita', category: 'Pizza', basePrice: 300, description: 'Domates sos, mozzarella, taze fesleğen.' },
+    { name: 'Marinara', category: 'Pizza', basePrice: 250, description: 'Domates sos, sarımsak.' },
+    { name: 'Acılı', category: 'Pizza', basePrice: 400, description: 'Domates sos, mozzarella, sucuk, jalapeno, kırmızı biber.' },
     { name: 'Dört Peynirli', category: 'Pizza', basePrice: 350, description: 'Domates sos, mozzarella, cheddar, parmesan, gorgonzola. Peynir cenneti!' },
-    { name: 'Karışık', category: 'Pizza', basePrice: 400, description: 'Domates sos, mozzarella, sucuk, salam, mantar. Her şeyden biraz!' },
-    { name: 'Pepperoni', category: 'Pizza', basePrice: 400, description: 'Domates sosu, mozarella, sucuk, parmesan' },
-    { name: 'Kavurmalı', category: 'Pizza', basePrice: 550, description: 'Domates sos, mozzarella, kavurma, mısır. Türk damak tadına özel!' },
-    { name: 'Füme Mantar', category: 'Pizza', basePrice: 550, description: 'Domates sos, mozzarella, füme et, mantar. Duman aroması!' },
-    { name: 'Et Partisi', category: 'Pizza', basePrice: 550, description: 'Domates sos, mozzarella, ıslı et, sucuk, acı sos. Protein şöleni!' },
-    { name: 'High Five Özel', category: 'Pizza', basePrice: 450, description: 'Domates sos, mozzarella, sucuk, füme et, biber. Şefin imzası!' },
+    { name: 'Karışık', category: 'Pizza', basePrice: 400, description: 'Domates sos, mozzarella, sucuk, salam, mantar.' },
+    { name: 'Pepperoni', category: 'Pizza', basePrice: 400, description: 'Domates sosu, mozarella,sucuk parmesan' },
+    { name: 'High Five Özel', category: 'Pizza', basePrice: 500, description: 'Domates sos, mozzarella, sucuk, füme et, biber.' },
 
     // Makarna
-    { name: 'Kremalı Mantarlı', category: 'Makarna', basePrice: 200, description: 'Krema sos, taze mantar. Hafif ve lezzetli!' },
-    { name: 'Napolitan', category: 'Makarna', basePrice: 200, description: 'Domates sos, parmesan.' },
-    { name: 'Arabiatta', category: 'Makarna', basePrice: 200, description: 'Acılı domates sos' },
-    { name: 'Köz Biberli', category: 'Makarna', basePrice: 200, description: 'Krema sos, kaşar, köz biber. Hafif tütsü aroması!' },
-    { name: 'Köz Patlıcanlı', category: 'Makarna', basePrice: 200, description: 'Domates sos, köz patlıcan. Türk mutfağı esintisi!' },
-    { name: 'Pesto', category: 'Makarna', basePrice: 250, description: 'Pesto soslu parmesan krema' },
-    { name: 'Beşamel Soslu', category: 'Makarna', basePrice: 275, description: 'Beşamel sos, kaşar peyniri. Kremsi lezzet!' },
-    { name: '4 Peynirli Makarna', category: 'Makarna', basePrice: 300, description: 'Peynir sos, krema, 4 çeşit peynir. Peynir tutkunlarına!' },
-    { name: 'Acılı Sosisli', category: 'Makarna', basePrice: 350, description: 'Domates sos, sosis' },
-    { name: 'Etli Mantarlı', category: 'Makarna', basePrice: 450, description: 'Özel sos, füme et, mantar. Doyurucu lezzet!' },
-    { name: 'High Five Makarna', category: 'Makarna', basePrice: 450, description: 'Özel sos, füme et, parmesan, kaşar. Şefin imzası!' },
+    { name: 'Pesto', category: 'Makarna', basePrice: 250, description: 'Pesto Soslu Parmesan Krema' },
+    { name: 'Napolitan', category: 'Makarna', basePrice: 200, description: 'domates sos, parmesan.' },
+    { name: 'Arabiatta', category: 'Makarna', basePrice: 200, description: 'Kırmızı Biber Soslu' },
 
     // İçecek
-    { name: 'Ayran', category: 'İçecek', basePrice: 20, description: 'Geleneksel, köpüklü', isReadyFood: true },
-    { name: 'Limonata', category: 'İçecek', basePrice: 35, description: 'Taze sıkılmış, ev yapımı', isReadyFood: true },
+    { name: 'Ayran', category: 'İçecek', basePrice: 40, description: 'Geleneksel, köpüklü', isReadyFood: true },
     { name: 'Damla Su', category: 'İçecek', basePrice: 40, description: '', isReadyFood: true },
     { name: 'Coca Cola Şişe', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
     { name: 'Coca Cola Zero Şişe', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
@@ -190,8 +178,8 @@ async function main() {
     { name: 'Fusetea Mango', category: 'İçecek', basePrice: 80, description: '', isReadyFood: true },
 
     // Tatlı
-    { name: 'Tiramisu', category: 'Tatlı', basePrice: 75, description: 'İtalyan klasiği, kahve ve mascarpone' },
-    { name: 'Çikolatalı Sufle', category: 'Tatlı', basePrice: 85, description: 'Sıcak servis, akan çikolata' },
+    { name: 'Tiramisu', category: 'Tatlı', basePrice: 200, description: 'İtalyan klasiği, kahve ve mascarpone' },
+    { name: 'Panna Cotta', category: 'Tatlı', basePrice: 225, description: 'İtalyan Panna Cotta' },
   ];
 
   for (const item of menuItems) {

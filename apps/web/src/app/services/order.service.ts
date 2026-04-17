@@ -50,6 +50,7 @@ export interface OrderDto {
   notes: string | null;
   customerPhone: string | null;
   customerName: string | null;
+  deliveryType: string | null;
   deliveryAddress: string | null;
   paymentMethod: string | null;
   parentOrderId: string | null;
@@ -110,6 +111,7 @@ export interface CustomerDetailDto {
     orderNumber: number | null;
     status: OrderStatus;
     totalPrice: number;
+    deliveryType: string | null;
     deliveryAddress: string | null;
     paymentMethod: string | null;
     items: { menuItemName: string; qty: number; unitPrice: number }[];

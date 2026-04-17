@@ -218,6 +218,13 @@ export class MenuService {
     );
   }
 
+  deleteVersion(versionId: string): Observable<ApiResponse<void>> {
+    return this.http.delete<ApiResponse<void>>(
+      `${environment.apiBaseUrl}/menu/versions/${versionId}`,
+      this.headers
+    );
+  }
+
   importMenu(data: unknown): Observable<ApiResponse<MenuImportResultDto>> {
     return this.http.post<ApiResponse<MenuImportResultDto>>(
       `${environment.apiBaseUrl}/menu/import`,

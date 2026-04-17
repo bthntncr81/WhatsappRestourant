@@ -11,6 +11,8 @@ import {
 import { Prisma } from '@prisma/client';
 import { chatbotService } from './chatbot.service';
 import { whatsappService } from './whatsapp.service';
+import { whatsappProviderService } from './whatsapp-provider.service';
+import { whatsappConfigService } from './whatsapp-config.service';
 import { TEMPLATES } from './message-templates';
 import { orderPaymentService } from './order-payment.service';
 import { posIntegrationService } from './pos-integration.service';
@@ -166,6 +168,11 @@ export class OrderService {
     // Push order to POS if integration is configured (non-blocking)
     posIntegrationService.pushOrder(tenantId, orderId).catch((err) => {
       logger.error({ tenantId, orderId, error: err.message }, 'POS pushOrder failed');
+    });
+
+    // Send WhatsApp notification to configured phones (non-blocking)
+    this.sendOrderNotification(tenantId, updatedOrder, order.conversation).catch((err) => {
+      logger.error({ tenantId, orderId, error: err.message }, 'Order notification failed');
     });
 
     return this.mapToDto(updatedOrder);
@@ -637,6 +644,89 @@ export class OrderService {
       WHERE "tenantId" = ${tenantId}
     `;
     return Number(result[0]?.next_number) || 1;
+  }
+
+  private async sendOrderNotification(tenantId: string, order: any, conversation: any): Promise<void> {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { orderNotifyPhones: true },
+    });
+
+    if (!tenant?.orderNotifyPhones?.length) return;
+
+    // Build order summary
+    const items = order.items.map((i: any) => `${i.qty}x ${i.menuItemName} - ${Number(i.unitPrice) * i.qty} TL`).join('\n');
+    const customerName = conversation.customerName || conversation.customerPhone;
+    const customerPhone = conversation.customerPhone;
+
+    let mapsLink = '';
+    if (conversation.customerLat && conversation.customerLng) {
+      mapsLink = `\n📍 Konum: https://maps.google.com/?q=${conversation.customerLat},${conversation.customerLng}`;
+    }
+
+    const deliveryAddr = order.deliveryAddress ? `\n🏠 Adres: ${order.deliveryAddress}` : '';
+
+    const message = `🔔 *YENİ SİPARİŞ #${order.orderNumber}*\n\n👤 ${customerName}\n📱 ${customerPhone}\n\n📋 *Ürünler:*\n${items}\n\n💰 *Toplam: ${Number(order.totalPrice)} TL*${deliveryAddr}${mapsLink}`;
+
+    // Get WhatsApp credentials for sending
+    const waConfig = await whatsappConfigService.getDecryptedConfig(tenantId);
+    if (!waConfig) {
+      logger.warn({ tenantId }, 'WhatsApp config not found, skipping order notifications');
+      return;
+    }
+
+    const tenantConfig = {
+      phoneNumberId: waConfig.phoneNumberId,
+      accessToken: waConfig.accessToken,
+    };
+
+    // Send text message first for the rich details (customer, items,
+    // address, maps link). Text sends require an open 24h window between
+    // the notify phone and the WhatsApp Business account — for restaurant
+    // staff phones this is usually the case since they interact with the
+    // bot regularly. If text fails (window closed), we fall back to the
+    // approved template which has no window restriction but only carries
+    // the order number.
+    //
+    // IMPORTANT: Do NOT swap the order back to template-first. The template
+    // only has a single {{1}} parameter (order number) and will silently
+    // succeed, hiding the rich details the user expects. User reported
+    // 2026-04-15: "eskiden konum falan geliyordu şimdi gelmiyor" — bug
+    // caused by template-first path never reaching the text fallback.
+    for (const phone of tenant.orderNotifyPhones) {
+      try {
+        await whatsappProviderService.sendTextWithConfig(phone, message, tenantConfig);
+        logger.info(
+          { tenantId, phone, orderNumber: order.orderNumber, method: 'text' },
+          'Order notification sent (rich text)',
+        );
+      } catch (textErr: unknown) {
+        const textMsg = textErr instanceof Error ? textErr.message : String(textErr);
+        logger.warn(
+          { tenantId, phone, error: textMsg },
+          'Rich text notification failed (likely 24h window closed), falling back to template',
+        );
+        try {
+          await whatsappProviderService.sendTemplateWithConfig(
+            phone,
+            'order_alert',
+            'tr',
+            [{ type: 'body', parameters: [{ type: 'text', text: `#${order.orderNumber}` }] }],
+            tenantConfig,
+          );
+          logger.info(
+            { tenantId, phone, orderNumber: order.orderNumber, method: 'template' },
+            'Order notification sent (template fallback)',
+          );
+        } catch (templateErr: unknown) {
+          const tmplMsg = templateErr instanceof Error ? templateErr.message : String(templateErr);
+          logger.error(
+            { tenantId, phone, textError: textMsg, templateError: tmplMsg },
+            'Failed to send order notification via both text and template',
+          );
+        }
+      }
+    }
   }
 
   private mapToDto(order: any): OrderDto {

@@ -20,6 +20,8 @@ export interface ConversationDto {
   createdAt: string;
   lastMessage?: MessageDto;
   unreadCount?: number;
+  customerLat?: number | null;
+  customerLng?: number | null;
 }
 
 export interface MessageDto {

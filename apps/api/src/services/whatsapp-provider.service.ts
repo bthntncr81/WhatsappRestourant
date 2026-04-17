@@ -290,6 +290,26 @@ export class WhatsAppProviderService {
   }
 
   /**
+   * Send template message using per-tenant DB config (no 24h window restriction)
+   */
+  async sendTemplateWithConfig(
+    to: string,
+    templateName: string,
+    languageCode: string,
+    components: Array<{ type: string; parameters: Array<{ type: string; text: string }> }>,
+    tenantConfig: { phoneNumberId: string; accessToken: string },
+  ): Promise<{ messageId: string }> {
+    return this.sendMessageWithConfig(to, {
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        components,
+      },
+    }, tenantConfig);
+  }
+
+  /**
    * Send interactive buttons using per-tenant DB config
    */
   async sendInteractiveButtonsWithConfig(

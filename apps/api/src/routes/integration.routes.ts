@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ApiResponse } from '@whatres/shared';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
+import { AppError } from '../middleware/error-handler';
 import { posIntegrationService } from '../services/pos-integration.service';
 import prisma from '../db/prisma';
 import { createLogger } from '../logger';
@@ -39,7 +40,7 @@ router.get(
           lastMenuSync: tenant?.posLastMenuSync?.toISOString() || null,
           menuHash: tenant?.posMenuHash || null,
           isConfigured: !!(tenant?.posApiUrl && tenant?.posApiKey),
-          webhookUrl: `${process.env.APP_BASE_URL || 'https://posfixmenu.com'}${process.env.API_PREFIX || '/api'}/webhooks/pos/${req.tenantId}`,
+          webhookUrl: `${process.env.APP_BASE_URL || 'https://order.highfivepps.com'}${process.env.API_PREFIX || '/api'}/webhooks/pos/${req.tenantId}`,
         },
       });
     } catch (error) {
@@ -231,6 +232,243 @@ router.put(
       logger.info({ tenantId: req.tenantId, pickupDiscountPercent: percent }, 'Gel al indirim oranı güncellendi');
 
       res.json({ success: true, data: { pickupDiscountPercent: percent } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * GET /integrations/order-notify-phones
+ */
+router.get(
+  '/order-notify-phones',
+  requireAuth,
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { orderNotifyPhones: true },
+      });
+      res.json({ success: true, data: { phones: tenant?.orderNotifyPhones || [] } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * PUT /integrations/order-notify-phones
+ */
+router.put(
+  '/order-notify-phones',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { phones } = req.body;
+      if (!Array.isArray(phones)) {
+        throw new AppError(400, 'INVALID_INPUT', 'phones must be an array of strings');
+      }
+      // Normalize phone numbers - ensure 90 prefix for Turkish numbers
+      const normalized = phones
+        .map((p: string) => {
+          let num = p.replace(/\D/g, '');
+          if (num.startsWith('0') && num.length === 11) num = '9' + num; // 05xx -> 905xx
+          if (num.length === 10 && !num.startsWith('90')) num = '90' + num; // 5xx -> 905xx
+          return num;
+        })
+        .filter((p: string) => p.length >= 12);
+
+      await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data: { orderNotifyPhones: normalized },
+      });
+      res.json({ success: true, data: { phones: normalized } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * GET /integrations/working-hours
+ */
+router.get(
+  '/working-hours',
+  requireAuth,
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { workingHours: true },
+      });
+      res.json({ success: true, data: { workingHours: tenant?.workingHours || null } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * PUT /integrations/working-hours
+ */
+router.put(
+  '/working-hours',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { workingHours } = req.body;
+      await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data: { workingHours: workingHours || null },
+      });
+      res.json({ success: true, data: { workingHours } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * GET /integrations/google-maps
+ */
+router.get(
+  '/google-maps',
+  requireAuth,
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { googleMapsApiKey: true },
+      });
+      res.json({ success: true, data: { apiKey: tenant?.googleMapsApiKey || '' } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * PUT /integrations/google-maps
+ */
+router.put(
+  '/google-maps',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { apiKey } = req.body;
+      await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data: { googleMapsApiKey: apiKey || null },
+      });
+      res.json({ success: true, data: { apiKey } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * GET /integrations/iyzico
+ */
+router.get(
+  '/iyzico',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { iyzicoApiKey: true, iyzicoSecretKey: true, iyzicoBaseUrl: true, iyzicoMode: true },
+      });
+      res.json({
+        success: true,
+        data: {
+          apiKey: tenant?.iyzicoApiKey || '',
+          secretKey: tenant?.iyzicoSecretKey ? '***' + tenant.iyzicoSecretKey.slice(-6) : '',
+          baseUrl: tenant?.iyzicoBaseUrl || '',
+          mode: tenant?.iyzicoMode || 'test',
+          isConfigured: !!(tenant?.iyzicoApiKey && tenant?.iyzicoSecretKey),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * PUT /integrations/iyzico
+ */
+router.put(
+  '/iyzico',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { apiKey, secretKey, mode } = req.body;
+      const baseUrl = mode === 'prod'
+        ? 'https://api.iyzipay.com'
+        : 'https://sandbox-api.iyzipay.com';
+
+      const data: any = { iyzicoMode: mode || 'test', iyzicoBaseUrl: baseUrl };
+      if (apiKey) data.iyzicoApiKey = apiKey;
+      if (secretKey && !secretKey.startsWith('***')) data.iyzicoSecretKey = secretKey;
+
+      await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data,
+      });
+
+      res.json({ success: true, data: { mode: mode || 'test', baseUrl } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * GET /integrations/busy-status
+ */
+router.get(
+  '/busy-status',
+  requireAuth,
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { isBusy: true, busyEstimateMinutes: true, busyMessage: true },
+      });
+      res.json({ success: true, data: tenant });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * PUT /integrations/busy-status
+ */
+router.put(
+  '/busy-status',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { isBusy, busyEstimateMinutes, busyMessage } = req.body;
+      const updated = await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data: {
+          isBusy: !!isBusy,
+          busyEstimateMinutes: busyEstimateMinutes ? Number(busyEstimateMinutes) : null,
+          busyMessage: busyMessage || null,
+        },
+        select: { isBusy: true, busyEstimateMinutes: true, busyMessage: true },
+      });
+      res.json({ success: true, data: updated });
     } catch (error) {
       next(error);
     }

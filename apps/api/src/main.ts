@@ -98,6 +98,19 @@ app.use(`${config.server.apiPrefix}/webhooks`, webhookRouter);
 app.use(`${config.server.apiPrefix}/integrations`, integrationRouter);
 app.use(`${config.server.apiPrefix}/dashboard`, dashboardRouter);
 
+// Public endpoints (no auth required)
+app.get(`${config.server.apiPrefix}/public/busy-status/:tenantId`, async (req, res) => {
+  try {
+    const { default: prisma } = await import('./db/prisma');
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.tenantId },
+      select: { isBusy: true, busyEstimateMinutes: true, busyMessage: true },
+    });
+    if (!tenant) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Tenant not found' } });
+    res.json({ success: true, data: tenant });
+  } catch { res.status(500).json({ success: false, error: { code: 'ERROR', message: 'Internal error' } }); }
+});
+
 // 404 Handler
 app.use((_req, res) => {
   res.status(404).json({
