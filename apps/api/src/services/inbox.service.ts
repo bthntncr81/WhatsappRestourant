@@ -1,5 +1,6 @@
 import prisma from '../db/prisma';
 import { AppError } from '../middleware/error-handler';
+import { createLogger } from '../logger';
 import {
   ConversationDto,
   ConversationListQueryDto,
@@ -13,6 +14,10 @@ import {
   GeoCheckResult,
 } from '@whatres/shared';
 import { Prisma } from '@prisma/client';
+import { whatsappProviderService } from './whatsapp-provider.service';
+import { whatsappConfigService } from './whatsapp-config.service';
+
+const logger = createLogger();
 
 export class InboxService {
   // ==================== CONVERSATIONS ====================
@@ -253,9 +258,54 @@ export class InboxService {
     tenantId: string,
     conversationId: string,
     text: string,
-    senderUserId: string
+    senderUserId: string,
   ): Promise<MessageDto> {
-    return this.createMessage(tenantId, conversationId, 'OUT', 'TEXT', text, undefined, senderUserId);
+    // 1. Save the message to DB
+    const message = await this.createMessage(tenantId, conversationId, 'OUT', 'TEXT', text, undefined, senderUserId);
+
+    // 2. Actually send it via WhatsApp — this was previously missing,
+    //    causing messages to appear in the inbox but never reach the customer.
+    try {
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { customerPhone: true },
+      });
+
+      if (!conversation?.customerPhone) {
+        logger.warn({ tenantId, conversationId }, 'Cannot send WhatsApp reply: no customer phone');
+        return message;
+      }
+
+      const waConfig = await whatsappConfigService.getDecryptedConfig(tenantId);
+      if (!waConfig) {
+        logger.warn({ tenantId, conversationId }, 'Cannot send WhatsApp reply: no WhatsApp config');
+        return message;
+      }
+
+      const result = await whatsappProviderService.sendTextWithConfig(
+        conversation.customerPhone,
+        text,
+        { phoneNumberId: waConfig.phoneNumberId, accessToken: waConfig.accessToken },
+      );
+
+      // Update message with the WhatsApp message ID
+      await prisma.message.update({
+        where: { id: message.id },
+        data: { externalId: result.messageId },
+      });
+
+      logger.info(
+        { tenantId, conversationId, messageId: message.id, waMessageId: result.messageId },
+        'Inbox reply sent via WhatsApp',
+      );
+    } catch (error) {
+      logger.error(
+        { tenantId, conversationId, messageId: message.id, error },
+        'Failed to send inbox reply via WhatsApp — message saved but not delivered',
+      );
+    }
+
+    return message;
   }
 
   // ==================== PHASE MANAGEMENT ====================

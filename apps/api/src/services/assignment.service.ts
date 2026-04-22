@@ -9,6 +9,8 @@ import {
   AgentDto,
 } from '@whatres/shared';
 import { inboxService } from './inbox.service';
+import { whatsappProviderService } from './whatsapp-provider.service';
+import { whatsappConfigService } from './whatsapp-config.service';
 
 const logger = createLogger();
 
@@ -112,24 +114,42 @@ export class AssignmentService {
 
   async handoffToAgent(
     tenantId: string,
-    conversationId: string
+    conversationId: string,
   ): Promise<void> {
-    // Update conversation status
-    await prisma.conversation.update({
+    const conversation = await prisma.conversation.update({
       where: { id: conversationId, tenantId },
       data: { status: 'PENDING_AGENT' },
+      select: { customerPhone: true },
     });
 
-    // Send bot message
+    const handoffText = '🔄 Sizi bir temsilciye bağlıyorum. Lütfen bekleyin.';
+
+    // Save system message to DB
     await inboxService.createMessage(
       tenantId,
       conversationId,
       'OUT',
       'SYSTEM',
-      '🔄 Sizi bir temsilciye bağlıyorum. Lütfen bekleyin.',
+      handoffText,
       undefined,
-      undefined
+      undefined,
     );
+
+    // Send via WhatsApp so the customer actually sees it
+    try {
+      if (conversation.customerPhone) {
+        const waConfig = await whatsappConfigService.getDecryptedConfig(tenantId);
+        if (waConfig) {
+          await whatsappProviderService.sendTextWithConfig(
+            conversation.customerPhone,
+            handoffText,
+            { phoneNumberId: waConfig.phoneNumberId, accessToken: waConfig.accessToken },
+          );
+        }
+      }
+    } catch (error) {
+      logger.error({ tenantId, conversationId, error }, 'Failed to send handoff message via WhatsApp');
+    }
 
     logger.info({ tenantId, conversationId }, 'Conversation handed off to agent');
   }
