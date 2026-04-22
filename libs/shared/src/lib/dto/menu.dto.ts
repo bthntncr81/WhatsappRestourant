@@ -19,6 +19,8 @@ export interface PublishMenuVersionDto {
 
 // ==================== MENU ITEM ====================
 
+export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT';
+
 export interface MenuItemDto {
   id: string;
   tenantId: string;
@@ -31,6 +33,12 @@ export interface MenuItemDto {
   isReadyFood: boolean;
   sortOrder: number;
   optionGroups?: MenuOptionGroupDto[];
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  discountStartAt: string | null;
+  discountEndAt: string | null;
+  effectivePrice: number;
+  hasActiveDiscount: boolean;
 }
 
 export interface CreateMenuItemDto {
@@ -42,6 +50,10 @@ export interface CreateMenuItemDto {
   isReadyFood?: boolean;
   sortOrder?: number;
   optionGroupIds?: string[];
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+  discountStartAt?: string | null;
+  discountEndAt?: string | null;
 }
 
 export interface UpdateMenuItemDto {
@@ -53,6 +65,10 @@ export interface UpdateMenuItemDto {
   isReadyFood?: boolean;
   sortOrder?: number;
   optionGroupIds?: string[];
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+  discountStartAt?: string | null;
+  discountEndAt?: string | null;
 }
 
 // ==================== OPTION GROUP ====================
@@ -174,9 +190,12 @@ export interface CanonicalMenuItem {
   name: string;
   description: string | null;
   basePrice: number;
+  effectivePrice: number;
   isActive: boolean;
   isReadyFood: boolean;
   optionGroupIds: string[];
+  discountType?: string | null;
+  discountValue?: number | null;
 }
 
 export interface CanonicalOptionGroup {

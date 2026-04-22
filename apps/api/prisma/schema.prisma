@@ -168,6 +168,13 @@ model MenuItem {
   isReadyFood     Boolean @default(false)
   sortOrder       Int     @default(0)
   externalItemId  String? // POS menuItemId
+
+  // Item-level discount
+  discountType    String?   // "PERCENTAGE" | "FIXED_AMOUNT" | null (no discount)
+  discountValue   Decimal?  @db.Decimal(10, 2) // 20 = %20 or ₺20
+  discountStartAt DateTime?
+  discountEndAt   DateTime?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

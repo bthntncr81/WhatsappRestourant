@@ -9,6 +9,7 @@ import {
   MenuOptionDto,
   MenuSynonymDto,
   CanonicalMenuExport,
+  DiscountType,
 } from '../../services/menu.service';
 import { IconComponent } from '../../shared/icon.component';
 import { DialogService } from '../../shared/dialog.service';
@@ -193,18 +194,32 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                                 @if (item.isReadyFood) {
                                   <span class="ready-food-badge">Hazır Gıda</span>
                                 }
+                                @if (item.hasActiveDiscount) {
+                                  <span class="discount-badge">İndirimli</span>
+                                }
                               </span>
-                              <span class="item-price">{{ item.basePrice | currency }}</span>
+                              <span class="item-price">
+                                @if (item.hasActiveDiscount) {
+                                  <span class="old-price">₺{{ item.basePrice }}</span>
+                                  <span class="new-price">₺{{ item.effectivePrice }}</span>
+                                } @else {
+                                  ₺{{ item.basePrice }}
+                                }
+                              </span>
                             </div>
                             @if (item.description) {
                               <p class="item-description text-muted">{{ item.description }}</p>
                             }
-                            @if (!selectedVersion()!.publishedAt) {
-                              <div class="item-actions">
+                            <div class="item-actions">
+                              <label class="toggle-switch" (click)="$event.stopPropagation()">
+                                <input type="checkbox" [checked]="item.isActive" (change)="toggleItemActive(item)"/>
+                                <span class="toggle-slider"></span>
+                              </label>
+                              @if (!selectedVersion()!.publishedAt) {
                                 <button class="btn-icon" (click)="editItem(item)"><app-icon name="edit" [size]="14"/></button>
                                 <button class="btn-icon danger" (click)="deleteItem(item)"><app-icon name="trash" [size]="14"/></button>
-                              </div>
-                            }
+                              }
+                            </div>
                           </div>
                         }
                       </div>
@@ -255,9 +270,47 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                     </label>
                     <span class="hint-text">Sipariş hazır durumundayken ekleme yapılabilecek ürünler</span>
                   </div>
+
+                  <div class="form-section-title">İndirim</div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label>İndirim Türü</label>
+                      <select [(ngModel)]="itemForm.discountType" name="discountType">
+                        <option [ngValue]="null">Yok</option>
+                        <option value="PERCENTAGE">Yüzde (%)</option>
+                        <option value="FIXED_AMOUNT">Sabit Tutar (₺)</option>
+                      </select>
+                    </div>
+                    @if (itemForm.discountType) {
+                      <div class="form-group">
+                        <label>{{ itemForm.discountType === 'PERCENTAGE' ? 'İndirim (%)' : 'İndirim (₺)' }}</label>
+                        <input type="number" [(ngModel)]="itemForm.discountValue" name="discountValue" step="0.01" min="0" />
+                      </div>
+                    }
+                  </div>
+                  @if (itemForm.discountType) {
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label>Başlangıç <span class="hint-text">(opsiyonel)</span></label>
+                        <input type="datetime-local" [(ngModel)]="itemForm.discountStartAt" name="discountStartAt" />
+                      </div>
+                      <div class="form-group">
+                        <label>Bitiş <span class="hint-text">(opsiyonel)</span></label>
+                        <input type="datetime-local" [(ngModel)]="itemForm.discountEndAt" name="discountEndAt" />
+                      </div>
+                    </div>
+                    <div class="discount-preview">
+                      @if (itemForm.discountValue && itemForm.basePrice) {
+                        <span class="old-price">₺{{ itemForm.basePrice }}</span>
+                        →
+                        <span class="new-price">₺{{ computePreviewPrice() }}</span>
+                      }
+                    </div>
+                  }
+
                   <div class="modal-actions">
-                    <button type="button" class="btn-secondary" (click)="closeItemForm()">Cancel</button>
-                    <button type="submit" class="btn-primary">Save</button>
+                    <button type="button" class="btn-secondary" (click)="closeItemForm()">İptal</button>
+                    <button type="submit" class="btn-primary">Kaydet</button>
                   </div>
                 </form>
               </div>
@@ -802,10 +855,91 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
 
       .item-actions {
         display: flex;
-        gap: var(--spacing-xs);
+        align-items: center;
+        gap: var(--spacing-sm);
         margin-top: var(--spacing-sm);
         padding-top: var(--spacing-sm);
         border-top: 1px solid var(--color-border);
+      }
+
+      .discount-badge {
+        display: inline-block;
+        background: #ef4444;
+        color: white;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        margin-left: 4px;
+      }
+
+      .old-price {
+        text-decoration: line-through;
+        color: var(--color-text-muted);
+        font-weight: 400;
+        margin-right: 6px;
+      }
+
+      .new-price {
+        color: #ef4444;
+        font-weight: 700;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 36px;
+        height: 20px;
+        cursor: pointer;
+      }
+      .toggle-switch input { opacity: 0; width: 0; height: 0; }
+      .toggle-slider {
+        position: absolute;
+        inset: 0;
+        background: var(--color-bg-tertiary);
+        border-radius: 20px;
+        border: 1px solid var(--color-border);
+        transition: all 0.2s;
+      }
+      .toggle-slider::before {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 14px;
+        height: 14px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      }
+      .toggle-switch input:checked + .toggle-slider {
+        background: #10b981;
+        border-color: #10b981;
+      }
+      .toggle-switch input:checked + .toggle-slider::before {
+        transform: translateX(16px);
+      }
+
+      .form-section-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--color-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--color-border);
+      }
+
+      .discount-preview {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: var(--color-bg-tertiary);
+        border-radius: var(--radius-md);
+        font-size: 0.9rem;
       }
 
       /* Option Groups */
@@ -1150,7 +1284,29 @@ export class MenuComponent implements OnInit {
   editingItem = signal<MenuItemDto | null>(null);
   editingGroupId = signal<string | null>(null);
 
-  itemForm = { name: '', description: '', basePrice: 0, category: '', isActive: true, isReadyFood: false };
+  itemForm: {
+    name: string;
+    description: string;
+    basePrice: number;
+    category: string;
+    isActive: boolean;
+    isReadyFood: boolean;
+    discountType: DiscountType | null;
+    discountValue: number | null;
+    discountStartAt: string | null;
+    discountEndAt: string | null;
+  } = {
+    name: '',
+    description: '',
+    basePrice: 0,
+    category: '',
+    isActive: true,
+    isReadyFood: false,
+    discountType: null,
+    discountValue: null,
+    discountStartAt: null,
+    discountEndAt: null,
+  };
   optionGroupForm = { name: '', type: 'SINGLE' as const, required: false };
   optionForm = { name: '', priceDelta: 0, isDefault: false };
   synonymForm = { phrase: '', mapsToItemId: undefined as string | undefined, weight: 1 };
@@ -1320,6 +1476,10 @@ export class MenuComponent implements OnInit {
       category: item.category,
       isActive: item.isActive,
       isReadyFood: item.isReadyFood,
+      discountType: item.discountType,
+      discountValue: item.discountValue,
+      discountStartAt: item.discountStartAt ? item.discountStartAt.slice(0, 16) : null,
+      discountEndAt: item.discountEndAt ? item.discountEndAt.slice(0, 16) : null,
     };
     this.showItemForm.set(true);
   }
@@ -1327,7 +1487,34 @@ export class MenuComponent implements OnInit {
   closeItemForm(): void {
     this.showItemForm.set(false);
     this.editingItem.set(null);
-    this.itemForm = { name: '', description: '', basePrice: 0, category: '', isActive: true, isReadyFood: false };
+    this.itemForm = {
+      name: '', description: '', basePrice: 0, category: '', isActive: true, isReadyFood: false,
+      discountType: null, discountValue: null, discountStartAt: null, discountEndAt: null,
+    };
+  }
+
+  toggleItemActive(item: MenuItemDto): void {
+    const versionId = this.selectedVersionId();
+    if (!versionId) return;
+
+    this.menuService.updateItem(versionId, item.id, { isActive: !item.isActive }).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.items.update((list) =>
+            list.map((i) => (i.id === item.id ? { ...i, isActive: !item.isActive } : i)),
+          );
+        }
+      },
+      error: (err) => this.dialog.error(err.error?.error?.message || 'Durum değiştirilemedi'),
+    });
+  }
+
+  computePreviewPrice(): number {
+    const bp = this.itemForm.basePrice || 0;
+    const dv = this.itemForm.discountValue || 0;
+    if (!this.itemForm.discountType || dv <= 0) return bp;
+    if (this.itemForm.discountType === 'PERCENTAGE') return Math.max(0, Math.round(bp * (1 - dv / 100) * 100) / 100);
+    return Math.max(0, Math.round((bp - dv) * 100) / 100);
   }
 
   saveItem(): void {

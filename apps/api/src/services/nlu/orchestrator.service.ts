@@ -13,6 +13,21 @@ import crypto from 'crypto';
 
 const logger = createLogger();
 
+function computeEffectivePrice(
+  basePrice: number,
+  item: { discountType: string | null; discountValue: unknown; discountStartAt: Date | null; discountEndAt: Date | null },
+): number {
+  if (!item.discountType || !item.discountValue) return basePrice;
+  const val = Number(item.discountValue);
+  if (val <= 0) return basePrice;
+  const now = new Date();
+  if (item.discountStartAt && now < item.discountStartAt) return basePrice;
+  if (item.discountEndAt && now > item.discountEndAt) return basePrice;
+  if (item.discountType === 'PERCENTAGE') return Math.max(0, basePrice * (1 - val / 100));
+  if (item.discountType === 'FIXED_AMOUNT') return Math.max(0, basePrice - val);
+  return basePrice;
+}
+
 // Confidence threshold for auto-confirmation
 const CONFIDENCE_THRESHOLD = 0.7;
 
@@ -101,15 +116,17 @@ export class NluOrchestratorService {
         if (uniquePrevIds.length > 0) {
           const prevMenuItems = await prisma.menuItem.findMany({
             where: { id: { in: uniquePrevIds }, tenantId },
-            select: { id: true, name: true, category: true, basePrice: true },
+            select: { id: true, name: true, category: true, basePrice: true, discountType: true, discountValue: true, discountStartAt: true, discountEndAt: true },
           });
           for (const item of prevMenuItems) {
             if (!candidates.some((c) => c.menuItemId === item.id)) {
+              const bp = Number(item.basePrice);
               candidates.push({
                 menuItemId: item.id,
                 name: item.name,
                 category: item.category,
-                basePrice: Number(item.basePrice),
+                basePrice: bp,
+                effectivePrice: computeEffectivePrice(bp, item),
                 synonymsMatched: [],
                 score: 0.2,
               });
@@ -428,7 +445,7 @@ export class NluOrchestratorService {
     tenantId: string,
     conversationId: string,
     extraction: LlmExtractionResponse,
-    candidates: Array<{ menuItemId: string; name: string; basePrice: number }>,
+    candidates: Array<{ menuItemId: string; name: string; basePrice: number; effectivePrice?: number }>,
     optionGroups: OptionGroupsMap,
     existingDraft?: any
   ) {
@@ -471,7 +488,7 @@ export class NluOrchestratorService {
 
       // Resolve option price deltas
       const { totalDelta, resolvedOptions } = this.resolveOptionDeltas(item, optionGroups);
-      const unitPrice = candidate.basePrice + totalDelta;
+      const unitPrice = (candidate.effectivePrice ?? candidate.basePrice) + totalDelta;
       const optionsJson = resolvedOptions.length > 0 ? resolvedOptions : null;
       const extrasJson = item.extras.length > 0 ? item.extras : null;
       const key = this.itemKey(item.menuItemId, optionsJson);

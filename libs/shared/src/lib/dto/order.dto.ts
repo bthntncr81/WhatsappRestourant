@@ -123,6 +123,7 @@ export interface MenuCandidateDto {
   name: string;
   category: string;
   basePrice: number;
+  effectivePrice?: number;
   synonymsMatched: string[];
   score: number;
 }

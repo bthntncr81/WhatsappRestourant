@@ -237,6 +237,10 @@ export class MenuService {
         isActive: dto.isActive ?? true,
         isReadyFood: dto.isReadyFood ?? false,
         sortOrder: dto.sortOrder ?? 0,
+        discountType: dto.discountType ?? null,
+        discountValue: dto.discountValue ?? null,
+        discountStartAt: dto.discountStartAt ? new Date(dto.discountStartAt) : null,
+        discountEndAt: dto.discountEndAt ? new Date(dto.discountEndAt) : null,
         optionGroups: dto.optionGroupIds
           ? {
               create: dto.optionGroupIds.map((groupId, index) => ({
@@ -305,6 +309,14 @@ export class MenuService {
         isActive: dto.isActive,
         isReadyFood: dto.isReadyFood,
         sortOrder: dto.sortOrder,
+        ...(dto.discountType !== undefined && { discountType: dto.discountType }),
+        ...(dto.discountValue !== undefined && { discountValue: dto.discountValue }),
+        ...(dto.discountStartAt !== undefined && {
+          discountStartAt: dto.discountStartAt ? new Date(dto.discountStartAt) : null,
+        }),
+        ...(dto.discountEndAt !== undefined && {
+          discountEndAt: dto.discountEndAt ? new Date(dto.discountEndAt) : null,
+        }),
       },
       include: {
         optionGroups: {
@@ -676,14 +688,31 @@ export class MenuService {
       if (!categoryMap.has(item.category)) {
         categoryMap.set(item.category, { name: item.category, items: [] });
       }
+      const bp = Number(item.basePrice);
+      const ep = this.isDiscountActive(
+        item.discountType as string | null,
+        item.discountValue ? Number(item.discountValue) : null,
+        item.discountStartAt,
+        item.discountEndAt,
+      )
+        ? this.computeEffectivePrice(
+            bp,
+            item.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT',
+            Number(item.discountValue),
+          )
+        : bp;
+
       categoryMap.get(item.category)!.items.push({
         id: item.id,
         name: item.name,
         description: item.description,
-        basePrice: Number(item.basePrice),
+        basePrice: bp,
+        effectivePrice: Math.round(ep * 100) / 100,
         isActive: item.isActive,
         isReadyFood: item.isReadyFood,
         optionGroupIds: item.optionGroups.map((og) => og.groupId),
+        discountType: item.discountType as string | null,
+        discountValue: item.discountValue ? Number(item.discountValue) : null,
       });
     }
 
@@ -915,19 +944,57 @@ export class MenuService {
   }
 
   private mapItemToDto(item: any): MenuItemDto {
+    const basePrice = Number(item.basePrice);
+    const discountType = item.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT' | null;
+    const discountValue = item.discountValue ? Number(item.discountValue) : null;
+    const hasActiveDiscount = this.isDiscountActive(discountType, discountValue, item.discountStartAt, item.discountEndAt);
+    const effectivePrice = hasActiveDiscount
+      ? this.computeEffectivePrice(basePrice, discountType!, discountValue!)
+      : basePrice;
+
     return {
       id: item.id,
       tenantId: item.tenantId,
       versionId: item.versionId,
       name: item.name,
       description: item.description,
-      basePrice: Number(item.basePrice),
+      basePrice,
       category: item.category,
       isActive: item.isActive,
       isReadyFood: item.isReadyFood,
       sortOrder: item.sortOrder,
       optionGroups: item.optionGroups?.map((og: any) => this.mapOptionGroupToDto(og.group)),
+      discountType,
+      discountValue,
+      discountStartAt: item.discountStartAt?.toISOString() ?? null,
+      discountEndAt: item.discountEndAt?.toISOString() ?? null,
+      effectivePrice: Math.round(effectivePrice * 100) / 100,
+      hasActiveDiscount,
     };
+  }
+
+  private isDiscountActive(
+    type: string | null,
+    value: number | null,
+    startAt: Date | null,
+    endAt: Date | null,
+  ): boolean {
+    if (!type || value == null || value <= 0) return false;
+    const now = new Date();
+    if (startAt && now < startAt) return false;
+    if (endAt && now > endAt) return false;
+    return true;
+  }
+
+  private computeEffectivePrice(
+    basePrice: number,
+    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT',
+    discountValue: number,
+  ): number {
+    if (discountType === 'PERCENTAGE') {
+      return Math.max(0, basePrice * (1 - discountValue / 100));
+    }
+    return Math.max(0, basePrice - discountValue);
   }
 
   private mapOptionGroupToDto(group: any): MenuOptionGroupDto {

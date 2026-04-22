@@ -1,7 +1,7 @@
 import * as stringSimilarity from 'string-similarity';
 import prisma from '../../db/prisma';
 import { cacheService } from '../cache.service';
-import { MenuCandidateDto, CanonicalMenuExport } from '@whatres/shared';
+import { MenuCandidateDto, CanonicalMenuExport, CanonicalCategory } from '@whatres/shared';
 import { createLogger } from '../../logger';
 import { turkishNlpService } from './turkish-nlp.service';
 import { embeddingService } from './embedding.service';
@@ -99,6 +99,7 @@ export class MenuCandidateService {
             name: item.name,
             category: category.name,
             basePrice: item.basePrice,
+            effectivePrice: item.effectivePrice ?? item.basePrice,
             synonymsMatched: score.matchedSynonyms,
             score: score.totalScore,
           });
@@ -146,8 +147,9 @@ export class MenuCandidateService {
                   name: item.name,
                   category: category.name,
                   basePrice: item.basePrice,
+                  effectivePrice: item.effectivePrice ?? item.basePrice,
                   synonymsMatched: [],
-                  score: embResult.score * 0.4, // Lower weight for embedding-only matches
+                  score: embResult.score * 0.4,
                 });
                 break;
               }
@@ -424,31 +426,19 @@ export class MenuCandidateService {
     if (!tenant) return null;
 
     // Group items by category
-    const categoryMap = new Map<
-      string,
-      {
-        name: string;
-        items: Array<{
-          id: string;
-          name: string;
-          description: string | null;
-          basePrice: number;
-          isActive: boolean;
-          isReadyFood: boolean;
-          optionGroupIds: string[];
-        }>;
-      }
-    >();
+    const categoryMap = new Map<string, CanonicalCategory>();
 
     for (const item of items) {
       if (!categoryMap.has(item.category)) {
         categoryMap.set(item.category, { name: item.category, items: [] });
       }
+      const bp = Number(item.basePrice);
       categoryMap.get(item.category)!.items.push({
         id: item.id,
         name: item.name,
         description: item.description,
-        basePrice: Number(item.basePrice),
+        basePrice: bp,
+        effectivePrice: bp,
         isActive: item.isActive,
         isReadyFood: item.isReadyFood,
         optionGroupIds: item.optionGroups.map((og) => og.groupId),

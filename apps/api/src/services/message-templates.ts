@@ -6,6 +6,7 @@ interface OrderSummaryItem {
   name: string;
   qty: number;
   price: number;
+  originalPrice?: number;
   options?: string[];
   notes?: string | null;
 }
@@ -23,7 +24,11 @@ export const TEMPLATES = {
       if (i.options && i.options.length > 0) {
         line += ` (${i.options.join(', ')})`;
       }
-      line += ` - ${(i.qty * i.price).toFixed(2)} TL`;
+      if (i.originalPrice && i.originalPrice > i.price) {
+        line += ` - ~${(i.qty * i.originalPrice).toFixed(2)} TL~ *${(i.qty * i.price).toFixed(2)} TL*`;
+      } else {
+        line += ` - ${(i.qty * i.price).toFixed(2)} TL`;
+      }
       if (i.notes) {
         line += `\n    Not: ${i.notes}`;
       }

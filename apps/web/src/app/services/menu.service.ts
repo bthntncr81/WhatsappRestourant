@@ -15,6 +15,8 @@ export interface MenuVersionDto {
   itemCount?: number;
 }
 
+export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT';
+
 export interface MenuItemDto {
   id: string;
   tenantId: string;
@@ -27,6 +29,12 @@ export interface MenuItemDto {
   isReadyFood: boolean;
   sortOrder: number;
   optionGroups?: MenuOptionGroupDto[];
+  discountType: DiscountType | null;
+  discountValue: number | null;
+  discountStartAt: string | null;
+  discountEndAt: string | null;
+  effectivePrice: number;
+  hasActiveDiscount: boolean;
 }
 
 export interface CreateMenuItemDto {
@@ -38,6 +46,10 @@ export interface CreateMenuItemDto {
   isReadyFood?: boolean;
   sortOrder?: number;
   optionGroupIds?: string[];
+  discountType?: DiscountType | null;
+  discountValue?: number | null;
+  discountStartAt?: string | null;
+  discountEndAt?: string | null;
 }
 
 export interface MenuOptionGroupDto {
