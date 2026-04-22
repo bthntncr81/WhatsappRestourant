@@ -15,8 +15,8 @@ export const LEGAL_TEXTS: Record<ConsentType, { title: string; content: string }
     content: `MESAFELİ SATIŞ SÖZLEŞMESİ
 
 SATICI:
-Unvan: Otorder Teknoloji A.Ş.
-E-posta: destek@otorder.com
+Unvan: Superpersonel Teknoloji A.Ş.
+E-posta: destek@superpersonel.com
 
 1. KONU
 İşbu sözleşme, SATICI tarafından sunulan WhatsApp tabanlı yapay zekâ destekli sipariş yazılımının ALICI'ya lisanslanmasına ilişkindir.
@@ -103,7 +103,7 @@ Bu sözleşme, veri işleyenin veri sorumlusu adına veri işlemesini düzenler.
 
 2. ROLLER
 Veri sorumlusu: İşletme (ALICI)
-Veri işleyen: Otorder Teknoloji A.Ş. (SATICI)
+Veri işleyen: Superpersonel Teknoloji A.Ş. (SATICI)
 
 Tüm KVKK yükümlülükleri veri sorumlusuna aittir.
 
