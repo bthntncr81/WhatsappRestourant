@@ -8,8 +8,8 @@ const logger = createLogger();
 //
 // Iki farklı iyzico hesabı vardır:
 //
-//   1. PLATFORM HESABI — Otorder (SaaS sağlayıcısı) şirketinin iyzico hesabı.
-//      Kullanım: tenant'ların Otorder'a ödediği abonelik ücretleri (STARTER/PRO)
+//   1. PLATFORM HESABI — Superpersonel (SaaS sağlayıcısı) şirketinin iyzico hesabı.
+//      Kullanım: tenant'ların Superpersonel'a ödediği abonelik ücretleri (STARTER/PRO)
 //      ve kayıtlı abonelik kartları. Tek hesap; env üzerinden okunur.
 //
 //   2. TENANT HESABI — Her restoranın kendi iyzico hesabı. Ayarlar sayfasından

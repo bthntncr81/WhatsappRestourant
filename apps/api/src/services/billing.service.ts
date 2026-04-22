@@ -27,7 +27,7 @@ const TRIAL_DAYS = 14;
 /**
  * Resolve the iyzico pricing plan reference code for a given (plan, cycle)
  * pair from environment variables. These correspond to pricing plans
- * created in the PLATFORM iyzico account (Otorder'ın hesabı).
+ * created in the PLATFORM iyzico account (Superpersonel'ın hesabı).
  *
  * Env vars:
  *   IYZICO_STARTER_MONTHLY_REF

@@ -39,7 +39,7 @@ interface WorkingHoursDay {
       <nav class="top-nav">
         <div class="nav-brand">
           <app-icon name="hexagon" [size]="22"/>
-          <span>Otorder</span>
+          <span>Superpersonel</span>
         </div>
         <div class="nav-right">
           <button class="icon-btn" (click)="themeService.toggleTheme()" aria-label="Tema">
@@ -1157,7 +1157,7 @@ export class OnboardingComponent implements OnInit {
     {
       key: 'welcome',
       title: 'Hoş geldiniz',
-      description: 'Birkaç basit adımda işletmenizi Otorder\'a bağlayacağız.',
+      description: 'Birkaç basit adımda işletmenizi Superpersonel\'a bağlayacağız.',
       icon: 'hexagon',
     },
     {

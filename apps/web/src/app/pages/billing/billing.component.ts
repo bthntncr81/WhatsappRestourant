@@ -37,7 +37,7 @@ interface ComparisonRow {
         </a>
         <div class="nav-brand">
           <app-icon name="hexagon" [size]="22"/>
-          <span>Otorder</span>
+          <span>Superpersonel</span>
         </div>
         <div class="nav-right">
           <button class="icon-btn" (click)="themeService.toggleTheme()" [attr.aria-label]="'Tema'">
@@ -348,7 +348,7 @@ interface ComparisonRow {
 
             <div class="secure-notice">
               <app-icon name="lock" [size]="14"/>
-              <span>Kart bilgileriniz bir sonraki adımda iyzico'nun güvenli sayfasında alınır — Otorder hiçbir kart verisine erişmez.</span>
+              <span>Kart bilgileriniz bir sonraki adımda iyzico'nun güvenli sayfasında alınır — Superpersonel hiçbir kart verisine erişmez.</span>
             </div>
 
             <form (ngSubmit)="startCheckout()" class="modal-form">
@@ -424,7 +424,7 @@ interface ComparisonRow {
         <div class="footer-inner">
           <div class="footer-brand">
             <app-icon name="hexagon" [size]="18"/>
-            <span>Otorder</span>
+            <span>Superpersonel</span>
           </div>
           <div class="footer-links">
             <a href="#">Gizlilik</a>
@@ -1326,7 +1326,7 @@ export class BillingComponent implements OnInit, OnDestroy {
    * the result to this window.
    *
    * We DO NOT collect card details ourselves — this is required for PCI-DSS
-   * compliance. The Otorder API never sees the card number, CVC, or expiry.
+   * compliance. The Superpersonel API never sees the card number, CVC, or expiry.
    */
   startCheckout(): void {
     if (!this.selectedPlanData()) return;

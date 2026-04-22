@@ -19,7 +19,7 @@ interface NavItem {
       <div class="sidebar-header">
         <div class="logo">
           <app-icon name="hexagon" [size]="28" class="logo-icon"/>
-          <span class="logo-text">Otorder</span>
+          <span class="logo-text">Superpersonel</span>
         </div>
         @if (authService.tenant(); as tenant) {
           <div class="tenant-badge">

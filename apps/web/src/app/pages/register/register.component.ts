@@ -17,7 +17,7 @@ import { IconComponent } from '../../shared/icon.component';
         <div class="auth-header">
           <div class="logo">
             <app-icon name="hexagon" [size]="32" class="logo-icon"/>
-            <span class="logo-text">Otorder</span>
+            <span class="logo-text">Superpersonel</span>
           </div>
           <h1 class="auth-title">Create your workspace</h1>
           <p class="auth-subtitle text-muted">Get started with a free account</p>
@@ -97,7 +97,7 @@ import { IconComponent } from '../../shared/icon.component';
           <div class="form-group">
             <label for="tenantSlug" class="form-label">Workspace URL</label>
             <div class="input-with-prefix">
-              <span class="input-prefix text-muted">otorder.com/</span>
+              <span class="input-prefix text-muted">superpersonel.com/</span>
               <input
                 type="text"
                 id="tenantSlug"
