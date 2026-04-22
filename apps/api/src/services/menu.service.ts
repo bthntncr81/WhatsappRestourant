@@ -270,9 +270,14 @@ export class MenuService {
     tenantId: string,
     versionId: string,
     itemId: string,
-    dto: UpdateMenuItemDto
+    dto: UpdateMenuItemDto,
   ): Promise<MenuItemDto> {
-    await this.verifyVersionEditable(tenantId, versionId);
+    // Discount fields can be edited on published versions (quick campaign).
+    // All other fields require a draft version.
+    const isDiscountOnly = this.isDiscountOnlyUpdate(dto);
+    if (!isDiscountOnly) {
+      await this.verifyVersionEditable(tenantId, versionId);
+    }
 
     const existing = await prisma.menuItem.findFirst({
       where: { id: itemId, tenantId, versionId },
@@ -911,6 +916,13 @@ export class MenuService {
   }
 
   // ==================== HELPERS ====================
+
+  private isDiscountOnlyUpdate(dto: UpdateMenuItemDto): boolean {
+    const nonDiscountKeys: (keyof UpdateMenuItemDto)[] = [
+      'name', 'description', 'basePrice', 'category', 'isActive', 'isReadyFood', 'sortOrder', 'optionGroupIds',
+    ];
+    return nonDiscountKeys.every((key) => dto[key] === undefined);
+  }
 
   private async verifyVersionEditable(tenantId: string, versionId: string): Promise<void> {
     const version = await prisma.menuVersion.findFirst({

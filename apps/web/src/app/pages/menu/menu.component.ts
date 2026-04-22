@@ -215,8 +215,10 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                                 <input type="checkbox" [checked]="item.isActive" (change)="toggleItemActive(item)"/>
                                 <span class="toggle-slider"></span>
                               </label>
+                              <button class="btn-icon" (click)="editItem(item)" [title]="selectedVersion()!.publishedAt ? 'İndirim düzenle' : 'Düzenle'">
+                                <app-icon [name]="selectedVersion()!.publishedAt ? 'dollar-sign' : 'edit'" [size]="14"/>
+                              </button>
                               @if (!selectedVersion()!.publishedAt) {
-                                <button class="btn-icon" (click)="editItem(item)"><app-icon name="edit" [size]="14"/></button>
                                 <button class="btn-icon danger" (click)="deleteItem(item)"><app-icon name="trash" [size]="14"/></button>
                               }
                             </div>
@@ -235,41 +237,43 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
             <div class="modal-overlay" (click)="closeItemForm()">
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
-                  <h3>{{ editingItem() ? 'Edit Item' : 'Add Item' }}</h3>
+                  <h3>{{ isPublishedVersion() ? 'İndirim Düzenle' : (editingItem() ? 'Ürün Düzenle' : 'Ürün Ekle') }}</h3>
                   <button class="btn-icon" (click)="closeItemForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveItem()">
                   <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" [(ngModel)]="itemForm.name" name="name" required />
+                    <label>Ürün Adı</label>
+                    <input type="text" [(ngModel)]="itemForm.name" name="name" required [disabled]="isPublishedVersion()" />
                   </div>
                   <div class="form-group">
-                    <label>Description</label>
-                    <textarea [(ngModel)]="itemForm.description" name="description"></textarea>
+                    <label>Açıklama</label>
+                    <textarea [(ngModel)]="itemForm.description" name="description" [disabled]="isPublishedVersion()"></textarea>
                   </div>
                   <div class="form-row">
                     <div class="form-group">
-                      <label>Price</label>
-                      <input type="number" [(ngModel)]="itemForm.basePrice" name="basePrice" step="0.01" required />
+                      <label>Fiyat</label>
+                      <input type="number" [(ngModel)]="itemForm.basePrice" name="basePrice" step="0.01" required [disabled]="isPublishedVersion()" />
                     </div>
                     <div class="form-group">
-                      <label>Category</label>
-                      <input type="text" [(ngModel)]="itemForm.category" name="category" required />
+                      <label>Kategori</label>
+                      <input type="text" [(ngModel)]="itemForm.category" name="category" required [disabled]="isPublishedVersion()" />
                     </div>
                   </div>
-                  <div class="form-group">
-                    <label class="checkbox-label">
-                      <input type="checkbox" [(ngModel)]="itemForm.isActive" name="isActive" />
-                      Active
-                    </label>
-                  </div>
-                  <div class="form-group">
-                    <label class="checkbox-label">
-                      <input type="checkbox" [(ngModel)]="itemForm.isReadyFood" name="isReadyFood" />
-                      Hazır Gıda
-                    </label>
-                    <span class="hint-text">Sipariş hazır durumundayken ekleme yapılabilecek ürünler</span>
-                  </div>
+                  @if (!isPublishedVersion()) {
+                    <div class="form-group">
+                      <label class="checkbox-label">
+                        <input type="checkbox" [(ngModel)]="itemForm.isActive" name="isActive" />
+                        Aktif
+                      </label>
+                    </div>
+                    <div class="form-group">
+                      <label class="checkbox-label">
+                        <input type="checkbox" [(ngModel)]="itemForm.isReadyFood" name="isReadyFood" />
+                        Hazır Gıda
+                      </label>
+                      <span class="hint-text">Sipariş hazır durumundayken ekleme yapılabilecek ürünler</span>
+                    </div>
+                  }
 
                   <div class="form-section-title">İndirim</div>
                   <div class="form-row">
@@ -1509,6 +1513,10 @@ export class MenuComponent implements OnInit {
     });
   }
 
+  isPublishedVersion(): boolean {
+    return !!this.selectedVersion()?.publishedAt;
+  }
+
   computePreviewPrice(): number {
     const bp = this.itemForm.basePrice || 0;
     const dv = this.itemForm.discountValue || 0;
@@ -1522,8 +1530,19 @@ export class MenuComponent implements OnInit {
     if (!versionId) return;
 
     const editing = this.editingItem();
+
+    // Published versiyonlarda sadece indirim alanları güncellenebilir
+    const payload = this.isPublishedVersion() && editing
+      ? {
+          discountType: this.itemForm.discountType,
+          discountValue: this.itemForm.discountValue,
+          discountStartAt: this.itemForm.discountStartAt,
+          discountEndAt: this.itemForm.discountEndAt,
+        }
+      : this.itemForm;
+
     const observable = editing
-      ? this.menuService.updateItem(versionId, editing.id, this.itemForm)
+      ? this.menuService.updateItem(versionId, editing.id, payload)
       : this.menuService.createItem(versionId, this.itemForm);
 
     observable.subscribe({
@@ -1531,10 +1550,11 @@ export class MenuComponent implements OnInit {
         if (response.success) {
           this.loadVersionData();
           this.closeItemForm();
+          this.dialog.success(this.isPublishedVersion() ? 'İndirim güncellendi' : 'Ürün kaydedildi');
         }
       },
       error: (err) => {
-        this.dialog.error(err.error?.error?.message || 'Ürün kaydedilemedi');
+        this.dialog.error(err.error?.error?.message || 'Kaydedilemedi');
       },
     });
   }
