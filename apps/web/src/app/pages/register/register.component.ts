@@ -1,7 +1,9 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { Router, RouterLink } from '@angular/router';
+import { environment } from '../../../environments/environment';
 import { AuthService } from '../../services/auth.service';
 import { IconComponent } from '../../shared/icon.component';
 
@@ -111,22 +113,86 @@ import { IconComponent } from '../../shared/icon.component';
             <span class="form-hint text-muted">Lowercase letters, numbers, and hyphens only</span>
           </div>
 
-          <button type="submit" class="btn-primary" [disabled]="loading()">
+          <!-- Legal Consent Checkboxes -->
+          <div class="consent-section">
+            <label class="consent-item">
+              <input type="checkbox" [(ngModel)]="consents.terms" name="consentTerms" [disabled]="loading()"/>
+              <span>
+                <a class="consent-link" (click)="openLegalModal('TERMS'); $event.preventDefault()">Mesafeli Satış Sözleşmesi</a>'ni okudum ve kabul ediyorum.
+              </span>
+            </label>
+            <label class="consent-item">
+              <input type="checkbox" [(ngModel)]="consents.kvkk" name="consentKvkk" [disabled]="loading()"/>
+              <span>
+                <a class="consent-link" (click)="openLegalModal('KVKK'); $event.preventDefault()">KVKK Aydınlatma Metni</a>'ni okudum ve bilgilendirildim.
+              </span>
+            </label>
+            <label class="consent-item">
+              <input type="checkbox" [(ngModel)]="consents.explicitConsent" name="consentExplicit" [disabled]="loading()"/>
+              <span>
+                Kişisel verilerimin işlenmesine ve yapay zekâ sistemleri tarafından analiz edilmesine
+                <a class="consent-link" (click)="openLegalModal('EXPLICIT_CONSENT'); $event.preventDefault()">açık rıza</a> veriyorum.
+              </span>
+            </label>
+            <label class="consent-item">
+              <input type="checkbox" [(ngModel)]="consents.dpa" name="consentDpa" [disabled]="loading()"/>
+              <span>
+                <a class="consent-link" (click)="openLegalModal('DPA'); $event.preventDefault()">Veri İşleme Sözleşmesi</a> hükümlerini kabul ediyorum.
+              </span>
+            </label>
+            <p class="consent-disclaimer">
+              Bu hizmeti kullanarak, sistemin bir altyapı hizmeti olduğunu, siparişlerin otomatik
+              işlendiğini ve müşteri verileri bakımından veri sorumlusu olduğunuzu kabul edersiniz.
+            </p>
+          </div>
+
+          <button type="submit" class="btn-primary" [disabled]="loading() || !allConsentsAccepted()">
             @if (loading()) {
               <span class="spinner"></span>
-              Creating workspace...
+              Hesap oluşturuluyor...
             } @else {
-              Create workspace
+              Kayıt ol
             }
           </button>
+          <p class="consent-sub">Kayıt olarak tüm sözleşmeleri kabul etmiş olursunuz.</p>
         </form>
 
         <div class="auth-footer">
           <p class="text-muted">
-            Already have an account?
-            <a routerLink="/login" class="auth-link">Sign in</a>
+            Zaten hesabınız var mı?
+            <a routerLink="/login" class="auth-link">Giriş yap</a>
           </p>
         </div>
+
+        <!-- Legal Document Modal -->
+        @if (legalModal()) {
+          <div class="legal-overlay" (click)="closeLegalModal()">
+            <div class="legal-modal" (click)="$event.stopPropagation()">
+              <div class="legal-header">
+                <h2>{{ legalModal()!.title }}</h2>
+                <button class="close-btn" (click)="closeLegalModal()">
+                  <app-icon name="x" [size]="18"/>
+                </button>
+              </div>
+              <div class="legal-body" #legalBody (scroll)="onLegalScroll()">
+                <pre class="legal-text">{{ legalModal()!.content }}</pre>
+              </div>
+              <div class="legal-footer">
+                <button
+                  class="btn-primary legal-accept-btn"
+                  (click)="acceptLegal()"
+                  [disabled]="!legalScrolledToBottom()"
+                >
+                  @if (!legalScrolledToBottom()) {
+                    Aşağı kaydırarak okuyun ↓
+                  } @else {
+                    Okudum ve anladım ✓
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+        }
       </div>
     </div>
   `,
@@ -376,11 +442,139 @@ import { IconComponent } from '../../shared/icon.component';
           text-decoration: underline;
         }
       }
+
+      /* Consent checkboxes */
+      .consent-section {
+        margin-top: var(--spacing-md);
+        padding-top: var(--spacing-md);
+        border-top: 1px solid var(--color-border);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .consent-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 0.82rem;
+        line-height: 1.45;
+        color: var(--color-text-secondary);
+        cursor: pointer;
+      }
+      .consent-item input[type='checkbox'] {
+        margin-top: 3px;
+        flex-shrink: 0;
+        accent-color: var(--color-accent-primary);
+      }
+      .consent-link {
+        color: var(--color-accent-primary);
+        font-weight: 500;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      .consent-disclaimer {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        line-height: 1.5;
+        margin: 4px 0 0;
+        padding: 8px 12px;
+        background: var(--color-bg-tertiary);
+        border-radius: var(--radius-sm);
+      }
+      .consent-sub {
+        text-align: center;
+        font-size: 0.72rem;
+        color: var(--color-text-muted);
+        margin: 6px 0 0;
+      }
+
+      /* Legal modal */
+      .legal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+      .legal-modal {
+        background: var(--color-bg-elevated, #fff);
+        border-radius: 16px;
+        max-width: 600px;
+        width: 100%;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+        animation: modalIn 0.2s ease;
+      }
+      @keyframes modalIn {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .legal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .legal-header h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0;
+      }
+      .close-btn {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        cursor: pointer;
+        color: var(--color-text-secondary);
+      }
+      .close-btn:hover { background: var(--color-bg-tertiary); }
+      .legal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 24px;
+        max-height: 50vh;
+      }
+      .legal-text {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-family: inherit;
+        font-size: 0.85rem;
+        line-height: 1.65;
+        color: var(--color-text-secondary);
+        margin: 0;
+      }
+      .legal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid var(--color-border);
+      }
+      .legal-accept-btn {
+        width: 100%;
+      }
+      .legal-accept-btn:disabled {
+        background: var(--color-bg-tertiary) !important;
+        color: var(--color-text-muted) !important;
+      }
     `,
   ],
 })
-export class RegisterComponent {
+export class RegisterComponent implements OnInit {
+  @ViewChild('legalBody') legalBodyRef!: ElementRef;
+
   private authService = inject(AuthService);
+  private http = inject(HttpClient);
   private router = inject(Router);
 
   name = '';
@@ -391,14 +585,86 @@ export class RegisterComponent {
   loading = signal(false);
   error = signal<string | null>(null);
 
+  consents = {
+    terms: false,
+    kvkk: false,
+    explicitConsent: false,
+    dpa: false,
+  };
+
+  legalDocuments = signal<Array<{ type: string; title: string; content: string }>>([]);
+  legalModal = signal<{ type: string; title: string; content: string } | null>(null);
+  legalScrolledToBottom = signal(false);
+
+  ngOnInit(): void {
+    this.http
+      .get<{ success: boolean; data: { documents: Array<{ type: string; title: string; content: string }> } }>(
+        `${environment.apiBaseUrl}/auth/legal-texts`,
+      )
+      .subscribe({
+        next: (res) => {
+          if (res.success) this.legalDocuments.set(res.data.documents);
+        },
+      });
+  }
+
+  allConsentsAccepted(): boolean {
+    return this.consents.terms && this.consents.kvkk && this.consents.explicitConsent && this.consents.dpa;
+  }
+
+  openLegalModal(type: string): void {
+    const doc = this.legalDocuments().find((d) => d.type === type);
+    if (doc) {
+      this.legalScrolledToBottom.set(false);
+      this.legalModal.set(doc);
+    }
+  }
+
+  closeLegalModal(): void {
+    this.legalModal.set(null);
+  }
+
+  onLegalScroll(): void {
+    if (!this.legalBodyRef) return;
+    const el = this.legalBodyRef.nativeElement;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+    if (atBottom) this.legalScrolledToBottom.set(true);
+  }
+
+  acceptLegal(): void {
+    const modal = this.legalModal();
+    if (!modal) return;
+
+    switch (modal.type) {
+      case 'TERMS':
+        this.consents.terms = true;
+        break;
+      case 'KVKK':
+        this.consents.kvkk = true;
+        break;
+      case 'EXPLICIT_CONSENT':
+        this.consents.explicitConsent = true;
+        break;
+      case 'DPA':
+        this.consents.dpa = true;
+        break;
+    }
+    this.closeLegalModal();
+  }
+
   onSubmit(): void {
     if (!this.name || !this.email || !this.password || !this.tenantName || !this.tenantSlug) {
-      this.error.set('Please fill in all fields');
+      this.error.set('Lütfen tüm alanları doldurun');
       return;
     }
 
     if (this.password.length < 8) {
-      this.error.set('Password must be at least 8 characters');
+      this.error.set('Şifre en az 8 karakter olmalı');
+      return;
+    }
+
+    if (!this.allConsentsAccepted()) {
+      this.error.set('Devam etmek için tüm sözleşmeleri kabul etmelisiniz');
       return;
     }
 
@@ -412,19 +678,19 @@ export class RegisterComponent {
         password: this.password,
         tenantName: this.tenantName,
         tenantSlug: this.tenantSlug.toLowerCase(),
+        consents: this.consents,
       })
       .subscribe({
         next: (response) => {
           if (response.success) {
-            // Redirect to onboarding wizard after registration
             this.router.navigate(['/onboarding']);
           } else {
-            this.error.set(response.error?.message || 'Registration failed');
+            this.error.set(response.error?.message || 'Kayıt başarısız');
           }
           this.loading.set(false);
         },
         error: (err) => {
-          this.error.set(err.error?.error?.message || 'Registration failed. Please try again.');
+          this.error.set(err.error?.error?.message || 'Kayıt başarısız. Lütfen tekrar deneyin.');
           this.loading.set(false);
         },
       });

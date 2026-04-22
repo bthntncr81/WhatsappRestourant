@@ -15,6 +15,12 @@ export interface RegisterDto {
   name: string;
   tenantName: string;
   tenantSlug: string;
+  consents: {
+    terms: boolean;
+    kvkk: boolean;
+    explicitConsent: boolean;
+    dpa: boolean;
+  };
 }
 
 export interface UserInfo {

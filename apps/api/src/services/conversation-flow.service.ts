@@ -12,6 +12,7 @@ import { upsellService } from './upsell.service';
 import { surveyService } from './survey.service';
 import { reorderService } from './reorder.service';
 import { TEMPLATES } from './message-templates';
+import { WHATSAPP_KVKK_MESSAGE, WHATSAPP_KVKK_ACCEPTED, WHATSAPP_MARKETING_ASK, WHATSAPP_MARKETING_ACCEPTED, WHATSAPP_MARKETING_DECLINED } from './legal-texts';
 import { createLogger } from '../logger';
 import {
   WhatsAppWebhookPayload,
@@ -133,6 +134,33 @@ export class ConversationFlowService {
         // Always force phase to IDLE (cancelActiveOrder may skip if no active order)
         await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
         await this.sendText(ctx, '🔄 Konuşma sıfırlandı. Yeni sipariş vermek için menüden seçim yapabilirsiniz.\n\n📋 *Menü* görmek için "menü" yazın.');
+        return;
+      }
+
+      // KVKK consent gate: first-time customers must accept before any order flow
+      if (!conversation.kvkkConsentAt) {
+        const text = normalizeTr(ctx.message.text || '');
+        const accepted = ['onayliyorum', 'onaylıyorum', 'kabul ediyorum', 'evet', 'onay'].some(
+          (k) => text.includes(k),
+        );
+        if (accepted) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { kvkkConsentAt: new Date() },
+          });
+          ctx.conversation.kvkkConsentAt = new Date();
+          await this.sendText(ctx, WHATSAPP_KVKK_ACCEPTED);
+          logger.info({ tenantId, conversationId }, 'Customer accepted KVKK consent');
+          return;
+        }
+        // Send KVKK message only if not already sent recently
+        const lastOut = await prisma.message.findFirst({
+          where: { conversationId, tenantId, direction: 'OUT' },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (!lastOut?.text?.includes('kişisel verileriniz işlenmektedir')) {
+          await this.sendText(ctx, WHATSAPP_KVKK_MESSAGE);
+        }
         return;
       }
 

@@ -93,6 +93,9 @@ model Tenant {
   busyEstimateMinutes Int?    // Tahmini teslimat süresi (dakika)
   busyMessage         String? // Opsiyonel özel mesaj
 
+  // Legal
+  consentLogs ConsentLog[]
+
   @@map("tenants")
 }
 
@@ -112,7 +115,27 @@ model User {
   internalNotes           InternalNote[]
   participatingIn         ConversationParticipant[]
 
+  consentLogs  ConsentLog[]
+
   @@map("users")
+}
+
+model ConsentLog {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  consentType   String   // TERMS | KVKK | EXPLICIT_CONSENT | DPA
+  version       String   @default("1.0")
+  ipAddress     String?
+  userAgent     String?
+  acceptedAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([tenantId, consentType])
+  @@map("consent_logs")
 }
 
 enum MemberRole {
@@ -317,6 +340,9 @@ model Conversation {
   geoCheckJson     Json?   // Full GeoCheckResult for reference
   flowSubState     String? // Sub-state within a phase (e.g., WAITING_SAVE_CONFIRM)
   flowMetadata     String? // JSON metadata for current flow sub-state
+
+  // KVKK consent from WhatsApp customer
+  kvkkConsentAt    DateTime?
 
   tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   messages       Message[]
@@ -979,9 +1005,11 @@ model CustomerProfile {
   customerPhone   String
   customerName    String?
   segment         CustomerSegment      @default(NEW)
-  broadcastOptIn  BroadcastOptInStatus @default(PENDING)
-  optInAskedAt    DateTime?
-  optInChangedAt  DateTime?
+  broadcastOptIn     BroadcastOptInStatus @default(PENDING)
+  optInAskedAt       DateTime?
+  optInChangedAt     DateTime?
+  marketingConsent   Boolean  @default(false)
+  marketingConsentAt DateTime?
   avgOrderHour    Int?                 // 0-23, weighted average order hour (UTC+3)
   lastOrderAt     DateTime?
   orderCount      Int                  @default(0)
