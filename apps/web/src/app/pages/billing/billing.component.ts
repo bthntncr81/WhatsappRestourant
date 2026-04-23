@@ -36,7 +36,7 @@ interface ComparisonRow {
           <span>Panele Dön</span>
         </a>
         <div class="nav-brand">
-          <app-icon name="hexagon" [size]="22"/>
+          <img src="/logo.jpeg" alt="Superpersonel" style="height:28px; border-radius:6px;"/>
           <span>Superpersonel</span>
         </div>
         <div class="nav-right">
@@ -423,7 +423,7 @@ interface ComparisonRow {
       <footer class="billing-footer">
         <div class="footer-inner">
           <div class="footer-brand">
-            <app-icon name="hexagon" [size]="18"/>
+            <img src="/logo.jpeg" alt="Superpersonel" style="height:22px; border-radius:4px;"/>
             <span>Superpersonel</span>
           </div>
           <div class="footer-links">

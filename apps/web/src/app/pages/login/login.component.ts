@@ -14,7 +14,7 @@ import { IconComponent } from '../../shared/icon.component';
       <div class="auth-card">
         <div class="auth-header">
           <div class="logo">
-            <app-icon name="hexagon" [size]="32" class="logo-icon"/>
+            <img src="/logo.jpeg" alt="Superpersonel" class="logo-img"/>
             <span class="logo-text">Superpersonel</span>
           </div>
           <h1 class="auth-title">Welcome back</h1>

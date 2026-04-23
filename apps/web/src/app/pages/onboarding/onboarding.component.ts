@@ -38,7 +38,7 @@ interface WorkingHoursDay {
       <!-- Top nav -->
       <nav class="top-nav">
         <div class="nav-brand">
-          <app-icon name="hexagon" [size]="22"/>
+          <img src="/logo.jpeg" alt="Superpersonel" style="height:28px; border-radius:6px;"/>
           <span>Superpersonel</span>
         </div>
         <div class="nav-right">

@@ -18,7 +18,7 @@ interface NavItem {
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <app-icon name="hexagon" [size]="28" class="logo-icon"/>
+          <img src="/logo.jpeg" alt="Superpersonel" class="logo-img"/>
           <span class="logo-text">Superpersonel</span>
         </div>
         @if (authService.tenant(); as tenant) {
@@ -87,6 +87,12 @@ interface NavItem {
         align-items: center;
         gap: var(--spacing-sm);
         margin-bottom: var(--spacing-md);
+      }
+
+      .logo-img {
+        height: 28px;
+        border-radius: 6px;
+        object-fit: contain;
       }
 
       .logo-icon {
