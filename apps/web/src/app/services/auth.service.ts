@@ -34,6 +34,8 @@ export interface TenantInfo {
   id: string;
   name: string;
   slug: string;
+  onboardingStep?: number;
+  onboardingCompleted?: boolean;
 }
 
 export interface AuthResponse {

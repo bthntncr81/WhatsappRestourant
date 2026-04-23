@@ -181,6 +181,8 @@ export class AuthService {
         id: currentMembership.tenant.id,
         name: currentMembership.tenant.name,
         slug: currentMembership.tenant.slug,
+        onboardingStep: currentMembership.tenant.onboardingStep,
+        onboardingCompleted: !!currentMembership.tenant.onboardingCompletedAt,
       },
       memberships: user.memberships.map((m) => ({
         id: m.id,

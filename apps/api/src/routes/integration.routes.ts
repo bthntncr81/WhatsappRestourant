@@ -475,4 +475,61 @@ router.put(
   },
 );
 
+// ==================== ONBOARDING ====================
+
+router.get(
+  '/onboarding',
+  requireAuth,
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: { onboardingStep: true, onboardingCompletedAt: true },
+      });
+      res.json({
+        success: true,
+        data: {
+          step: tenant?.onboardingStep ?? 0,
+          completed: !!tenant?.onboardingCompletedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.patch(
+  '/onboarding',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { step, completed } = req.body;
+      const data: any = {};
+      if (typeof step === 'number' && step >= 0 && step <= 6) {
+        data.onboardingStep = step;
+      }
+      if (completed === true) {
+        data.onboardingCompletedAt = new Date();
+        data.onboardingStep = 6;
+      }
+      const tenant = await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data,
+        select: { onboardingStep: true, onboardingCompletedAt: true },
+      });
+      res.json({
+        success: true,
+        data: {
+          step: tenant.onboardingStep,
+          completed: !!tenant.onboardingCompletedAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 export const integrationRouter = router;

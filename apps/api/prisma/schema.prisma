@@ -88,6 +88,10 @@ model Tenant {
   iyzicoBaseUrl     String?  // https://api.iyzipay.com (prod) or https://sandbox-api.iyzipay.com (test)
   iyzicoMode        String   @default("test") // "test" or "prod"
 
+  // Onboarding
+  onboardingStep        Int       @default(0)  // 0=not started, 1-5=in progress, 6=done
+  onboardingCompletedAt DateTime?
+
   // Busy mode
   isBusy              Boolean @default(false)
   busyEstimateMinutes Int?    // Tahmini teslimat süresi (dakika)

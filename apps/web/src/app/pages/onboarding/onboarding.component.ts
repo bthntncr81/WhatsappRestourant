@@ -49,9 +49,7 @@ interface WorkingHoursDay {
               <app-icon name="moon" [size]="16"/>
             }
           </button>
-          <button class="skip-btn" (click)="skipOnboarding()">
-            Atla ve panele git
-          </button>
+          <span class="step-indicator">Adım {{ currentIndex() + 1 }} / {{ steps.length }}</span>
         </div>
       </nav>
 
@@ -440,7 +438,7 @@ interface WorkingHoursDay {
               </button>
             } @else if (currentStep() === 'store') {
               <div class="right-group">
-                <button type="button" class="btn btn-ghost" (click)="next()">Atla</button>
+                <button type="button" class="btn btn-ghost" (click)="skipStep()">Şimdilik geç</button>
                 <button type="button" class="btn btn-primary" (click)="saveStore()" [disabled]="saving()">
                   @if (saving()) {
                     <span class="btn-spin"></span>
@@ -453,7 +451,7 @@ interface WorkingHoursDay {
               </div>
             } @else if (currentStep() === 'whatsapp') {
               <div class="right-group">
-                <button type="button" class="btn btn-ghost" (click)="next()">Atla</button>
+                <button type="button" class="btn btn-ghost" (click)="skipStep()">Şimdilik geç</button>
                 <button type="button" class="btn btn-primary" (click)="saveWhatsApp()" [disabled]="saving()">
                   @if (saving()) {
                     <span class="btn-spin"></span>
@@ -466,7 +464,7 @@ interface WorkingHoursDay {
               </div>
             } @else if (currentStep() === 'operations') {
               <div class="right-group">
-                <button type="button" class="btn btn-ghost" (click)="next()">Atla</button>
+                <button type="button" class="btn btn-ghost" (click)="skipStep()">Şimdilik geç</button>
                 <button type="button" class="btn btn-primary" (click)="saveOperations()" [disabled]="saving()">
                   @if (saving()) {
                     <span class="btn-spin"></span>
@@ -545,6 +543,12 @@ interface WorkingHoursDay {
       .icon-btn:hover {
         background: var(--color-bg-tertiary);
         color: var(--color-text-primary);
+      }
+
+      .step-indicator {
+        font-size: 0.82rem;
+        color: var(--color-text-muted);
+        font-weight: 500;
       }
 
       .skip-btn {
@@ -1251,6 +1255,53 @@ export class OnboardingComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadExistingData();
+    this.loadOnboardingState();
+  }
+
+  private loadOnboardingState(): void {
+    this.http
+      .get<{ success: boolean; data: { step: number; completed: boolean } }>(
+        `${environment.apiBaseUrl}/integrations/onboarding`,
+        { headers: this.authService.getAuthHeaders() },
+      )
+      .subscribe({
+        next: (res) => {
+          if (res.success && res.data.step > 0 && res.data.step < this.steps.length) {
+            this.currentStep.set(this.steps[res.data.step].key);
+          }
+          if (res.success && res.data.completed) {
+            this.router.navigate(['/']);
+          }
+        },
+      });
+  }
+
+  private saveOnboardingStep(stepIndex: number): void {
+    this.http
+      .patch(
+        `${environment.apiBaseUrl}/integrations/onboarding`,
+        { step: stepIndex },
+        { headers: this.authService.getAuthHeaders() },
+      )
+      .subscribe();
+  }
+
+  private completeOnboarding(): void {
+    this.http
+      .patch(
+        `${environment.apiBaseUrl}/integrations/onboarding`,
+        { completed: true },
+        { headers: this.authService.getAuthHeaders() },
+      )
+      .subscribe({
+        next: () => {
+          const tenant = this.authService.tenant();
+          if (tenant) {
+            tenant.onboardingCompleted = true;
+            tenant.onboardingStep = 6;
+          }
+        },
+      });
   }
 
   private loadExistingData(): void {
@@ -1309,9 +1360,15 @@ export class OnboardingComponent implements OnInit {
     this.stepError.set(null);
     const i = this.currentIndex();
     if (i < this.steps.length - 1) {
-      this.currentStep.set(this.steps[i + 1].key);
+      const nextIndex = i + 1;
+      this.currentStep.set(this.steps[nextIndex].key);
+      this.saveOnboardingStep(nextIndex);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  }
+
+  skipStep(): void {
+    this.next();
   }
 
   back(): void {
@@ -1475,24 +1532,8 @@ export class OnboardingComponent implements OnInit {
     });
   }
 
-  skipOnboarding(): void {
-    this.markCompleteInStorage();
-    this.router.navigate(['/']);
-  }
-
   finish(): void {
-    this.markCompleteInStorage();
+    this.completeOnboarding();
     this.router.navigate(['/']);
-  }
-
-  private markCompleteInStorage(): void {
-    const tenantId = this.authService.tenant()?.id;
-    if (tenantId) {
-      try {
-        localStorage.setItem(`whatres_onboarding_done_${tenantId}`, '1');
-      } catch {
-        /* ignore storage failures */
-      }
-    }
   }
 }
