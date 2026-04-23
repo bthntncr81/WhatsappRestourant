@@ -18,7 +18,7 @@ interface NavItem {
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <img src="/logo.jpeg" alt="Superpersonel" class="logo-img"/>
+          <img src="/logo.jpeg" alt="Superpersonel" style="height:26px; width:26px; border-radius:6px; object-fit:cover;"/>
           <span class="logo-text">Superpersonel</span>
         </div>
         @if (authService.tenant(); as tenant) {

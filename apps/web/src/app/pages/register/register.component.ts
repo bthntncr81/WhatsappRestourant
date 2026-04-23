@@ -16,7 +16,7 @@ import { IconComponent } from '../../shared/icon.component';
       <div class="auth-card">
         <div class="auth-header">
           <div class="logo">
-            <img src="/logo.jpeg" alt="Superpersonel" class="logo-img"/>
+            <img src="/logo.jpeg" alt="Superpersonel" style="height:32px; width:32px; border-radius:8px; object-fit:cover;"/>
             <span class="logo-text">Superpersonel</span>
           </div>
           <h1 class="auth-title">Create your workspace</h1>
