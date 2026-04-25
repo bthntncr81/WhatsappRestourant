@@ -66,8 +66,8 @@ export class BillingService {
   // ==================== PLANS ====================
 
   getPlans(): PlanDefinition[] {
-    // Exclude legacy plans (STARTER/PRO) from new signups
-    const activePlans: SubscriptionPlan[] = ['TRIAL', 'SILVER', 'GOLD', 'PLATINUM'];
+    // Only show paid plans — TRIAL hidden, STARTER/PRO legacy
+    const activePlans: SubscriptionPlan[] = ['SILVER', 'GOLD', 'PLATINUM'];
     return activePlans.map((key) => PLAN_DEFINITIONS[key]);
   }
 
@@ -90,30 +90,30 @@ export class BillingService {
     });
 
     if (!subscription) {
-      // Create trial subscription with upsert to handle race conditions
+      // Create initial subscription — no free trial, starts with SILVER (unpaid)
       const trialEndsAt = new Date();
       trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
 
       try {
         subscription = await prisma.subscription.upsert({
           where: { tenantId },
-          update: {}, // No update if exists
+          update: {},
           create: {
             tenantId,
-            plan: 'TRIAL',
+            plan: 'SILVER',
             status: 'ACTIVE',
             billingCycle: 'MONTHLY',
-            trialEndsAt,
+            trialEndsAt: null,
             currentPeriodStart: new Date(),
-            currentPeriodEnd: trialEndsAt,
-            monthlyOrderLimit: PLAN_DEFINITIONS.TRIAL.features.monthlyOrderLimit,
-            monthlyMessageLimit: PLAN_DEFINITIONS.TRIAL.features.monthlyMessageLimit,
-            maxStores: PLAN_DEFINITIONS.TRIAL.features.maxStores,
-            maxUsers: PLAN_DEFINITIONS.TRIAL.features.maxUsers,
+            currentPeriodEnd: null,
+            monthlyOrderLimit: PLAN_DEFINITIONS.SILVER.features.monthlyOrderLimit,
+            monthlyMessageLimit: PLAN_DEFINITIONS.SILVER.features.monthlyMessageLimit,
+            maxStores: PLAN_DEFINITIONS.SILVER.features.maxStores,
+            maxUsers: PLAN_DEFINITIONS.SILVER.features.maxUsers,
           },
         });
 
-        logger.info({ tenantId }, 'Created trial subscription');
+        logger.info({ tenantId }, 'Created initial SILVER subscription');
       } catch (error: any) {
         // If unique constraint error, subscription was created by another request
         if (error.code === 'P2002') {

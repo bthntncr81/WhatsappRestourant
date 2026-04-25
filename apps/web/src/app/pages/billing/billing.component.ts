@@ -59,7 +59,7 @@ interface ComparisonRow {
         <span class="eyebrow">Fiyatlandırma</span>
         <h1>İşletmeniz için doğru planı seçin</h1>
         <p class="lede">
-          14 gün ücretsiz deneyin. Kredi kartı gerekmez. İstediğiniz zaman iptal edin.
+          İşletmenize en uygun planı seçin. İstediğiniz zaman yükseltin veya iptal edin.
         </p>
 
         <!-- Billing cycle toggle -->
@@ -171,8 +171,6 @@ interface ComparisonRow {
                     <app-icon name="check" [size]="14"/>
                     Mevcut planınız
                   </button>
-                } @else if (plan.isFree) {
-                  <button class="btn btn-ghost" disabled>Deneme aktif</button>
                 } @else {
                   <button class="btn btn-primary" (click)="selectPlan(plan)">
                     @if (planRank(plan.key) > planRank(currentPlanKey() || 'TRIAL')) {
@@ -185,6 +183,46 @@ interface ComparisonRow {
               </div>
             </article>
           }
+        </section>
+
+        <!-- Add-ons -->
+        <section class="addons">
+          <header class="section-head">
+            <h2>Ek Hizmetler</h2>
+            <p>Planınıza ekleyebileceğiniz opsiyonel hizmetler</p>
+          </header>
+          <div class="addons-grid">
+            <!-- POS Integration -->
+            <div class="addon-card pos-addon">
+              <div class="addon-icon">
+                <app-icon name="package" [size]="24"/>
+              </div>
+              <div class="addon-info">
+                <h3>POS Entegrasyonu (HighFive)</h3>
+                <p>Menü otomatik senkron, siparişler direkt POS'a iletilir. Ayarlar'dan yapılandırılır.</p>
+              </div>
+              <div class="addon-price">
+                <span class="addon-amount">₺1.000</span>
+                <span class="addon-period">/ay</span>
+              </div>
+            </div>
+
+            <!-- Extra Order Packs -->
+            <div class="addon-card">
+              <div class="addon-icon">
+                <app-icon name="shopping-cart" [size]="24"/>
+              </div>
+              <div class="addon-info">
+                <h3>Ekstra Sipariş Paketleri</h3>
+                <p>Aylık limitiniz dolduğunda ek sipariş hakkı satın alın.</p>
+                <div class="extra-packs">
+                  <span class="pack">500 sipariş — $50</span>
+                  <span class="pack">1.000 sipariş — $85</span>
+                  <span class="pack">2.000 sipariş — $125</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Current usage -->
@@ -268,7 +306,6 @@ interface ComparisonRow {
               <thead>
                 <tr>
                   <th class="feat-col">Özellik</th>
-                  <th>Deneme</th>
                   <th>Gümüş</th>
                   <th class="col-popular">Gold</th>
                   <th>Platinyum</th>
@@ -278,13 +315,6 @@ interface ComparisonRow {
                 @for (row of comparisonRows; track row.label) {
                   <tr>
                     <td class="feat-col">{{ row.label }}</td>
-                    <td>
-                      @if (isBool(row.values.TRIAL)) {
-                        <app-icon [name]="row.values.TRIAL ? 'check' : 'x'" [size]="16"/>
-                      } @else {
-                        {{ row.values.TRIAL }}
-                      }
-                    </td>
                     <td>
                       @if (isBool(row.values.SILVER)) {
                         <app-icon [name]="row.values.SILVER ? 'check' : 'x'" [size]="16"/>
@@ -320,8 +350,8 @@ interface ComparisonRow {
           </header>
           <div class="faq-grid">
             <div class="faq-item">
-              <h4>Deneme süresi nasıl çalışır?</h4>
-              <p>14 gün boyunca Deneme planının tüm özelliklerini ücretsiz kullanabilirsiniz. Kredi kartı bilgisi istenmez.</p>
+              <h4>POS entegrasyonu nedir?</h4>
+              <p>Aylık ₺1.000 ek ücretle HighFive POS sisteminizle entegrasyon sağlanır. Menü otomatik senkronlanır, siparişler POS'a iletilir.</p>
             </div>
             <div class="faq-item">
               <h4>Planımı istediğim zaman değiştirebilir miyim?</h4>
@@ -920,6 +950,90 @@ interface ComparisonRow {
 
     .compare-table app-icon { color: #10b981; }
     .compare-table td app-icon[name="x"] { color: var(--color-text-muted); opacity: 0.5; }
+
+    /* ========== Add-ons ========== */
+    .addons {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 24px 60px;
+    }
+
+    .addons-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 16px;
+    }
+
+    .addon-card {
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
+      border-radius: 14px;
+      padding: 24px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      transition: border-color 0.2s;
+    }
+    .addon-card:hover {
+      border-color: var(--color-accent-primary, #1B5583);
+    }
+
+    .addon-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--color-accent-primary, #1B5583) 10%, transparent);
+      color: var(--color-accent-primary, #1B5583);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .addon-info {
+      flex: 1;
+    }
+    .addon-info h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+    .addon-info p {
+      font-size: 0.85rem;
+      color: var(--color-text-secondary);
+      line-height: 1.5;
+      margin: 0 0 10px;
+    }
+
+    .addon-price {
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .addon-amount {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--color-text-primary);
+    }
+    .addon-period {
+      font-size: 0.85rem;
+      color: var(--color-text-muted);
+    }
+
+    .extra-packs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pack {
+      display: inline-block;
+      padding: 4px 10px;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--color-text-primary);
+    }
 
     /* ========== FAQ ========== */
     .faq {
