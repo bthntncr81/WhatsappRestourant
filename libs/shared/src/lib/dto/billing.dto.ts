@@ -1,6 +1,6 @@
 // ==================== SUBSCRIPTION PLANS ====================
 
-export type SubscriptionPlan = 'TRIAL' | 'STARTER' | 'PRO';
+export type SubscriptionPlan = 'TRIAL' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'STARTER' | 'PRO';
 export type SubscriptionStatus = 'ACTIVE' | 'PENDING' | 'CANCELLED' | 'EXPIRED' | 'UNPAID';
 export type BillingCycle = 'MONTHLY' | 'ANNUAL';
 export type TransactionType = 'SUBSCRIPTION_PAYMENT' | 'SUBSCRIPTION_UPGRADE' | 'SUBSCRIPTION_RENEWAL' | 'REFUND';
@@ -19,7 +19,22 @@ export interface PlanFeatures {
   apiAccess: boolean;
   analytics: boolean;
   multiLanguage: boolean;
+  posIntegration: boolean;
 }
+
+export interface ExtraOrderPack {
+  orders: number;
+  price: number;
+  currency: string;
+}
+
+export const EXTRA_ORDER_PACKS: ExtraOrderPack[] = [
+  { orders: 500, price: 50, currency: 'USD' },
+  { orders: 1000, price: 85, currency: 'USD' },
+  { orders: 2000, price: 125, currency: 'USD' },
+];
+
+export const POS_INTEGRATION_MONTHLY_PRICE = 1000; // TL/ay
 
 export interface PlanDefinition {
   key: SubscriptionPlan;
@@ -45,7 +60,7 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
     description: '14 günlük ücretsiz deneme',
     monthlyPrice: 0,
     annualPrice: 0,
-    currency: 'TRY',
+    currency: 'USD',
     isFree: true,
     features: {
       monthlyOrderLimit: 50,
@@ -58,19 +73,20 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
       apiAccess: false,
       analytics: false,
       multiLanguage: false,
+      posIntegration: false,
     },
   },
-  STARTER: {
-    key: 'STARTER',
-    name: 'Starter',
-    description: 'Küçük işletmeler için ideal',
-    monthlyPrice: 299,
-    annualPrice: 2990, // ~2 ay ücretsiz
-    currency: 'TRY',
+  SILVER: {
+    key: 'SILVER',
+    name: 'Gümüş',
+    description: 'Küçük ve orta ölçekli işletmeler için',
+    monthlyPrice: 80,
+    annualPrice: 840, // $70/ay × 12
+    currency: 'USD',
     isFree: false,
     features: {
-      monthlyOrderLimit: 500,
-      monthlyMessageLimit: 2000,
+      monthlyOrderLimit: 750,
+      monthlyMessageLimit: 3000,
       maxStores: 1,
       maxUsers: 3,
       whatsappIntegration: true,
@@ -79,28 +95,81 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
       apiAccess: false,
       analytics: true,
       multiLanguage: false,
+      posIntegration: false,
     },
   },
-  PRO: {
-    key: 'PRO',
-    name: 'Pro',
-    description: 'Büyüyen işletmeler için',
-    monthlyPrice: 799,
-    annualPrice: 7990, // ~2 ay ücretsiz
-    currency: 'TRY',
+  GOLD: {
+    key: 'GOLD',
+    name: 'Gold',
+    description: 'Büyüyen işletmeler için ideal',
+    monthlyPrice: 135,
+    annualPrice: 1440, // $120/ay × 12
+    currency: 'USD',
     isFree: false,
     popular: true,
     features: {
-      monthlyOrderLimit: 2000,
-      monthlyMessageLimit: 10000,
-      maxStores: 3,
-      maxUsers: 10,
+      monthlyOrderLimit: 1500,
+      monthlyMessageLimit: 6000,
+      maxStores: 2,
+      maxUsers: 5,
+      whatsappIntegration: true,
+      prioritySupport: true,
+      customBranding: false,
+      apiAccess: true,
+      analytics: true,
+      multiLanguage: false,
+      posIntegration: false,
+    },
+  },
+  PLATINUM: {
+    key: 'PLATINUM',
+    name: 'Platinyum',
+    description: 'Yüksek hacimli işletmeler ve zincirler için',
+    monthlyPrice: 380,
+    annualPrice: 4080, // $340/ay × 12
+    currency: 'USD',
+    isFree: false,
+    features: {
+      monthlyOrderLimit: 3000,
+      monthlyMessageLimit: 15000,
+      maxStores: 5,
+      maxUsers: 15,
       whatsappIntegration: true,
       prioritySupport: true,
       customBranding: true,
       apiAccess: true,
       analytics: true,
       multiLanguage: true,
+      posIntegration: false,
+    },
+  },
+  // Legacy plans — kept for existing subscriptions, hidden from new signups
+  STARTER: {
+    key: 'STARTER',
+    name: 'Starter (Eski)',
+    description: 'Bu plan artık yeni üyeliklere kapalıdır',
+    monthlyPrice: 0,
+    annualPrice: 0,
+    currency: 'USD',
+    isFree: false,
+    features: {
+      monthlyOrderLimit: 500, monthlyMessageLimit: 2000, maxStores: 1, maxUsers: 3,
+      whatsappIntegration: true, prioritySupport: false, customBranding: false,
+      apiAccess: false, analytics: true, multiLanguage: false, posIntegration: false,
+    },
+  },
+  PRO: {
+    key: 'PRO',
+    name: 'Pro (Eski)',
+    description: 'Bu plan artık yeni üyeliklere kapalıdır',
+    monthlyPrice: 0,
+    annualPrice: 0,
+    currency: 'USD',
+    isFree: false,
+    features: {
+      monthlyOrderLimit: 2000, monthlyMessageLimit: 10000, maxStores: 3, maxUsers: 10,
+      whatsappIntegration: true, prioritySupport: true, customBranding: true,
+      apiAccess: true, analytics: true, multiLanguage: true, posIntegration: false,
     },
   },
 };

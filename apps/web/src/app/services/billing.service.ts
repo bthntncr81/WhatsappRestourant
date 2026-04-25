@@ -6,7 +6,7 @@ import { AuthService } from './auth.service';
 
 // ==================== TYPES ====================
 
-export type SubscriptionPlan = 'TRIAL' | 'STARTER' | 'PRO';
+export type SubscriptionPlan = 'TRIAL' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'STARTER' | 'PRO';
 export type SubscriptionStatus = 'ACTIVE' | 'PENDING' | 'CANCELLED' | 'EXPIRED' | 'UNPAID';
 export type BillingCycle = 'MONTHLY' | 'ANNUAL';
 

@@ -33,7 +33,7 @@ const buyerSchema = z.object({
 });
 
 const checkoutFormSchema = z.object({
-  planKey: z.enum(['TRIAL', 'STARTER', 'PRO'], {
+  planKey: z.enum(['TRIAL', 'SILVER', 'GOLD', 'PLATINUM'], {
     message: 'Geçersiz plan seçimi',
   }),
   billingCycle: z.enum(['MONTHLY', 'ANNUAL'], {
@@ -49,7 +49,7 @@ const cancelSchema = z.object({
 });
 
 const changePlanSchema = z.object({
-  newPlan: z.enum(['TRIAL', 'STARTER', 'PRO'], {
+  newPlan: z.enum(['TRIAL', 'SILVER', 'GOLD', 'PLATINUM'], {
     message: 'Geçersiz plan seçimi',
   }),
   billingCycle: z.enum(['MONTHLY', 'ANNUAL']).optional(),

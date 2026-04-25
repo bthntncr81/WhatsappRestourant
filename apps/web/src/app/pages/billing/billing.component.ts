@@ -18,8 +18,9 @@ interface ComparisonRow {
   label: string;
   values: {
     TRIAL: string | boolean;
-    STARTER: string | boolean;
-    PRO: string | boolean;
+    SILVER: string | boolean;
+    GOLD: string | boolean;
+    PLATINUM: string | boolean;
   };
 }
 
@@ -117,12 +118,12 @@ interface ComparisonRow {
                   <span class="period">14 gün deneme</span>
                 } @else {
                   <div class="amount-row">
-                    <span class="currency">₺</span>
+                    <span class="currency">$</span>
                     <span class="amount">{{ displayedPrice(plan) }}</span>
                     <span class="per">/ay</span>
                   </div>
                   @if (selectedCycle() === 'ANNUAL') {
-                    <span class="period">Yıllık ₺{{ plan.annualPrice }} peşin</span>
+                    <span class="period">Yıllık {{ plan.annualPrice }}$ peşin</span>
                   } @else {
                     <span class="period">Aylık faturalanır</span>
                   }
@@ -268,8 +269,9 @@ interface ComparisonRow {
                 <tr>
                   <th class="feat-col">Özellik</th>
                   <th>Deneme</th>
-                  <th>Starter</th>
-                  <th class="col-popular">Pro</th>
+                  <th>Gümüş</th>
+                  <th class="col-popular">Gold</th>
+                  <th>Platinyum</th>
                 </tr>
               </thead>
               <tbody>
@@ -284,17 +286,24 @@ interface ComparisonRow {
                       }
                     </td>
                     <td>
-                      @if (isBool(row.values.STARTER)) {
-                        <app-icon [name]="row.values.STARTER ? 'check' : 'x'" [size]="16"/>
+                      @if (isBool(row.values.SILVER)) {
+                        <app-icon [name]="row.values.SILVER ? 'check' : 'x'" [size]="16"/>
                       } @else {
-                        {{ row.values.STARTER }}
+                        {{ row.values.SILVER }}
                       }
                     </td>
                     <td class="col-popular">
-                      @if (isBool(row.values.PRO)) {
-                        <app-icon [name]="row.values.PRO ? 'check' : 'x'" [size]="16"/>
+                      @if (isBool(row.values.GOLD)) {
+                        <app-icon [name]="row.values.GOLD ? 'check' : 'x'" [size]="16"/>
                       } @else {
-                        {{ row.values.PRO }}
+                        {{ row.values.GOLD }}
+                      }
+                    </td>
+                    <td>
+                      @if (isBool(row.values.PLATINUM)) {
+                        <app-icon [name]="row.values.PLATINUM ? 'check' : 'x'" [size]="16"/>
+                      } @else {
+                        {{ row.values.PLATINUM }}
                       }
                     </td>
                   </tr>
@@ -341,7 +350,7 @@ interface ComparisonRow {
             <header class="modal-head">
               <h2>{{ selectedPlanData()!.name }} planına geçiş</h2>
               <div class="modal-price">
-                ₺{{ selectedCycle() === 'MONTHLY' ? selectedPlanData()!.monthlyPrice : selectedPlanData()!.annualPrice }}
+                {{ selectedCycle() === 'MONTHLY' ? selectedPlanData()!.monthlyPrice : selectedPlanData()!.annualPrice }}$
                 <span>/ {{ selectedCycle() === 'MONTHLY' ? 'ay' : 'yıl' }}</span>
               </div>
             </header>
@@ -1195,43 +1204,51 @@ export class BillingComponent implements OnInit, OnDestroy {
   readonly comparisonRows: ComparisonRow[] = [
     {
       label: 'Aylık sipariş limiti',
-      values: { TRIAL: '50', STARTER: '500', PRO: '2.000' },
+      values: { TRIAL: '50', SILVER: '750', GOLD: '1.500', PLATINUM: '3.000' },
     },
     {
       label: 'Aylık mesaj limiti',
-      values: { TRIAL: '200', STARTER: '2.000', PRO: '10.000' },
+      values: { TRIAL: '200', SILVER: '3.000', GOLD: '6.000', PLATINUM: '15.000' },
     },
     {
       label: 'Şube sayısı',
-      values: { TRIAL: '1', STARTER: '1', PRO: '3' },
+      values: { TRIAL: '1', SILVER: '1', GOLD: '2', PLATINUM: '5' },
     },
     {
       label: 'Kullanıcı sayısı',
-      values: { TRIAL: '2', STARTER: '3', PRO: '10' },
+      values: { TRIAL: '2', SILVER: '3', GOLD: '5', PLATINUM: '15' },
     },
     {
       label: 'WhatsApp entegrasyonu',
-      values: { TRIAL: true, STARTER: true, PRO: true },
+      values: { TRIAL: true, SILVER: true, GOLD: true, PLATINUM: true },
     },
     {
       label: 'Gelişmiş analitik',
-      values: { TRIAL: false, STARTER: true, PRO: true },
+      values: { TRIAL: false, SILVER: true, GOLD: true, PLATINUM: true },
     },
     {
       label: 'Öncelikli destek',
-      values: { TRIAL: false, STARTER: false, PRO: true },
+      values: { TRIAL: false, SILVER: false, GOLD: true, PLATINUM: true },
     },
     {
       label: 'API erişimi',
-      values: { TRIAL: false, STARTER: false, PRO: true },
+      values: { TRIAL: false, SILVER: false, GOLD: true, PLATINUM: true },
     },
     {
       label: 'Çoklu dil',
-      values: { TRIAL: false, STARTER: true, PRO: true },
+      values: { TRIAL: false, SILVER: false, GOLD: false, PLATINUM: true },
     },
     {
       label: 'Özel markalama',
-      values: { TRIAL: false, STARTER: false, PRO: true },
+      values: { TRIAL: false, SILVER: false, GOLD: false, PLATINUM: true },
+    },
+    {
+      label: 'POS entegrasyonu',
+      values: { TRIAL: false, SILVER: '+₺1.000/ay', GOLD: '+₺1.000/ay', PLATINUM: '+₺1.000/ay' },
+    },
+    {
+      label: 'Ekstra sipariş paketi',
+      values: { TRIAL: false, SILVER: 'Mevcut', GOLD: 'Mevcut', PLATINUM: 'Mevcut' },
     },
   ];
 
@@ -1298,7 +1315,7 @@ export class BillingComponent implements OnInit, OnDestroy {
 
   planRank(plan: SubscriptionPlan | null): number {
     if (!plan) return 0;
-    const order: Record<SubscriptionPlan, number> = { TRIAL: 0, STARTER: 1, PRO: 2 };
+    const order: Record<SubscriptionPlan, number> = { TRIAL: 0, STARTER: 1, SILVER: 1, PRO: 2, GOLD: 2, PLATINUM: 3 };
     return order[plan];
   }
 

@@ -30,10 +30,9 @@ const TRIAL_DAYS = 14;
  * created in the PLATFORM iyzico account (Superpersonel'ın hesabı).
  *
  * Env vars:
- *   IYZICO_STARTER_MONTHLY_REF
- *   IYZICO_STARTER_ANNUAL_REF
- *   IYZICO_PRO_MONTHLY_REF
- *   IYZICO_PRO_ANNUAL_REF
+ *   IYZICO_SILVER_MONTHLY_REF / IYZICO_SILVER_ANNUAL_REF
+ *   IYZICO_GOLD_MONTHLY_REF / IYZICO_GOLD_ANNUAL_REF
+ *   IYZICO_PLATINUM_MONTHLY_REF / IYZICO_PLATINUM_ANNUAL_REF
  *
  * If an ANNUAL ref is not set, we log a warning and fall back to the MONTHLY
  * ref so sandbox setups with only one pricing plan per tier continue to work.
@@ -67,7 +66,9 @@ export class BillingService {
   // ==================== PLANS ====================
 
   getPlans(): PlanDefinition[] {
-    return Object.values(PLAN_DEFINITIONS);
+    // Exclude legacy plans (STARTER/PRO) from new signups
+    const activePlans: SubscriptionPlan[] = ['TRIAL', 'SILVER', 'GOLD', 'PLATINUM'];
+    return activePlans.map((key) => PLAN_DEFINITIONS[key]);
   }
 
   getPlan(planKey: SubscriptionPlan): PlanDefinition {
