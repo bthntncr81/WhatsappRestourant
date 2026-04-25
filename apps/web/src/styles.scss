@@ -71,12 +71,15 @@
   --color-bg-tertiary: #EDF0F2;
   --color-bg-elevated: #ffffff;
 
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border-hover: rgba(0, 0, 0, 0.15);
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-border-hover: rgba(0, 0, 0, 0.2);
 
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
   --color-text-muted: #94a3b8;
+
+  --color-accent-primary: #1a5276;
+  --color-accent-primary-hover: #154360;
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -87,6 +90,40 @@
     rgba(27, 85, 131, 0.05),
     transparent 40%
   );
+
+  // Light-theme overrides for components using hardcoded "color: white"
+  // on elements that should follow the theme. These selectors target
+  // common patterns across all pages.
+
+  .btn-secondary,
+  .btn-ghost {
+    color: var(--color-text-primary) !important;
+  }
+
+  // Status badges and tags with colored backgrounds keep white text — OK.
+  // But inputs/textareas need dark text on white bg:
+  input, textarea, select {
+    color: var(--color-text-primary);
+    &::placeholder {
+      color: var(--color-text-muted);
+    }
+  }
+
+  // Cards and modals need proper contrast
+  .modal, .card, .settings-card, .content-card {
+    color: var(--color-text-primary);
+  }
+
+  // Topbar and sidebar text
+  .topbar-action, .nav-item, .sidebar-link {
+    color: var(--color-text-secondary);
+  }
+
+  // Chat bubbles — outgoing (agent) should have dark text on light bg
+  .message-bubble.out {
+    background: var(--color-bg-tertiary) !important;
+    color: var(--color-text-primary) !important;
+  }
 }
 
 *,
