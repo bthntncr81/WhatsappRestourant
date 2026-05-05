@@ -96,6 +96,19 @@ export class ConversationFlowService {
     const ctx: FlowContext = { tenantId, conversationId, conversation, message, payload };
     const currentPhase = (conversation.phase as ConversationPhase) || 'IDLE';
 
+    // Agent takeover guard: if an agent has locked this conversation,
+    // the bot stays completely silent. Only the agent responds via inbox.
+    const lock = await prisma.conversationLock.findUnique({
+      where: { conversationId },
+    });
+    if (lock || conversation.status === 'PENDING_AGENT') {
+      logger.info(
+        { tenantId, conversationId, hasLock: !!lock, status: conversation.status },
+        'Bot silenced — conversation is handled by an agent',
+      );
+      return;
+    }
+
     logger.info(
       { tenantId, conversationId, phase: currentPhase, messageKind: message.kind },
       'Flow service handling message',
