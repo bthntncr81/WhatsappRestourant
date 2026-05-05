@@ -145,31 +145,34 @@ export class ConversationFlowService {
         return;
       }
 
-      // KVKK consent gate: first-time customers must accept before any order flow
+      // KVKK consent gate: first-time customers see the notice once.
+      // ANY reply after the notice counts as implicit acceptance —
+      // no need to type "ONAYLIYORUM" specifically.
       if (!conversation.kvkkConsentAt) {
-        const text = normalizeTr(ctx.message.text || '');
-        const accepted = ['onayliyorum', 'onaylıyorum', 'kabul ediyorum', 'evet', 'onay'].some(
-          (k) => text.includes(k),
-        );
-        if (accepted) {
+        // Check if we already sent the KVKK notice in this conversation
+        const kvkkNoticeSent = await prisma.message.findFirst({
+          where: {
+            conversationId,
+            tenantId,
+            direction: 'OUT',
+            text: { contains: 'kişisel verileriniz işlenmektedir' },
+          },
+        });
+
+        if (kvkkNoticeSent) {
+          // Customer replied AFTER seeing the notice → auto-accept
           await prisma.conversation.update({
             where: { id: conversationId },
             data: { kvkkConsentAt: new Date() },
           });
           ctx.conversation.kvkkConsentAt = new Date();
-          await this.sendText(ctx, WHATSAPP_KVKK_ACCEPTED);
-          logger.info({ tenantId, conversationId }, 'Customer accepted KVKK consent');
+          logger.info({ tenantId, conversationId }, 'KVKK auto-accepted (customer replied after notice)');
+          // Fall through to normal flow — process the customer's actual message
+        } else {
+          // First ever message — send KVKK notice
+          await this.sendText(ctx, WHATSAPP_KVKK_MESSAGE);
           return;
         }
-        // Send KVKK message only if not already sent recently
-        const lastOut = await prisma.message.findFirst({
-          where: { conversationId, tenantId, direction: 'OUT' },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (!lastOut?.text?.includes('kişisel verileriniz işlenmektedir')) {
-          await this.sendText(ctx, WHATSAPP_KVKK_MESSAGE);
-        }
-        return;
       }
 
       let nextPhase: ConversationPhase;

@@ -133,14 +133,13 @@ Dolaylı zararlar kapsam dışıdır.`,
 
 export const WHATSAPP_KVKK_MESSAGE = `Siparişinizi oluşturabilmemiz için bazı kişisel verileriniz işlenmektedir.
 
-Devam etmeden önce lütfen aşağıdaki hususları onaylayınız:
 • Kişisel verilerinizin sipariş amacıyla işlenmesini
 • Mesajlarınızın yapay zekâ ile analiz edilmesini
 • Verilerinizin WhatsApp altyapısı ve üçüncü taraf servisler üzerinden işlenmesini
 
-Siparişler otomatik sistemler tarafından işlenmektedir.
+kabul etmiş sayılırsınız.
 
-Devam etmek için lütfen *ONAYLIYORUM* yazarak cevap veriniz.`;
+Bu mesaja yanıt vererek siparişinize devam edebilirsiniz. 🍽️`;
 
 export const WHATSAPP_KVKK_ACCEPTED = `Teşekkürler! Onayınız kaydedildi. ✅
 
