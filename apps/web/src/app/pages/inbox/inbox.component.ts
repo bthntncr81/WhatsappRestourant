@@ -220,7 +220,12 @@ import { IconComponent } from '../../shared/icon.component';
                 <div class="loader"></div>
               </div>
             } @else {
-              @for (msg of messages(); track msg.id) {
+              @for (msg of messages(); track msg.id; let i = $index) {
+                @if (shouldShowDateSeparator(i)) {
+                  <div class="date-separator">
+                    <span>{{ formatDateSeparator(msg.createdAt) }}</span>
+                  </div>
+                }
                 <div class="message" [class.outgoing]="msg.direction === 'OUT'" [class.system]="msg.kind === 'SYSTEM'">
                   <div class="message-bubble">
                     @if (msg.kind === 'LOCATION' && msg.payloadJson) {
@@ -852,6 +857,22 @@ import { IconComponent } from '../../shared/icon.component';
             color: rgba(255, 255, 255, 0.7);
           }
         }
+
+      .date-separator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 0;
+        span {
+          padding: 4px 14px;
+          background: var(--color-bg-elevated);
+          border: 1px solid var(--color-border);
+          border-radius: 100px;
+          font-size: 0.72rem;
+          font-weight: 600;
+          color: var(--color-text-muted);
+        }
+      }
 
         &.system {
           align-self: center;
@@ -1727,7 +1748,26 @@ export class InboxComponent implements OnInit, OnDestroy {
 
   formatMessageTime(dateStr: string): string {
     const date = new Date(dateStr);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  shouldShowDateSeparator(index: number): boolean {
+    const msgs = this.messages();
+    if (index === 0) return true;
+    const curr = new Date(msgs[index].createdAt).toDateString();
+    const prev = new Date(msgs[index - 1].createdAt).toDateString();
+    return curr !== prev;
+  }
+
+  formatDateSeparator(dateStr: string): string {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) return 'Bugün';
+    if (date.toDateString() === yesterday.toDateString()) return 'Dün';
+    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
   getStatusLabel(status: ConversationStatus): string {

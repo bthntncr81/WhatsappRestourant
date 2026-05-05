@@ -47,6 +47,14 @@ const GREETING_KEYWORDS = ['merhaba', 'selam', 'iyi gunler', 'iyi g\u00fcnler', 
 const THANKS_KEYWORDS = ['tesekkur', 'te\u015fekk\u00fcr', 'sagol', 'sa\u011fol', 'eyvallah'];
 const HELP_KEYWORDS = ['yardim', 'yard\u0131m', 'nasil', 'nas\u0131l', 'ne yapabilirim'];
 const REORDER_KEYWORDS = ['tekrar', 'favorilerim', 'favori', 'onceki', 'gene ayni', 'her zamanki'];
+const WORKING_HOURS_KEYWORDS = [
+  'saat kacta', 'saat kaçta', 'kacta acili', 'kaçta açılı',
+  'ne zaman acili', 'ne zaman açılı', 'acilis saati', 'açılış saati',
+  'calisma saat', 'çalışma saat', 'kapali mi', 'kapalı mı',
+  'acik mi', 'açık mı', 'saat kac', 'saat kaç', 'kacta kapani',
+  'kaçta kapanı', 'ne zamana kadar', 'kapaniyor', 'kapanıyor',
+  'aciyorsunuz', 'açıyorsunuz', 'acik misiniz', 'açık mısınız',
+];
 const BROADCAST_OPT_OUT_KEYWORDS = ['kampanya istemiyorum', 'bildirim kapat'];
 const PAYMENT_CHANGE_KEYWORDS = [
   'online ode', 'online öde',
@@ -396,6 +404,33 @@ export class ConversationFlowService {
         logger.warn({ err }, 'Broadcast opt-out failed');
         await this.sendText(ctx, 'Kampanya bildirimleri kapatildi.');
       }
+      return 'IDLE';
+    }
+
+    // Working hours question — answer with schedule
+    if (WORKING_HOURS_KEYWORDS.some(k => text.includes(k))) {
+      const tenantForHours = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { workingHours: true },
+      });
+      if (tenantForHours?.workingHours) {
+        const formatted = this.formatWorkingHours(tenantForHours.workingHours as any);
+        await this.sendText(ctx, `🕐 Çalışma saatlerimiz:\n\n${formatted}\n\nSipariş vermek için ürün adını yazabilirsiniz.`);
+      } else {
+        await this.sendText(ctx, '🕐 Çalışma saatlerimiz henüz ayarlanmamış. Sipariş vermek için ürün adını yazabilirsiniz.');
+      }
+      return 'IDLE';
+    }
+
+    // Greeting / thanks — friendly response without NLU
+    if (this.matchesKeyword(text, GREETING_KEYWORDS) || this.matchesKeyword(text, THANKS_KEYWORDS)) {
+      await this.sendText(ctx, TEMPLATES.greeting);
+      return 'IDLE';
+    }
+
+    // Help request
+    if (this.matchesKeyword(text, HELP_KEYWORDS)) {
+      await this.sendText(ctx, '🤖 Size nasıl yardımcı olabilirim?\n\n• Sipariş vermek için ürün adını yazın\n• Menüyü görmek için "menü" yazın\n• Çalışma saatlerini öğrenmek için "saat kaçta açılıyorsunuz" yazın\n• Önceki siparişinizi tekrar vermek için "tekrar" yazın');
       return 'IDLE';
     }
 

@@ -101,6 +101,14 @@ export const routes: Routes = [
     canActivate: [roleGuard(['OWNER', 'ADMIN'])],
   },
 
+  // Hidden admin pages (not in sidebar)
+  {
+    path: 'x-ai-feedback',
+    loadComponent: () =>
+      import('./pages/ai-feedback/ai-feedback.component').then((m) => m.AiFeedbackComponent),
+    canActivate: [roleGuard(['OWNER'])],
+  },
+
   // Wildcard
   {
     path: '**',

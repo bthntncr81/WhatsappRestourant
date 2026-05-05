@@ -532,4 +532,142 @@ router.patch(
   },
 );
 
+// ==================== AI FEEDBACK (admin only) ====================
+
+router.get(
+  '/ai-feedback/conversations',
+  requireAuth,
+  requireRole(['OWNER']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const date = req.query.date as string || new Date().toISOString().split('T')[0];
+      const startOfDay = new Date(date + 'T00:00:00Z');
+      const endOfDay = new Date(date + 'T23:59:59Z');
+
+      const conversations = await prisma.conversation.findMany({
+        where: {
+          tenantId: req.tenantId!,
+          messages: { some: { direction: 'OUT', kind: 'TEXT', createdAt: { gte: startOfDay, lte: endOfDay } } },
+        },
+        select: {
+          id: true,
+          customerPhone: true,
+          customerName: true,
+          messages: {
+            where: { createdAt: { gte: startOfDay, lte: endOfDay } },
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              direction: true,
+              kind: true,
+              text: true,
+              rating: true,
+              ratingNote: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: { lastMessageAt: 'desc' },
+        take: 50,
+      });
+      res.json({ success: true, data: conversations });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.patch(
+  '/ai-feedback/rate/:messageId',
+  requireAuth,
+  requireRole(['OWNER']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { rating, note } = req.body;
+      if (!rating || rating < 1 || rating > 3) {
+        throw new AppError(400, 'INVALID_RATING', 'Rating must be 1 (wrong), 2 (partial), or 3 (correct)');
+      }
+      const updated = await prisma.message.update({
+        where: { id: req.params.messageId },
+        data: { rating, ratingNote: note || null, ratedAt: new Date() },
+        select: { id: true, rating: true, ratingNote: true },
+      });
+      res.json({ success: true, data: updated });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  '/ai-feedback/daily-prompt',
+  requireAuth,
+  requireRole(['OWNER']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const date = req.query.date as string || new Date().toISOString().split('T')[0];
+      const startOfDay = new Date(date + 'T00:00:00Z');
+      const endOfDay = new Date(date + 'T23:59:59Z');
+
+      const badMessages = await prisma.message.findMany({
+        where: {
+          tenantId: req.tenantId!,
+          direction: 'OUT',
+          rating: { in: [1, 2] },
+          ratedAt: { gte: startOfDay, lte: endOfDay },
+        },
+        select: {
+          id: true,
+          text: true,
+          rating: true,
+          ratingNote: true,
+          conversation: {
+            select: {
+              messages: {
+                where: { createdAt: { gte: startOfDay, lte: endOfDay } },
+                orderBy: { createdAt: 'asc' },
+                take: 10,
+                select: { direction: true, text: true, kind: true },
+              },
+            },
+          },
+        },
+        take: 30,
+      });
+
+      if (badMessages.length === 0) {
+        res.json({ success: true, data: { prompt: null, message: 'Bugün kötü puanlı mesaj yok — tebrikler!' } });
+        return;
+      }
+
+      let prompt = `Aşağıda WhatsApp sipariş botunun bugün (${date}) yanlış veya kısmen doğru cevap verdiği konuşma örnekleri var.\n\n`;
+      prompt += `Her birinde müşterinin ne yazdığı, botun ne cevap verdiği ve neden yanlış olduğu belirtilmiş.\n`;
+      prompt += `Bu bilgilere dayanarak botun NLU (doğal dil anlama) ve yanıt sistemini iyileştirmek için öneriler sun.\n\n`;
+      prompt += `---\n\n`;
+
+      for (const msg of badMessages) {
+        const context = msg.conversation.messages
+          .map((m: any) => `${m.direction === 'IN' ? 'MÜŞTERİ' : 'BOT'}: ${m.text || `[${m.kind}]`}`)
+          .join('\n');
+
+        prompt += `KONUŞMA:\n${context}\n\n`;
+        prompt += `YANLIŞ CEVAP: ${msg.text}\n`;
+        prompt += `PUAN: ${msg.rating === 1 ? 'YANLIŞ' : 'KISMİ'}\n`;
+        if (msg.ratingNote) prompt += `NOT: ${msg.ratingNote}\n`;
+        prompt += `\n---\n\n`;
+      }
+
+      prompt += `Toplam ${badMessages.length} hatalı cevap var. Bunlara göre:\n`;
+      prompt += `1. Hangi tür müşteri mesajları yanlış anlaşılıyor?\n`;
+      prompt += `2. Hangi keyword'ler eklenmeli?\n`;
+      prompt += `3. NLU prompt'u nasıl iyileştirilebilir?\n`;
+      prompt += `4. Conversation flow'da hangi edge case'ler handle edilmeli?\n`;
+
+      res.json({ success: true, data: { prompt, badCount: badMessages.length, date } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 export const integrationRouter = router;
