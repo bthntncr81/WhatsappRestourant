@@ -10,6 +10,7 @@ const logger = createLogger();
 const ACTIVE_ORDER_PHASES: ConversationPhase[] = [
   'ORDER_COLLECTING',
   'ORDER_REVIEW',
+  'DELIVERY_TYPE_SELECTION',
   'LOCATION_REQUEST',
   'ADDRESS_SELECTION',
   'ADDRESS_COLLECTION',
@@ -25,8 +26,8 @@ const EXCLUDED_SUB_STATES = [
   'PAYMENT_CHANGE_PENDING',
 ];
 
-const INACTIVITY_WARNING_MS = 5 * 60 * 1000; // 5 minutes
-const INACTIVITY_CANCEL_MS = 1 * 60 * 1000;  // 1 minute after warning
+const INACTIVITY_WARNING_MS = 13 * 60 * 1000; // 13 minutes — warn customer
+const INACTIVITY_CANCEL_MS = 2 * 60 * 1000;   // 2 minutes after warning (15 min total)
 
 export class InactivityTimeoutService {
   /**

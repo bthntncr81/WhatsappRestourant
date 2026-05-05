@@ -414,11 +414,17 @@ export class ConversationFlowService {
     }
 
     // Check for active (non-draft) orders — seamless addition
+    // Only consider orders from the last 2 hours for seamless addition.
+    // Older orders should not intercept new order attempts.
     const activeParentOrder = await orderService.findActiveOrderForConversation(
       tenantId, conversationId
     );
 
-    if (activeParentOrder && ['PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY'].includes(activeParentOrder.status)) {
+    const SESSION_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
+    const isRecentOrder = activeParentOrder?.createdAt &&
+      (Date.now() - new Date(activeParentOrder.createdAt).getTime()) < SESSION_MAX_AGE_MS;
+
+    if (activeParentOrder && isRecentOrder && ['PENDING_CONFIRMATION', 'CONFIRMED', 'PREPARING', 'READY'].includes(activeParentOrder.status)) {
       // Payment change request: customer wants to switch to online payment
       const isPaymentChange = PAYMENT_CHANGE_KEYWORDS.some(k => text.includes(k));
       if (isPaymentChange) {
