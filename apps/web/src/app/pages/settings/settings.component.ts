@@ -26,20 +26,20 @@ import { DialogService } from '../../shared/dialog.service';
   template: `
     <div class="settings">
       <div class="settings-header">
-        <h1 class="settings-title">Settings</h1>
+        <h1 class="settings-title">Ayarlar</h1>
         <p class="settings-subtitle text-secondary">
-          Manage your application preferences.
+          Uygulama tercihlerinizi yönetin.
         </p>
       </div>
 
       <div class="settings-section">
-        <h2 class="section-title">General</h2>
+        <h2 class="section-title">Genel</h2>
         <div class="settings-card">
           <div class="setting-item">
             <div class="setting-info">
-              <span class="setting-label">Dark Mode</span>
+              <span class="setting-label">Koyu Tema</span>
               <span class="setting-description text-muted">
-                Enable dark mode for the application
+                Uygulama için koyu temayı etkinleştirin
               </span>
             </div>
             <label class="toggle">
@@ -49,9 +49,9 @@ import { DialogService } from '../../shared/dialog.service';
           </div>
           <div class="setting-item">
             <div class="setting-info">
-              <span class="setting-label">Notifications</span>
+              <span class="setting-label">Bildirimler</span>
               <span class="setting-description text-muted">
-                Receive email notifications
+                E-posta bildirimleri alın
               </span>
             </div>
             <label class="toggle">
@@ -65,7 +65,7 @@ import { DialogService } from '../../shared/dialog.service';
       <!-- WhatsApp Integration (OWNER/ADMIN only) -->
       @if (isAdmin()) {
         <div class="settings-section">
-          <h2 class="section-title">WhatsApp Integration</h2>
+          <h2 class="section-title">WhatsApp Entegrasyonu</h2>
           <div class="settings-card">
             <!-- Connection Status Banner -->
             <div class="wa-status-banner" [ngClass]="getStatusClass()">
@@ -73,7 +73,7 @@ import { DialogService } from '../../shared/dialog.service';
               <span class="status-text">{{ getStatusLabel() }}</span>
               @if (waConfig()?.lastVerifiedAt) {
                 <span class="text-muted status-date">
-                  Last verified: {{ waConfig()!.lastVerifiedAt | date:'medium' }}
+                  Son doğrulama: {{ waConfig()!.lastVerifiedAt | date:'medium' }}
                 </span>
               }
               @if (waConfig()?.statusMessage) {
@@ -88,25 +88,25 @@ import { DialogService } from '../../shared/dialog.service';
               <div class="setting-item column">
                 <span class="setting-label">Webhook URL</span>
                 <span class="setting-description text-muted">
-                  Configure this URL in your Meta WhatsApp dashboard
+                  Bu URL'yi Meta WhatsApp panelinde yapılandırın
                 </span>
                 <div class="copy-input">
                   <input type="text" class="setting-input mono" [value]="waConfig()!.webhookUrl" readonly />
                   <button class="btn-copy" (click)="copyToClipboard(waConfig()!.webhookUrl)">
-                    {{ copyFeedback() === 'webhookUrl' ? 'Copied!' : 'Copy' }}
+                    {{ copyFeedback() === 'webhookUrl' ? 'Kopyalandı!' : 'Kopyala' }}
                   </button>
                 </div>
               </div>
 
               <div class="setting-item column">
-                <span class="setting-label">Verify Token</span>
+                <span class="setting-label">Doğrulama Anahtarı</span>
                 <span class="setting-description text-muted">
-                  Paste this token in the Meta webhook configuration
+                  Bu anahtarı Meta webhook yapılandırmasına yapıştırın
                 </span>
                 <div class="copy-input">
                   <input type="text" class="setting-input mono" [value]="waConfig()!.webhookVerifyToken" readonly />
                   <button class="btn-copy" (click)="copyToClipboard(waConfig()!.webhookVerifyToken, 'verifyToken')">
-                    {{ copyFeedback() === 'verifyToken' ? 'Copied!' : 'Copy' }}
+                    {{ copyFeedback() === 'verifyToken' ? 'Kopyalandı!' : 'Kopyala' }}
                   </button>
                 </div>
               </div>
@@ -117,36 +117,36 @@ import { DialogService } from '../../shared/dialog.service';
               <div class="setting-item column">
                 <span class="setting-label">Phone Number ID</span>
                 <input type="text" class="setting-input" formControlName="phoneNumberId"
-                       [placeholder]="waConfig()?.phoneNumberId || 'Enter Phone Number ID'" />
+                       [placeholder]="waConfig()?.phoneNumberId || 'Telefon Numarası ID girin'" />
               </div>
               <div class="setting-item column">
                 <span class="setting-label">WhatsApp Business Account ID</span>
                 <input type="text" class="setting-input" formControlName="wabaId"
-                       [placeholder]="waConfig()?.wabaId || 'Enter WABA ID'" />
+                       [placeholder]="waConfig()?.wabaId || 'WABA ID girin'" />
               </div>
               <div class="setting-item column">
                 <span class="setting-label">Access Token</span>
                 <input type="password" class="setting-input" formControlName="accessToken"
-                       [placeholder]="waConfig()?.accessTokenMasked || 'Enter Access Token'" />
+                       [placeholder]="waConfig()?.accessTokenMasked || 'Erişim Anahtarı girin'" />
               </div>
               <div class="setting-item column">
                 <span class="setting-label">App Secret</span>
                 <input type="password" class="setting-input" formControlName="appSecret"
-                       [placeholder]="waConfig()?.appSecretMasked || 'Enter App Secret'" />
+                       [placeholder]="waConfig()?.appSecretMasked || 'Uygulama Gizli Anahtarı girin'" />
               </div>
 
               <!-- Action Buttons -->
               <div class="setting-item action-row">
                 <div class="btn-group">
                   <button type="submit" class="btn btn-primary" [disabled]="isSaving() || waForm.invalid">
-                    {{ isSaving() ? 'Saving...' : 'Save Configuration' }}
+                    {{ isSaving() ? 'Kaydediliyor...' : 'Yapılandırmayı Kaydet' }}
                   </button>
                   @if (waConfig()) {
                     <button type="button" class="btn btn-secondary" (click)="testConnection()" [disabled]="isTesting()">
-                      {{ isTesting() ? 'Testing...' : 'Test Connection' }}
+                      {{ isTesting() ? 'Test ediliyor...' : 'Bağlantıyı Test Et' }}
                     </button>
                     <button type="button" class="btn btn-danger" (click)="disconnectWhatsApp()">
-                      Disconnect
+                      Bağlantıyı Kes
                     </button>
                   }
                 </div>
@@ -158,10 +158,10 @@ import { DialogService } from '../../shared/dialog.service';
               <div class="test-result" [ngClass]="testResult()!.success ? 'success' : 'error'">
                 <p class="test-message">{{ testResult()!.message }}</p>
                 @if (testResult()!.phoneNumber) {
-                  <p class="test-detail">Phone: {{ testResult()!.phoneNumber }}</p>
+                  <p class="test-detail">Telefon: {{ testResult()!.phoneNumber }}</p>
                 }
                 @if (testResult()!.qualityRating) {
-                  <p class="test-detail">Quality: {{ testResult()!.qualityRating }}</p>
+                  <p class="test-detail">Kalite: {{ testResult()!.qualityRating }}</p>
                 }
               </div>
             }
@@ -182,7 +182,7 @@ import { DialogService } from '../../shared/dialog.service';
                   }
                 </span>
                 <h3 class="guide-title">WhatsApp Entegrasyon Rehberi</h3>
-                <span class="guide-badge">{{ guideOpen() ? 'Gizle' : '5 Adim' }}</span>
+                <span class="guide-badge">{{ guideOpen() ? 'Gizle' : '5 Adım' }}</span>
               </button>
 
               @if (guideOpen()) {
@@ -191,15 +191,15 @@ import { DialogService } from '../../shared/dialog.service';
                   <div class="guide-step">
                     <div class="step-header">
                       <span class="step-number">1</span>
-                      <span class="step-title">Meta Developer Hesabi ve Uygulama Olusturma</span>
+                      <span class="step-title">Meta Developer Hesabı ve Uygulama Oluşturma</span>
                     </div>
                     <div class="step-body">
                       <ol class="step-list">
-                        <li><a href="https://developers.facebook.com" target="_blank" rel="noopener">developers.facebook.com</a> adresine gidin ve giris yapin.</li>
-                        <li>Sag ustteki <strong>"My Apps"</strong> butonuna tiklayin.</li>
-                        <li><strong>"Create App"</strong> &rarr; <strong>"Other"</strong> &rarr; <strong>"Business"</strong> secin.</li>
-                        <li>Uygulama adini girin (ornegin: <code>Restoran WhatsApp</code>) ve olusturun.</li>
-                        <li>Uygulama sayfasinda <strong>"Add Product"</strong> bolumunden <strong>WhatsApp</strong> butonuna tiklayin ve <strong>"Set Up"</strong> deyin.</li>
+                        <li><a href="https://developers.facebook.com" target="_blank" rel="noopener">developers.facebook.com</a> adresine gidin ve giriş yapın.</li>
+                        <li>Sağ üstteki <strong>"My Apps"</strong> butonuna tıklayın.</li>
+                        <li><strong>"Create App"</strong> &rarr; <strong>"Other"</strong> &rarr; <strong>"Business"</strong> seçin.</li>
+                        <li>Uygulama adını girin (örneğin: <code>Restoran WhatsApp</code>) ve oluşturun.</li>
+                        <li>Uygulama sayfasında <strong>"Add Product"</strong> bölümünden <strong>WhatsApp</strong> butonuna tıklayın ve <strong>"Set Up"</strong> deyin.</li>
                       </ol>
                     </div>
                   </div>
@@ -212,14 +212,14 @@ import { DialogService } from '../../shared/dialog.service';
                     </div>
                     <div class="step-body">
                       <ol class="step-list">
-                        <li>Sol menuden <strong>WhatsApp &rarr; API Setup</strong> sayfasina gidin.</li>
-                        <li><strong>"From"</strong> alaninda test telefon numaranizi secin.</li>
-                        <li>Sayfada gosterilen <strong>Phone Number ID</strong> degerini kopyalayin ve yukaridaki alana yapiştirin.</li>
-                        <li><strong>WhatsApp Business Account ID</strong> icin: sol menuden <strong>WhatsApp &rarr; Configuration</strong> sayfasina gidin, URL'deki <code>waba_id=XXXX</code> degerini veya sayfadaki WABA ID'yi kopyalayin.</li>
+                        <li>Sol menüden <strong>WhatsApp &rarr; API Setup</strong> sayfasına gidin.</li>
+                        <li><strong>"From"</strong> alanında test telefon numaranızı seçin.</li>
+                        <li>Sayfada gösterilen <strong>Phone Number ID</strong> değerini kopyalayın ve yukarıdaki alana yapıştırın.</li>
+                        <li><strong>WhatsApp Business Account ID</strong> için: sol menüden <strong>WhatsApp &rarr; Configuration</strong> sayfasına gidin, URL'deki <code>waba_id=XXXX</code> değerini veya sayfadaki WABA ID'yi kopyalayın.</li>
                       </ol>
                       <div class="step-tip">
                         <span class="tip-icon"><app-icon name="lightbulb" [size]="16"/></span>
-                        <span>Production icin kendi telefon numaranizi eklemek isterseniz <strong>"Add phone number"</strong> butonunu kullanin.</span>
+                        <span>Production için kendi telefon numaranızı eklemek isterseniz <strong>"Add phone number"</strong> butonunu kullanın.</span>
                       </div>
                     </div>
                   </div>
@@ -228,37 +228,37 @@ import { DialogService } from '../../shared/dialog.service';
                   <div class="guide-step highlight">
                     <div class="step-header">
                       <span class="step-number">3</span>
-                      <span class="step-title">Kalici Access Token Olusturma (Onemli!)</span>
+                      <span class="step-title">Kalıcı Access Token Oluşturma (Önemli!)</span>
                     </div>
                     <div class="step-body">
                       <div class="step-warning">
                         <span class="warning-icon"><app-icon name="alert-triangle" [size]="16"/></span>
-                        <span>API Setup sayfasindaki gecici token <strong>24 saat</strong> sonra gecersiz olur. Asagidaki adimlari takip ederek kalici token olusturun.</span>
+                        <span>API Setup sayfasındaki geçici token <strong>24 saat</strong> sonra geçersiz olur. Aşağıdaki adımları takip ederek kalıcı token oluşturun.</span>
                       </div>
                       <ol class="step-list">
                         <li><a href="https://business.facebook.com/settings" target="_blank" rel="noopener">business.facebook.com/settings</a> adresine gidin.</li>
-                        <li>Sol menuden <strong>Kullanicilar &rarr; Sistem Kullanicilari</strong> (Users &rarr; System Users) sayfasina gidin.</li>
-                        <li><strong>"Ekle"</strong> (Add) butonuna basin. Isim girin (ornegin: <code>whatres-api</code>), rol olarak <strong>Admin</strong> secin.</li>
-                        <li>Olusturulan sistem kullanicisina tiklayin &rarr; <strong>"Varlik Ekle"</strong> (Add Assets) butonuna basin.</li>
+                        <li>Sol menüden <strong>Kullanıcılar &rarr; Sistem Kullanıcıları</strong> (Users &rarr; System Users) sayfasına gidin.</li>
+                        <li><strong>"Ekle"</strong> (Add) butonuna basın. İsim girin (örneğin: <code>whatres-api</code>), rol olarak <strong>Admin</strong> seçin.</li>
+                        <li>Oluşturulan sistem kullanıcısına tıklayın &rarr; <strong>"Varlık Ekle"</strong> (Add Assets) butonuna basın.</li>
                         <li>
                           Asagidaki varliklari ekleyin:
                           <ul class="step-sublist">
-                            <li><strong>Uygulamalar</strong> (Apps) &rarr; WhatsApp uygulamanizi secin &rarr; <strong>Tam Kontrol</strong> (Full Control)</li>
-                            <li><strong>WhatsApp Hesaplari</strong> (WhatsApp Accounts) &rarr; WABA hesabinizi secin &rarr; <strong>Tam Kontrol</strong></li>
+                            <li><strong>Uygulamalar</strong> (Apps) &rarr; WhatsApp uygulamanızı seçin &rarr; <strong>Tam Kontrol</strong> (Full Control)</li>
+                            <li><strong>WhatsApp Hesapları</strong> (WhatsApp Accounts) &rarr; WABA hesabınızı seçin &rarr; <strong>Tam Kontrol</strong></li>
                           </ul>
                         </li>
-                        <li><strong>"Token Olustur"</strong> (Generate Token) butonuna basin.</li>
-                        <li>Uygulamanizi secin ve su izinleri (permissions) ekleyin:
+                        <li><strong>"Token Oluştur"</strong> (Generate Token) butonuna basın.</li>
+                        <li>Uygulamanızı seçin ve şu izinleri (permissions) ekleyin:
                           <ul class="step-sublist">
                             <li><code>whatsapp_business_messaging</code></li>
                             <li><code>whatsapp_business_management</code></li>
                           </ul>
                         </li>
-                        <li>Olusturulan tokeni kopyalayin ve yukaridaki <strong>Access Token</strong> alanina yapiştirin.</li>
+                        <li>Oluşturulan tokeni kopyalayın ve yukarıdaki <strong>Access Token</strong> alanına yapıştırın.</li>
                       </ol>
                       <div class="step-tip success">
                         <span class="tip-icon"><app-icon name="check-circle" [size]="16"/></span>
-                        <span>Bu token <strong>asla expire olmaz</strong>. Bir kez olusturup kullanabilirsiniz.</span>
+                        <span>Bu token <strong>asla expire olmaz</strong>. Bir kez oluşturup kullanabilirsiniz.</span>
                       </div>
                     </div>
                   </div>
@@ -271,14 +271,14 @@ import { DialogService } from '../../shared/dialog.service';
                     </div>
                     <div class="step-body">
                       <ol class="step-list">
-                        <li><a href="https://developers.facebook.com" target="_blank" rel="noopener">developers.facebook.com</a> &rarr; uygulamaniza gidin.</li>
-                        <li>Sol menuden <strong>Settings &rarr; Basic</strong> sayfasina gidin.</li>
-                        <li><strong>App Secret</strong> alaninda <strong>"Show"</strong> butonuna tiklayin.</li>
-                        <li>Gosterilen degeri kopyalayin ve yukaridaki <strong>App Secret</strong> alanina yapiştirin.</li>
+                        <li><a href="https://developers.facebook.com" target="_blank" rel="noopener">developers.facebook.com</a> &rarr; uygulamanıza gidin.</li>
+                        <li>Sol menüden <strong>Settings &rarr; Basic</strong> sayfasına gidin.</li>
+                        <li><strong>App Secret</strong> alanında <strong>"Show"</strong> butonuna tıklayın.</li>
+                        <li>Gösterilen değeri kopyalayın ve yukarıdaki <strong>App Secret</strong> alanına yapıştırın.</li>
                       </ol>
                       <div class="step-tip">
                         <span class="tip-icon"><app-icon name="lock" [size]="16"/></span>
-                        <span>App Secret, webhook mesajlarinin dogrulanmasi icin kullanilir. Kimseyle paylaşmayin.</span>
+                        <span>App Secret, webhook mesajlarının doğrulanması için kullanılır. Kimseyle paylaşmayın.</span>
                       </div>
                     </div>
                   </div>
@@ -287,25 +287,25 @@ import { DialogService } from '../../shared/dialog.service';
                   <div class="guide-step">
                     <div class="step-header">
                       <span class="step-number">5</span>
-                      <span class="step-title">Webhook Yapilandirmasi</span>
+                      <span class="step-title">Webhook Yapılandırması</span>
                     </div>
                     <div class="step-body">
                       <ol class="step-list">
-                        <li>Yukaridaki tum bilgileri girdikten sonra <strong>"Save Configuration"</strong> butonuna basin.</li>
-                        <li>Kayit basarili oldugunda sayfada <strong>Webhook URL</strong> ve <strong>Verify Token</strong> gosterilecek.</li>
-                        <li>Meta Developer sayfanizda <strong>WhatsApp &rarr; Configuration</strong> bolumune gidin.</li>
-                        <li><strong>"Edit"</strong> butonuna tiklayin:
+                        <li>Yukarıdaki tüm bilgileri girdikten sonra <strong>"Save Configuration"</strong> butonuna basın.</li>
+                        <li>Kayıt başarılı olduğunda sayfada <strong>Webhook URL</strong> ve <strong>Verify Token</strong> gösterilecek.</li>
+                        <li>Meta Developer sayfanızda <strong>WhatsApp &rarr; Configuration</strong> bölümüne gidin.</li>
+                        <li><strong>"Edit"</strong> butonuna tıklayın:
                           <ul class="step-sublist">
-                            <li><strong>Callback URL</strong> alanina yukaridaki <em>Webhook URL</em>'yi yapiştirin.</li>
-                            <li><strong>Verify Token</strong> alanina yukaridaki <em>Verify Token</em>'i yapiştirin.</li>
+                            <li><strong>Callback URL</strong> alanına yukarıdaki <em>Webhook URL</em>'yi yapıştırın.</li>
+                            <li><strong>Verify Token</strong> alanına yukarıdaki <em>Verify Token</em>'i yapıştırın.</li>
                           </ul>
                         </li>
-                        <li><strong>"Verify and Save"</strong> butonuna basin.</li>
-                        <li>Webhook alanlari bolumunde <strong>"messages"</strong> alaninin yanindaki <strong>Subscribe</strong> kutusunu isaretleyin.</li>
+                        <li><strong>"Verify and Save"</strong> butonuna basın.</li>
+                        <li>Webhook alanları bölümünde <strong>"messages"</strong> alanının yanındaki <strong>Subscribe</strong> kutusunu işaretleyin.</li>
                       </ol>
                       <div class="step-tip success">
                         <span class="tip-icon"><app-icon name="party-popper" [size]="16"/></span>
-                        <span>Tebrikler! Entegrasyon tamamlandi. <strong>"Test Connection"</strong> butonuyla baglantinizi dogrulayin.</span>
+                        <span>Tebrikler! Entegrasyon tamamlandı. <strong>"Test Connection"</strong> butonuyla bağlantınızı doğrulayın.</span>
                       </div>
                     </div>
                   </div>
@@ -317,12 +317,12 @@ import { DialogService } from '../../shared/dialog.service';
 
         <!-- POS Integration -->
         <div class="settings-section">
-          <h2 class="section-title">POS Menu Entegrasyonu</h2>
+          <h2 class="section-title">POS Menü Entegrasyonu</h2>
           <div class="settings-card">
             <!-- Connection Status Banner -->
             <div class="wa-status-banner" [ngClass]="posConfig()?.isConfigured ? 'connected' : 'disconnected'">
               <span class="status-dot"></span>
-              <span class="status-text">{{ posConfig()?.isConfigured ? 'Bagli' : 'Bagli Degil' }}</span>
+              <span class="status-text">{{ posConfig()?.isConfigured ? 'Bağlı' : 'Bağlı Değil' }}</span>
               @if (posConfig()?.lastMenuSync) {
                 <span class="text-muted status-date">
                   Son sync: {{ posConfig()!.lastMenuSync | date:'medium' }}
@@ -335,12 +335,12 @@ import { DialogService } from '../../shared/dialog.service';
               <div class="setting-item column">
                 <span class="setting-label">Webhook URL</span>
                 <span class="setting-description text-muted">
-                  POS sisteminizde bu URL'yi webhook olarak tanimlayabilirsiniz
+                  POS sisteminizde bu URL'yi webhook olarak tanımlayabilirsiniz
                 </span>
                 <div class="copy-input">
                   <input type="text" class="setting-input mono" [value]="posConfig()!.webhookUrl" readonly />
                   <button class="btn-copy" (click)="copyToClipboard(posConfig()!.webhookUrl, 'posWebhook')">
-                    {{ copyFeedback() === 'posWebhook' ? 'Copied!' : 'Copy' }}
+                    {{ copyFeedback() === 'posWebhook' ? 'Kopyalandı!' : 'Kopyala' }}
                   </button>
                 </div>
               </div>
@@ -416,11 +416,11 @@ import { DialogService } from '../../shared/dialog.service';
 
         <!-- Çalışma Saatleri -->
         <div class="settings-section">
-          <h2 class="section-title">Calisma Saatleri</h2>
+          <h2 class="section-title">Çalışma Saatleri</h2>
           <div class="settings-card">
             <div class="setting-item column">
               <span class="setting-description text-muted">
-                Calisma saatleri disinda gelen siparislerde musteri bilgilendirilir.
+                Çalışma saatleri dışında gelen siparişlerde müşteri bilgilendirilir.
               </span>
             </div>
             @for (day of weekDays; track day.key) {
@@ -428,7 +428,7 @@ import { DialogService } from '../../shared/dialog.service';
                 <label style="width: 90px; font-size: 13px; font-weight: 500;">{{ day.label }}</label>
                 <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer;">
                   <input type="checkbox" [checked]="!isDayClosed(day.key)" (change)="toggleDayClosed(day.key)"/>
-                  Acik
+                  Açık
                 </label>
                 @if (!isDayClosed(day.key)) {
                   <input type="time" [value]="getDayOpen(day.key)" (change)="setDayTime(day.key, 'open', $event)"
@@ -446,7 +446,7 @@ import { DialogService } from '../../shared/dialog.service';
             </div>
             @if (hoursSaved()) {
               <div class="test-result success">
-                <p class="test-message">Calisma saatleri kaydedildi!</p>
+                <p class="test-message">Çalışma saatleri kaydedildi!</p>
               </div>
             }
           </div>
@@ -459,7 +459,7 @@ import { DialogService } from '../../shared/dialog.service';
             <div class="setting-item column">
               <span class="setting-label">API Key</span>
               <span class="setting-description text-muted">
-                Konum servisleri icin gerekli. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: var(--color-accent-primary);">Google Cloud Console</a> > Credentials > Create Credentials > API Key ile olusturun. Geocoding API ve Maps JavaScript API aktif olmali.
+                Konum servisleri için gerekli. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: var(--color-accent-primary);">Google Cloud Console</a> > Credentials > Create Credentials > API Key ile oluşturun. Geocoding API ve Maps JavaScript API aktif olmalı.
               </span>
               <input type="text" class="setting-input" [value]="googleMapsKey()" (input)="googleMapsKey.set($any($event.target).value)" placeholder="AIzaSy..."/>
             </div>
@@ -478,7 +478,7 @@ import { DialogService } from '../../shared/dialog.service';
 
         <!-- iyzico Ödeme Ayarları -->
         <div class="settings-section">
-          <h2 class="section-title">iyzico Odeme Ayarlari</h2>
+          <h2 class="section-title">iyzico Ödeme Ayarları</h2>
           <div class="settings-card">
             <div class="setting-item">
               <div class="setting-info">
@@ -505,7 +505,7 @@ import { DialogService } from '../../shared/dialog.service';
             </div>
             @if (iyzicoSaved()) {
               <div class="test-result success">
-                <p class="test-message">iyzico ayarlari kaydedildi! ({{ iyzicoMode() === 'prod' ? 'CANLI' : 'TEST' }} mod)</p>
+                <p class="test-message">iyzico ayarları kaydedildi! ({{ iyzicoMode() === 'prod' ? 'CANLI' : 'TEST' }} mod)</p>
               </div>
             }
           </div>
@@ -513,13 +513,13 @@ import { DialogService } from '../../shared/dialog.service';
 
         <!-- Gel Al İndirim Ayarı -->
         <div class="settings-section">
-          <h2 class="section-title">Gel Al Indirimi</h2>
+          <h2 class="section-title">Gel Al İndirimi</h2>
           <div class="settings-card">
             <div class="setting-item">
               <div class="setting-info">
-                <span class="setting-label">Gel Al Indirim Orani (%)</span>
+                <span class="setting-label">Gel Al İndirim Oranı (%)</span>
                 <span class="setting-description text-muted">
-                  Gel al siparislerinde uygulanacak indirim yuzdesi. 0 veya bos birakilirsa indirim uygulanmaz.
+                  Gel al siparişlerinde uygulanacak indirim yüzdesi. 0 veya boş bırakılırsa indirim uygulanmaz.
                 </span>
               </div>
               <div class="pickup-discount-input">
@@ -536,7 +536,7 @@ import { DialogService } from '../../shared/dialog.service';
             </div>
             @if (pickupDiscountSaved()) {
               <div class="test-result success">
-                <p class="test-message">Indirim orani kaydedildi!</p>
+                <p class="test-message">İndirim oranı kaydedildi!</p>
               </div>
             }
           </div>
@@ -544,12 +544,12 @@ import { DialogService } from '../../shared/dialog.service';
 
         <!-- Sipariş Bildirim Telefonları -->
         <div class="settings-section">
-          <h2 class="section-title">Siparis Bildirim Telefonlari</h2>
+          <h2 class="section-title">Sipariş Bildirim Telefonları</h2>
           <div class="settings-card">
             <div class="setting-item column">
-              <span class="setting-label">WhatsApp Bildirim Numaralari</span>
+              <span class="setting-label">WhatsApp Bildirim Numaraları</span>
               <span class="setting-description text-muted">
-                Yeni siparis geldiginde bu numaralara WhatsApp ile bildirim gonderilir (urunler, fiyat, konum linki).
+                Yeni sipariş geldiğinde bu numaralara WhatsApp ile bildirim gönderilir (ürünler, fiyat, konum linki).
               </span>
             </div>
 
@@ -570,7 +570,7 @@ import { DialogService } from '../../shared/dialog.service';
             </div>
             @if (notifyPhonesSaved()) {
               <div class="test-result success">
-                <p class="test-message">Bildirim numaralari kaydedildi!</p>
+                <p class="test-message">Bildirim numaraları kaydedildi!</p>
               </div>
             }
           </div>
@@ -578,12 +578,12 @@ import { DialogService } from '../../shared/dialog.service';
 
         <!-- Menu Media Upload -->
         <div class="settings-section">
-          <h2 class="section-title">Menu Gorselleri</h2>
+          <h2 class="section-title">Menü Görselleri</h2>
           <div class="settings-card">
             <div class="setting-item column">
-              <span class="setting-label">WhatsApp Menu Gorselleri</span>
+              <span class="setting-label">WhatsApp Menü Görselleri</span>
               <span class="setting-description text-muted">
-                Musteriler "menu" yazdiginda gonderilecek gorselleri yukleyin. (maks. 10 dosya, jpeg/png/webp/pdf)
+                Müşteriler "menü" yazdığında gönderilecek görselleri yükleyin. (maks. 10 dosya, jpeg/png/webp/pdf)
               </span>
             </div>
 
@@ -597,7 +597,7 @@ import { DialogService } from '../../shared/dialog.service';
                   <app-icon name="upload" [size]="24"/>
                   <span class="upload-text">
                     @if (isUploadingMedia()) {
-                      Yukleniyor...
+                      Yükleniyor...
                     } @else {
                       Dosya secin veya surukleyin
                     }
@@ -635,7 +635,7 @@ import { DialogService } from '../../shared/dialog.service';
 
             @if (menuMedia().length === 0) {
               <div class="media-empty text-muted">
-                Henuz menu gorseli yuklenmemis.
+                Henüz menü görseli yüklenmemiş.
               </div>
             }
           </div>
@@ -965,7 +965,7 @@ export class SettingsComponent implements OnInit {
         this.isLoading.set(false);
       },
       error: (err) => {
-        this.errorMessage.set('Failed to load WhatsApp configuration');
+        this.errorMessage.set('WhatsApp yapılandırması yüklenemedi');
         this.isLoading.set(false);
       },
     });
@@ -988,7 +988,7 @@ export class SettingsComponent implements OnInit {
         this.isSaving.set(false);
       },
       error: (err) => {
-        this.errorMessage.set(err.error?.error?.message || 'Failed to save configuration');
+        this.errorMessage.set(err.error?.error?.message || 'Yapılandırma kaydedilemedi');
         this.isSaving.set(false);
       },
     });
@@ -1009,7 +1009,7 @@ export class SettingsComponent implements OnInit {
         this.isTesting.set(false);
       },
       error: (err) => {
-        this.errorMessage.set(err.error?.error?.message || 'Connection test failed');
+        this.errorMessage.set(err.error?.error?.message || 'Bağlantı testi başarısız');
         this.isTesting.set(false);
       },
     });
@@ -1029,7 +1029,7 @@ export class SettingsComponent implements OnInit {
         this.waForm.reset();
       },
       error: (err) => {
-        this.errorMessage.set(err.error?.error?.message || 'Failed to disconnect');
+        this.errorMessage.set(err.error?.error?.message || 'Bağlantı kesilemedi');
       },
     });
   }
@@ -1050,10 +1050,10 @@ export class SettingsComponent implements OnInit {
   getStatusLabel(): string {
     const status = this.waConfig()?.connectionStatus;
     switch (status) {
-      case 'CONNECTED': return 'Connected';
-      case 'PENDING': return 'Pending Verification';
-      case 'ERROR': return 'Error';
-      default: return 'Not Connected';
+      case 'CONNECTED': return 'Bağlı';
+      case 'PENDING': return 'Doğrulama Bekliyor';
+      case 'ERROR': return 'Hata';
+      default: return 'Bağlı Değil';
     }
   }
 
@@ -1074,7 +1074,7 @@ export class SettingsComponent implements OnInit {
         }
       },
       error: () => {
-        this.posError.set('POS ayarlari yuklenemedi');
+        this.posError.set('POS ayarları yüklenemedi');
       },
     });
   }

@@ -56,7 +56,7 @@ interface NavItem {
             </div>
           </a>
         }
-        <button class="logout-btn" (click)="logout()" title="Sign out">
+        <button class="logout-btn" (click)="logout()" title="Çıkış Yap">
           <app-icon name="log-out" [size]="18"/>
         </button>
       </div>
@@ -250,15 +250,15 @@ export class SidebarComponent {
   authService = inject(AuthService);
 
   navItems: NavItem[] = [
-    { label: 'Dashboard', icon: 'dashboard', path: '/' },
+    { label: 'Panel', icon: 'dashboard', path: '/' },
     { label: 'Chatbot', icon: 'bot', path: '/chatbot' },
-    { label: 'Inbox', icon: 'message-square', path: '/inbox' },
-    { label: 'Siparisler', icon: 'package', path: '/orders' },
-    { label: 'Menu', icon: 'utensils', path: '/menu' },
-    { label: 'Subeler', icon: 'store', path: '/stores' },
-    { label: 'Yazdirma', icon: 'printer', path: '/print-jobs' },
+    { label: 'Gelen Kutusu', icon: 'message-square', path: '/inbox' },
+    { label: 'Siparişler', icon: 'package', path: '/orders' },
+    { label: 'Menü', icon: 'utensils', path: '/menu' },
+    { label: 'Şubeler', icon: 'store', path: '/stores' },
+    { label: 'Yazdırma', icon: 'printer', path: '/print-jobs' },
     { label: 'Anketler', icon: 'bar-chart', path: '/surveys' },
-    { label: 'Musteriler', icon: 'users', path: '/customers' },
+    { label: 'Müşteriler', icon: 'users', path: '/customers' },
     { label: 'Kampanyalar', icon: 'megaphone', path: '/campaigns' },
     { label: 'Ayarlar', icon: 'settings', path: '/settings' },
   ];

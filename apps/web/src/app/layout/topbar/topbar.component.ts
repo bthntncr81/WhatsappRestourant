@@ -13,9 +13,9 @@ import { IconComponent } from '../../shared/icon.component';
     <header class="topbar">
       <div class="topbar-left">
         <div class="breadcrumb">
-          <span class="breadcrumb-item text-muted">Home</span>
+          <span class="breadcrumb-item text-muted">Ana Sayfa</span>
           <span class="breadcrumb-separator text-muted">/</span>
-          <span class="breadcrumb-item active">Dashboard</span>
+          <span class="breadcrumb-item active">Panel</span>
         </div>
       </div>
 
@@ -25,7 +25,7 @@ import { IconComponent } from '../../shared/icon.component';
           <input
             type="text"
             class="search-input"
-            placeholder="Search..."
+            placeholder="Ara..."
           />
           <kbd class="search-shortcut">⌘K</kbd>
         </div>
@@ -47,18 +47,18 @@ import { IconComponent } from '../../shared/icon.component';
           </a>
         }
 
-        <button class="topbar-action" title="Notifications">
+        <button class="topbar-action" title="Bildirimler">
           <app-icon name="bell" [size]="18"/>
           <span class="notification-badge">3</span>
         </button>
-        <button class="topbar-action theme-toggle" (click)="themeService.toggleTheme()" [title]="themeService.isDark() ? 'Light Mode' : 'Dark Mode'">
+        <button class="topbar-action theme-toggle" (click)="themeService.toggleTheme()" [title]="themeService.isDark() ? 'Açık Tema' : 'Koyu Tema'">
           @if (themeService.isDark()) {
             <app-icon name="sun" [size]="18"/>
           } @else {
             <app-icon name="moon" [size]="18"/>
           }
         </button>
-        <button class="topbar-action" title="Help">
+        <button class="topbar-action" title="Yardım">
           <app-icon name="help-circle" [size]="18"/>
         </button>
       </div>
@@ -265,8 +265,11 @@ export class TopbarComponent implements OnInit {
   getPlanName(plan: string): string {
     const names: Record<string, string> = {
       TRIAL: 'Deneme',
-      STARTER: 'Starter',
-      PRO: 'Pro',
+      STARTER: 'Başlangıç',
+      PRO: 'Profesyonel',
+      SILVER: 'Silver',
+      GOLD: 'Gold',
+      PLATINUM: 'Platinum',
     };
     return names[plan] || plan;
   }

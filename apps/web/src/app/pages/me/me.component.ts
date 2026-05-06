@@ -10,20 +10,20 @@ import { IconComponent } from '../../shared/icon.component';
   template: `
     <div class="me-page">
       <div class="me-header">
-        <h1 class="me-title">My Profile</h1>
-        <p class="me-subtitle text-secondary">View your account and workspace information</p>
+        <h1 class="me-title">Profilim</h1>
+        <p class="me-subtitle text-secondary">Hesap ve çalışma alanı bilgileriniz</p>
       </div>
 
       @if (loading()) {
         <div class="loading-state">
           <div class="loader"></div>
-          <span class="text-muted">Loading profile...</span>
+          <span class="text-muted">Profil yükleniyor...</span>
         </div>
       } @else if (error()) {
         <div class="error-state">
           <app-icon name="alert-triangle" [size]="20" class="error-icon"/>
           <span class="error-message">{{ error() }}</span>
-          <button class="retry-btn" (click)="loadProfile()">Retry</button>
+          <button class="retry-btn" (click)="loadProfile()">Tekrar Dene</button>
         </div>
       } @else if (profile()) {
         <div class="profile-grid">
@@ -31,23 +31,23 @@ import { IconComponent } from '../../shared/icon.component';
           <div class="profile-card">
             <div class="card-header">
               <app-icon name="user" [size]="20" class="card-icon"/>
-              <h2 class="card-title">User Information</h2>
+              <h2 class="card-title">Kullanıcı Bilgileri</h2>
             </div>
             <div class="card-content">
               <div class="info-row">
-                <span class="info-label">Name</span>
+                <span class="info-label">Adı</span>
                 <span class="info-value">{{ profile()!.user.name }}</span>
               </div>
               <div class="info-row">
-                <span class="info-label">Email</span>
+                <span class="info-label">E-posta</span>
                 <span class="info-value font-mono">{{ profile()!.user.email }}</span>
               </div>
               <div class="info-row">
-                <span class="info-label">User ID</span>
+                <span class="info-label">Kullanıcı ID</span>
                 <span class="info-value font-mono text-muted">{{ profile()!.user.id }}</span>
               </div>
               <div class="info-row">
-                <span class="info-label">Role</span>
+                <span class="info-label">Rol</span>
                 <span class="role-badge" [attr.data-role]="profile()!.user.role">
                   {{ profile()!.user.role }}
                 </span>
@@ -59,11 +59,11 @@ import { IconComponent } from '../../shared/icon.component';
           <div class="profile-card">
             <div class="card-header">
               <app-icon name="building" [size]="20" class="card-icon"/>
-              <h2 class="card-title">Current Workspace</h2>
+              <h2 class="card-title">Mevcut Çalışma Alanı</h2>
             </div>
             <div class="card-content">
               <div class="info-row">
-                <span class="info-label">Name</span>
+                <span class="info-label">Adı</span>
                 <span class="info-value">{{ profile()!.tenant.name }}</span>
               </div>
               <div class="info-row">
@@ -71,7 +71,7 @@ import { IconComponent } from '../../shared/icon.component';
                 <span class="info-value font-mono">{{ profile()!.tenant.slug }}</span>
               </div>
               <div class="info-row">
-                <span class="info-label">Tenant ID</span>
+                <span class="info-label">İşletme ID</span>
                 <span class="info-value font-mono text-muted">{{ profile()!.tenant.id }}</span>
               </div>
             </div>
@@ -81,11 +81,11 @@ import { IconComponent } from '../../shared/icon.component';
           <div class="profile-card full-width">
             <div class="card-header">
               <app-icon name="link" [size]="20" class="card-icon"/>
-              <h2 class="card-title">All Workspaces</h2>
+              <h2 class="card-title">Tüm Çalışma Alanları</h2>
             </div>
             <div class="card-content">
               @if (profile()!.memberships.length === 0) {
-                <p class="text-muted">No workspace memberships found.</p>
+                <p class="text-muted">Çalışma alanı üyeliği bulunamadı.</p>
               } @else {
                 <div class="memberships-list">
                   @for (membership of profile()!.memberships; track membership.id) {
@@ -393,12 +393,12 @@ export class MeComponent implements OnInit {
         if (response.success && response.data) {
           this.profile.set(response.data);
         } else {
-          this.error.set(response.error?.message || 'Failed to load profile');
+          this.error.set(response.error?.message || 'Profil yüklenemedi');
         }
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err.error?.error?.message || 'Failed to load profile');
+        this.error.set(err.error?.error?.message || 'Profil yüklenemedi');
         this.loading.set(false);
       },
     });

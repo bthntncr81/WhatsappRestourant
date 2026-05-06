@@ -17,8 +17,8 @@ import { IconComponent } from '../../shared/icon.component';
             <img src="/logo.jpeg" alt="Superpersonel" style="height:32px; width:32px; border-radius:8px; object-fit:cover;"/>
             <span class="logo-text">Superpersonel</span>
           </div>
-          <h1 class="auth-title">Welcome back</h1>
-          <p class="auth-subtitle text-muted">Sign in to your account</p>
+          <h1 class="auth-title">Tekrar hoş geldiniz</h1>
+          <p class="auth-subtitle text-muted">Hesabınıza giriş yapın</p>
         </div>
 
         <form class="auth-form" (ngSubmit)="onSubmit()">
@@ -30,21 +30,21 @@ import { IconComponent } from '../../shared/icon.component';
           }
 
           <div class="form-group">
-            <label for="email" class="form-label">Email</label>
+            <label for="email" class="form-label">E-posta</label>
             <input
               type="email"
               id="email"
               class="form-input"
               [(ngModel)]="email"
               name="email"
-              placeholder="you@example.com"
+              placeholder="ornek@example.com"
               required
               [disabled]="loading()"
             />
           </div>
 
           <div class="form-group">
-            <label for="password" class="form-label">Password</label>
+            <label for="password" class="form-label">Şifre</label>
             <input
               type="password"
               id="password"
@@ -60,17 +60,17 @@ import { IconComponent } from '../../shared/icon.component';
           <button type="submit" class="btn-primary" [disabled]="loading()">
             @if (loading()) {
               <span class="spinner"></span>
-              Signing in...
+              Giriş yapılıyor...
             } @else {
-              Sign in
+              Giriş Yap
             }
           </button>
         </form>
 
         <div class="auth-footer">
           <p class="text-muted">
-            Don't have an account?
-            <a routerLink="/register" class="auth-link">Create one</a>
+            Hesabınız yok mu?
+            <a routerLink="/register" class="auth-link">Hesap oluştur</a>
           </p>
         </div>
       </div>
@@ -275,7 +275,7 @@ export class LoginComponent {
 
   onSubmit(): void {
     if (!this.email || !this.password) {
-      this.error.set('Please fill in all fields');
+      this.error.set('Lütfen tüm alanları doldurun');
       return;
     }
 
@@ -287,12 +287,12 @@ export class LoginComponent {
         if (response.success) {
           this.router.navigate(['/']);
         } else {
-          this.error.set(response.error?.message || 'Login failed');
+          this.error.set(response.error?.message || 'Giriş başarısız');
         }
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err.error?.error?.message || 'Login failed. Please try again.');
+        this.error.set(err.error?.error?.message || 'Giriş başarısız. Lütfen tekrar deneyin.');
         this.loading.set(false);
       },
     });

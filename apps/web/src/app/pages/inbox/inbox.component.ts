@@ -25,8 +25,8 @@ import { IconComponent } from '../../shared/icon.component';
       <!-- Sidebar: Conversation List -->
       <aside class="conversations-sidebar">
         <div class="sidebar-header">
-          <h2 class="sidebar-title">Inbox</h2>
-          <button class="refresh-btn" (click)="loadConversations()" title="Refresh">
+          <h2 class="sidebar-title">Gelen Kutusu</h2>
+          <button class="refresh-btn" (click)="loadConversations()" title="Yenile">
             <app-icon name="refresh" [size]="16"/>
           </button>
         </div>
@@ -36,19 +36,19 @@ import { IconComponent } from '../../shared/icon.component';
           <div class="summary-stats">
             <div class="stat" [class.active]="statusFilter() === null" (click)="setStatusFilter(null)">
               <span class="stat-count">{{ summary()!.total }}</span>
-              <span class="stat-label">All</span>
+              <span class="stat-label">Tümü</span>
             </div>
             <div class="stat" [class.active]="statusFilter() === 'OPEN'" (click)="setStatusFilter('OPEN')">
               <span class="stat-count">{{ summary()!.open }}</span>
-              <span class="stat-label">Open</span>
+              <span class="stat-label">Açık</span>
             </div>
             <div class="stat pending" [class.active]="statusFilter() === 'PENDING_AGENT'" (click)="setStatusFilter('PENDING_AGENT')">
               <span class="stat-count">{{ summary()!.pendingAgent }}</span>
-              <span class="stat-label">Pending</span>
+              <span class="stat-label">Beklemede</span>
             </div>
             <div class="stat" [class.active]="statusFilter() === 'CLOSED'" (click)="setStatusFilter('CLOSED')">
               <span class="stat-count">{{ summary()!.closed }}</span>
-              <span class="stat-label">Closed</span>
+              <span class="stat-label">Kapalı</span>
             </div>
           </div>
         }
@@ -57,7 +57,7 @@ import { IconComponent } from '../../shared/icon.component';
         <div class="search-box">
           <input
             type="text"
-            placeholder="Search by phone or name..."
+            placeholder="Telefon veya ada göre ara..."
             [(ngModel)]="searchQuery"
             (input)="onSearchChange()"
           />
@@ -72,7 +72,7 @@ import { IconComponent } from '../../shared/icon.component';
           } @else if (conversations().length === 0) {
             <div class="empty-state">
               <span class="empty-icon"><app-icon name="message-square" [size]="48"/></span>
-              <p>No conversations yet</p>
+              <p>Henüz konuşma yok</p>
             </div>
           } @else {
             @for (conv of conversations(); track conv.id) {
@@ -117,7 +117,7 @@ import { IconComponent } from '../../shared/icon.component';
         @if (!selectedConversation()) {
           <div class="no-conversation">
             <span class="empty-icon"><app-icon name="message-square" [size]="48"/></span>
-            <p>Select a conversation to view messages</p>
+            <p>Mesajları görüntülemek için bir konuşma seçin</p>
           </div>
         } @else {
           <!-- Chat Header -->
@@ -195,7 +195,7 @@ import { IconComponent } from '../../shared/icon.component';
                 class="panel-toggle-btn" 
                 [class.active]="showIntentPanel()"
                 (click)="showIntentPanel.set(!showIntentPanel())"
-                title="Toggle AI Panel"
+                title="Yapay Zekâ Paneli"
               >
                 <app-icon name="bot" [size]="14"/>
               </button>
@@ -206,9 +206,9 @@ import { IconComponent } from '../../shared/icon.component';
                 [ngModel]="selectedConversation()!.status"
                 (ngModelChange)="updateStatus($event)"
               >
-                <option value="OPEN">Open</option>
-                <option value="PENDING_AGENT">Pending</option>
-                <option value="CLOSED">Closed</option>
+                <option value="OPEN">Açık</option>
+                <option value="PENDING_AGENT">Beklemede</option>
+                <option value="CLOSED">Kapalı</option>
               </select>
             </div>
           </div>
@@ -236,7 +236,7 @@ import { IconComponent } from '../../shared/icon.component';
                           target="_blank"
                           class="location-link"
                         >
-                          View on map
+                          Haritada Gör
                         </a>
                       </div>
                     } @else if (msg.kind === 'IMAGE') {
@@ -265,7 +265,7 @@ import { IconComponent } from '../../shared/icon.component';
           <!-- Internal Notes Section -->
           <div class="internal-notes-section">
             <div class="notes-header" (click)="showNotes.set(!showNotes())">
-              <span><app-icon name="file-text" [size]="14"/> Internal Notes ({{ internalNotes().length }})</span>
+              <span><app-icon name="file-text" [size]="14"/> İç Notlar ({{ internalNotes().length }})</span>
               <span class="toggle-icon">
                 @if (showNotes()) {
                   <app-icon name="chevron-down" [size]="14"/>
@@ -288,7 +288,7 @@ import { IconComponent } from '../../shared/icon.component';
                 <form (ngSubmit)="createNote()" class="note-form">
                   <input
                     type="text"
-                    placeholder="Add internal note..."
+                    placeholder="İç not ekle..."
                     [(ngModel)]="newNoteText"
                     name="newNoteText"
                   />
@@ -309,7 +309,7 @@ import { IconComponent } from '../../shared/icon.component';
               <input
                 type="text"
                 class="reply-input"
-                placeholder="Type a message..."
+                placeholder="Bir mesaj yazın..."
                 [(ngModel)]="replyText"
                 name="replyText"
                 [disabled]="sending() || !canWrite()"
@@ -1738,11 +1738,11 @@ export class InboxComponent implements OnInit, OnDestroy {
     if (days === 0) {
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else if (days === 1) {
-      return 'Yesterday';
+      return 'Dün';
     } else if (days < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
+      return date.toLocaleDateString('tr-TR', { weekday: 'short' });
     } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' });
     }
   }
 
@@ -1773,26 +1773,26 @@ export class InboxComponent implements OnInit, OnDestroy {
   getStatusLabel(status: ConversationStatus): string {
     switch (status) {
       case 'OPEN':
-        return 'Open';
+        return 'Açık';
       case 'PENDING_AGENT':
-        return 'Pending';
+        return 'Beklemede';
       case 'CLOSED':
-        return 'Closed';
+        return 'Kapalı';
     }
   }
 
   getKindLabel(kind: string): string {
     switch (kind) {
       case 'LOCATION':
-        return '📍 Location';
+        return '📍 Konum';
       case 'IMAGE':
-        return '🖼️ Image';
+        return '🖼️ Görsel';
       case 'VOICE':
-        return '🎤 Voice';
+        return '🎤 Sesli Mesaj';
       case 'SYSTEM':
-        return 'System message';
+        return 'Sistem mesajı';
       default:
-        return 'Message';
+        return 'Mesaj';
     }
   }
 

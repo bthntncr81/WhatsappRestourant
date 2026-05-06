@@ -40,7 +40,7 @@ import { DialogService } from '../../shared/dialog.service';
           <div class="busy-toggle" style="display: flex; align-items: center; gap: 8px; margin-left: 12px; padding: 4px 12px; border-radius: 8px; background: var(--color-bg-elevated); border: 1px solid var(--color-border);">
             <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; white-space: nowrap;">
               <input type="checkbox" [checked]="isBusy()" (change)="toggleBusy()" style="width: 16px; height: 16px; cursor: pointer;"/>
-              Yogun
+              Yoğun
             </label>
             @if (isBusy()) {
               <input type="number" [value]="busyEstimate()" (change)="updateBusyEstimate($event)" placeholder="dk" min="5" max="120" step="5"
@@ -239,12 +239,12 @@ import { DialogService } from '../../shared/dialog.service';
         <div class="panel-overlay" (click)="closeCustomerPanel()"></div>
         <div class="customer-panel" (click)="$event.stopPropagation()">
           <div class="panel-header">
-            <h3>Musteri Detayi</h3>
+            <h3>Müşteri Detayı</h3>
             <button class="close-btn" (click)="closeCustomerPanel()"><app-icon name="x" [size]="16"/></button>
           </div>
 
           @if (customerDetailLoading()) {
-            <div class="panel-loading">Yukleniyor...</div>
+            <div class="panel-loading">Yükleniyor...</div>
           } @else if (customerDetail()) {
             <div class="panel-content">
               <!-- Customer Info -->
@@ -255,7 +255,7 @@ import { DialogService } from '../../shared/dialog.service';
                     <div class="customer-detail-name">{{ customerDetail()!.customerName || 'Misafir' }}</div>
                     <div class="customer-detail-phone">{{ customerDetail()!.customerPhone }}</div>
                     @if (customerDetail()!.firstOrderDate) {
-                      <div class="customer-since">Ilk siparis: {{ formatDate(customerDetail()!.firstOrderDate!) }}</div>
+                      <div class="customer-since">İlk sipariş: {{ formatDate(customerDetail()!.firstOrderDate!) }}</div>
                     }
                   </div>
                 </div>
@@ -263,11 +263,11 @@ import { DialogService } from '../../shared/dialog.service';
 
               <!-- Stats -->
               <div class="panel-section">
-                <h4 class="section-title">Istatistikler</h4>
+                <h4 class="section-title">İstatistikler</h4>
                 <div class="stats-grid-panel">
                   <div class="stat-card-panel">
                     <span class="stat-card-value">{{ customerDetail()!.stats.totalOrders }}</span>
-                    <span class="stat-card-label-panel">Siparis</span>
+                    <span class="stat-card-label-panel">Sipariş</span>
                   </div>
                   <div class="stat-card-panel">
                     <span class="stat-card-value">{{ customerDetail()!.stats.totalSpent | number:'1.0-0' }} TL</span>
@@ -279,7 +279,7 @@ import { DialogService } from '../../shared/dialog.service';
                   </div>
                   <div class="stat-card-panel">
                     <span class="stat-card-value">{{ customerDetail()!.stats.cancelledOrders }}</span>
-                    <span class="stat-card-label-panel">Iptal</span>
+                    <span class="stat-card-label-panel">İptal</span>
                   </div>
                 </div>
               </div>
@@ -287,7 +287,7 @@ import { DialogService } from '../../shared/dialog.service';
               <!-- Current Order Address -->
               @if (selectedOrder()?.deliveryAddress) {
                 <div class="panel-section">
-                  <h4 class="section-title">Teslimat Adresi (Bu Siparis)</h4>
+                  <h4 class="section-title">Teslimat Adresi (Bu Sipariş)</h4>
                   <div class="address-card current">
                     <app-icon name="map-pin" [size]="16" class="address-icon"/>
                     <span>{{ selectedOrder()!.deliveryAddress }}</span>
@@ -298,11 +298,11 @@ import { DialogService } from '../../shared/dialog.service';
               <!-- Favorite Items -->
               @if (customerDetail()!.favoriteItems.length > 0) {
                 <div class="panel-section">
-                  <h4 class="section-title">En Cok Siparis Edilen</h4>
+                  <h4 class="section-title">En Çok Sipariş Edilen</h4>
                   @for (item of customerDetail()!.favoriteItems; track item.menuItemName) {
                     <div class="favorite-item">
                       <span class="favorite-name">{{ item.menuItemName }}</span>
-                      <span class="favorite-count">{{ item.totalQty }}x ({{ item.orderCount }} siparis)</span>
+                      <span class="favorite-count">{{ item.totalQty }}x ({{ item.orderCount }} sipariş)</span>
                     </div>
                   }
                 </div>
@@ -311,7 +311,7 @@ import { DialogService } from '../../shared/dialog.service';
               <!-- Saved Addresses -->
               @if (customerDetail()!.savedAddresses.length > 0) {
                 <div class="panel-section">
-                  <h4 class="section-title">Kayitli Adresler</h4>
+                  <h4 class="section-title">Kayıtlı Adresler</h4>
                   @for (addr of customerDetail()!.savedAddresses; track addr.id) {
                     <div class="address-card">
                       <div class="address-name-panel">{{ addr.name }}</div>
@@ -333,7 +333,7 @@ import { DialogService } from '../../shared/dialog.service';
               <!-- Order History -->
               @if (customerDetail()!.recentOrders.length > 0) {
                 <div class="panel-section">
-                  <h4 class="section-title">Siparis Gecmisi</h4>
+                  <h4 class="section-title">Sipariş Geçmişi</h4>
                   @for (histOrder of customerDetail()!.recentOrders; track histOrder.id) {
                     <div class="history-order">
                       <div class="history-header">
@@ -352,7 +352,7 @@ import { DialogService } from '../../shared/dialog.service';
                           <span class="history-item">{{ hItem.qty }}x {{ hItem.menuItemName }}</span>
                         }
                         @if (histOrder.items.length > 3) {
-                          <span class="history-item more">+{{ histOrder.items.length - 3 }} urun daha</span>
+                          <span class="history-item more">+{{ histOrder.items.length - 3 }} ürün daha</span>
                         }
                       </div>
                       <div class="history-footer">

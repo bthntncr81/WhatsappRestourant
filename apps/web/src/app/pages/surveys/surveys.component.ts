@@ -51,7 +51,7 @@ interface ApiResponse<T> {
     <div class="surveys-page">
       <div class="page-header">
         <h1>Memnuniyet Anketleri</h1>
-        <p class="text-secondary">Musteri geri bildirimleri ve sikayetler</p>
+        <p class="text-secondary">Müşteri geri bildirimleri ve şikâyetler</p>
       </div>
 
       <!-- Stats Cards -->
@@ -66,11 +66,11 @@ interface ApiResponse<T> {
         </div>
         <div class="stat-card accent">
           <div class="stat-value">{{ stats()!.complaintCount }}</div>
-          <div class="stat-label">Sikayet</div>
+          <div class="stat-label">Şikâyet</div>
         </div>
         <div class="stat-card warn" *ngIf="stats()!.unresolvedCount > 0">
           <div class="stat-value">{{ stats()!.unresolvedCount }}</div>
-          <div class="stat-label">Cozumsuz</div>
+          <div class="stat-label">Çözümsüz</div>
         </div>
       </div>
 
@@ -81,21 +81,21 @@ interface ApiResponse<T> {
           [class.active]="filter() === 'unresolved'"
           (click)="setFilter('unresolved')"
         >
-          Cozumsuz
+          Çözümsüz
         </button>
         <button
           class="tab-btn"
           [class.active]="filter() === 'all'"
           (click)="setFilter('all')"
         >
-          Tumu
+          Tümü
         </button>
         <button
           class="tab-btn"
           [class.active]="filter() === 'resolved'"
           (click)="setFilter('resolved')"
         >
-          Cozulmus
+          Çözülmüş
         </button>
       </div>
 
@@ -119,29 +119,29 @@ interface ApiResponse<T> {
           </div>
           <div class="complaint-meta">
             <span class="badge" [class.resolved]="c.resolvedAt" [class.unresolved]="!c.resolvedAt">
-              {{ c.resolvedAt ? 'Cozuldu' : 'Bekliyor' }}
+              {{ c.resolvedAt ? 'Çözüldü' : 'Bekliyor' }}
             </span>
           </div>
         </div>
 
         <div class="empty-state" *ngIf="complaints().length === 0">
-          Sikayet bulunamadi.
+          Şikâyet bulunamadı.
         </div>
       </div>
 
-      <div class="loading" *ngIf="loading()">Yukleniyor...</div>
+      <div class="loading" *ngIf="loading()">Yükleniyor...</div>
 
       <!-- Detail Panel -->
       <div class="detail-overlay" *ngIf="selectedComplaint()" (click)="closeDetail()"></div>
       <div class="detail-panel" *ngIf="selectedComplaint()">
         <div class="detail-header">
-          <h2>Sikayet Detayi</h2>
+          <h2>Şikâyet Detayı</h2>
           <button class="close-btn" (click)="closeDetail()">&times;</button>
         </div>
 
         <div class="detail-info">
           <div class="info-row">
-            <span class="info-label">Musteri:</span>
+            <span class="info-label">Müşteri:</span>
             <span>{{ selectedComplaint()!.customerName || selectedComplaint()!.customerPhone }}</span>
           </div>
           <div class="info-row">
@@ -159,14 +159,14 @@ interface ApiResponse<T> {
             <span>{{ formatDate(selectedComplaint()!.createdAt) }}</span>
           </div>
           <div class="info-row" *ngIf="selectedComplaint()!.resolvedAt">
-            <span class="info-label">Cozum:</span>
+            <span class="info-label">Çözüm:</span>
             <span>{{ selectedComplaint()!.resolutionNote }}</span>
           </div>
         </div>
 
         <!-- Conversation History -->
         <div class="chat-history">
-          <h3>Konusma Gecmisi</h3>
+          <h3>Konuşma Geçmişi</h3>
           <div class="messages-container">
             <div
               *ngFor="let msg of selectedComplaint()!.messages"
@@ -186,7 +186,7 @@ interface ApiResponse<T> {
         <div class="resolve-form" *ngIf="!selectedComplaint()!.resolvedAt">
           <textarea
             [(ngModel)]="resolveNote"
-            placeholder="Cozum notu yazin..."
+            placeholder="Çözüm notu yazın..."
             rows="3"
           ></textarea>
           <button
@@ -194,7 +194,7 @@ interface ApiResponse<T> {
             (click)="resolveComplaint()"
             [disabled]="!resolveNote.trim() || resolving()"
           >
-            {{ resolving() ? 'Kaydediliyor...' : 'Cozuldu Olarak Isaretle' }}
+            {{ resolving() ? 'Kaydediliyor...' : 'Çözüldü Olarak İşaretle' }}
           </button>
         </div>
       </div>

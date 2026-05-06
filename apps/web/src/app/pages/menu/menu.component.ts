@@ -24,16 +24,16 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
     <div class="menu-page">
       <div class="page-header">
         <div class="header-content">
-          <h1 class="page-title">Menu Management</h1>
-          <p class="page-subtitle text-secondary">Manage your menu versions, items, and options</p>
+          <h1 class="page-title">Menü Yönetimi</h1>
+          <p class="page-subtitle text-secondary">Menü versiyonlarını, ürünleri ve seçenekleri yönetin</p>
         </div>
         <div class="header-actions">
           <button class="btn-secondary" (click)="handleImport()">
-            <app-icon name="download" [size]="16"/> Import
+            <app-icon name="download" [size]="16"/> İçe Aktar
           </button>
           @if (selectedVersion()) {
             <button class="btn-secondary" (click)="handleExport()">
-              <app-icon name="upload" [size]="16"/> Export
+              <app-icon name="upload" [size]="16"/> Dışa Aktar
             </button>
           }
         </div>
@@ -56,7 +56,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
       <!-- Version Selector (when not on versions tab) -->
       @if (activeTab() !== 'versions' && versions().length > 0) {
         <div class="version-selector">
-          <label class="selector-label">Working Version:</label>
+          <label class="selector-label">Çalışma Versiyonu:</label>
           <select
             class="selector-select"
             [ngModel]="selectedVersionId()"
@@ -75,7 +75,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
       @if (loading()) {
         <div class="loading-state">
           <div class="loader"></div>
-          <span class="text-muted">Loading...</span>
+          <span class="text-muted">Yükleniyor...</span>
         </div>
       }
 
@@ -84,7 +84,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         <div class="error-alert">
           <app-icon name="alert-triangle" [size]="16"/>
           <span>{{ error() }}</span>
-          <button class="btn-sm" (click)="loadData()">Retry</button>
+          <button class="btn-sm" (click)="loadData()">Tekrar Dene</button>
         </div>
       }
 
@@ -94,28 +94,28 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         @if (activeTab() === 'versions') {
           <div class="content-card">
             <div class="card-header">
-              <h2>Menu Versions</h2>
+              <h2>Menü Versiyonları</h2>
               <button class="btn-primary" (click)="createVersion()">
-                <span>+</span> New Version
+                <span>+</span> Yeni Versiyon
               </button>
             </div>
             <div class="card-content">
               @if (versions().length === 0) {
                 <div class="empty-state">
                   <app-icon name="clipboard" [size]="48" class="empty-icon"/>
-                  <p>No versions yet. Create your first menu version to get started.</p>
+                  <p>Henüz versiyon yok. Başlamak için ilk menü versiyonunuzu oluşturun.</p>
                 </div>
               } @else {
                 <div class="versions-list">
                   @for (v of versions(); track v.id) {
                     <div class="version-item" [class.published]="v.publishedAt" [class.active-version]="v.id === activeVersionId()">
                       <div class="version-info">
-                        <span class="version-number">Version {{ v.version }}</span>
+                        <span class="version-number">Versiyon {{ v.version }}</span>
                         <span class="version-meta text-muted">
-                          {{ v.itemCount || 0 }} items •
-                          Created {{ v.createdAt | date: 'short' }}
+                          {{ v.itemCount || 0 }} ürün •
+                          Oluşturulma {{ v.createdAt | date: 'short' }}
                           @if (v.publishedAt) {
-                            • Published {{ v.publishedAt | date: 'short' }}
+                            • Yayınlanma {{ v.publishedAt | date: 'short' }}
                           }
                         </span>
                       </div>
@@ -163,22 +163,22 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         @if (activeTab() === 'items') {
           <div class="content-card">
             <div class="card-header">
-              <h2>Menu Items</h2>
+              <h2>Menü Ürünleri</h2>
               @if (selectedVersion() && !selectedVersion()!.publishedAt) {
                 <button class="btn-primary" (click)="showItemForm.set(true)">
-                  <span>+</span> Add Item
+                  <span>+</span> Ürün Ekle
                 </button>
               }
             </div>
             <div class="card-content">
               @if (!selectedVersion()) {
                 <div class="empty-state">
-                  <p>Select a version to view items.</p>
+                  <p>Ürünleri görüntülemek için bir versiyon seçin.</p>
                 </div>
               } @else if (items().length === 0) {
                 <div class="empty-state">
                   <app-icon name="utensils" [size]="48" class="empty-icon"/>
-                  <p>No items in this version yet.</p>
+                  <p>Bu versiyonda henüz ürün yok.</p>
                 </div>
               } @else {
                 <div class="items-grid">
@@ -326,22 +326,22 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         @if (activeTab() === 'options') {
           <div class="content-card">
             <div class="card-header">
-              <h2>Option Groups</h2>
+              <h2>Seçenek Grupları</h2>
               @if (selectedVersion() && !selectedVersion()!.publishedAt) {
                 <button class="btn-primary" (click)="showOptionGroupForm.set(true)">
-                  <span>+</span> Add Group
+                  <span>+</span> Grup Ekle
                 </button>
               }
             </div>
             <div class="card-content">
               @if (!selectedVersion()) {
                 <div class="empty-state">
-                  <p>Select a version to view option groups.</p>
+                  <p>Seçenek gruplarını görüntülemek için bir versiyon seçin.</p>
                 </div>
               } @else if (optionGroups().length === 0) {
                 <div class="empty-state">
                   <app-icon name="settings" [size]="48" class="empty-icon"/>
-                  <p>No option groups in this version yet.</p>
+                  <p>Bu versiyonda henüz seçenek grubu yok.</p>
                 </div>
               } @else {
                 <div class="groups-list">
@@ -352,12 +352,12 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                           <span class="group-name">{{ group.name }}</span>
                           <span class="group-type badge">{{ group.type }}</span>
                           @if (group.required) {
-                            <span class="group-type badge required">Required</span>
+                            <span class="group-type badge required">Zorunlu</span>
                           }
                         </div>
                         @if (!selectedVersion()!.publishedAt) {
                           <div class="group-actions">
-                            <button class="btn-sm" (click)="addOptionToGroup(group)">+ Option</button>
+                            <button class="btn-sm" (click)="addOptionToGroup(group)">+ Seçenek</button>
                             <button class="btn-icon danger" (click)="deleteOptionGroup(group)"><app-icon name="trash" [size]="14"/></button>
                           </div>
                         }
@@ -373,7 +373,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                                 </span>
                               }
                               @if (option.isDefault) {
-                                <span class="option-default">Default</span>
+                                <span class="option-default">Varsayılan</span>
                               }
                               @if (!selectedVersion()!.publishedAt) {
                                 <button class="btn-icon small danger" (click)="deleteOption(option)"><app-icon name="x" [size]="16"/></button>
@@ -394,30 +394,30 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
             <div class="modal-overlay" (click)="closeOptionGroupForm()">
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
-                  <h3>Add Option Group</h3>
+                  <h3>Seçenek Grubu Ekle</h3>
                   <button class="btn-icon" (click)="closeOptionGroupForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveOptionGroup()">
                   <div class="form-group">
-                    <label>Name</label>
+                    <label>Adı</label>
                     <input type="text" [(ngModel)]="optionGroupForm.name" name="name" required />
                   </div>
                   <div class="form-group">
-                    <label>Type</label>
+                    <label>Tür</label>
                     <select [(ngModel)]="optionGroupForm.type" name="type">
-                      <option value="SINGLE">Single Select</option>
-                      <option value="MULTI">Multi Select</option>
+                      <option value="SINGLE">Tekli Seçim</option>
+                      <option value="MULTI">Çoklu Seçim</option>
                     </select>
                   </div>
                   <div class="form-group">
                     <label class="checkbox-label">
                       <input type="checkbox" [(ngModel)]="optionGroupForm.required" name="required" />
-                      Required
+                      Zorunlu
                     </label>
                   </div>
                   <div class="modal-actions">
-                    <button type="button" class="btn-secondary" (click)="closeOptionGroupForm()">Cancel</button>
-                    <button type="submit" class="btn-primary">Save</button>
+                    <button type="button" class="btn-secondary" (click)="closeOptionGroupForm()">İptal</button>
+                    <button type="submit" class="btn-primary">Kaydet</button>
                   </div>
                 </form>
               </div>
@@ -429,27 +429,27 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
             <div class="modal-overlay" (click)="closeOptionForm()">
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
-                  <h3>Add Option</h3>
+                  <h3>Seçenek Ekle</h3>
                   <button class="btn-icon" (click)="closeOptionForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveOption()">
                   <div class="form-group">
-                    <label>Name</label>
+                    <label>Adı</label>
                     <input type="text" [(ngModel)]="optionForm.name" name="name" required />
                   </div>
                   <div class="form-group">
-                    <label>Price Delta</label>
+                    <label>Fiyat Farkı</label>
                     <input type="number" [(ngModel)]="optionForm.priceDelta" name="priceDelta" step="0.01" />
                   </div>
                   <div class="form-group">
                     <label class="checkbox-label">
                       <input type="checkbox" [(ngModel)]="optionForm.isDefault" name="isDefault" />
-                      Default
+                      Varsayılan
                     </label>
                   </div>
                   <div class="modal-actions">
-                    <button type="button" class="btn-secondary" (click)="closeOptionForm()">Cancel</button>
-                    <button type="submit" class="btn-primary">Save</button>
+                    <button type="button" class="btn-secondary" (click)="closeOptionForm()">İptal</button>
+                    <button type="submit" class="btn-primary">Kaydet</button>
                   </div>
                 </form>
               </div>
@@ -461,23 +461,23 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         @if (activeTab() === 'synonyms') {
           <div class="content-card">
             <div class="card-header">
-              <h2>Esanlamlilar</h2>
+              <h2>Eşanlamlılar</h2>
               @if (selectedVersion()) {
                 <button class="btn-primary" (click)="showSynonymForm.set(true)">
-                  <span>+</span> Esanlamli Ekle
+                  <span>+</span> Eşanlamlı Ekle
                 </button>
               }
             </div>
             <div class="card-content">
               @if (!selectedVersion()) {
                 <div class="empty-state">
-                  <p>Esanlamlilari goruntulemek icin bir versiyon secin.</p>
+                  <p>Eşanlamlıları görüntülemek için bir versiyon seçin.</p>
                 </div>
               } @else if (synonyms().length === 0) {
                 <div class="empty-state">
                   <app-icon name="type" [size]="48" class="empty-icon"/>
-                  <p>Bu versiyonda henuz esanlamli eklenmemis.</p>
-                  <p class="text-muted" style="margin-top: 8px; font-size: 13px;">Musterilerin kullandigi kisa isimleri ekleyin. Ornek: "kola" → "Coca Cola Sise"</p>
+                  <p>Bu versiyonda henüz eşanlamlı eklenmemiş.</p>
+                  <p class="text-muted" style="margin-top: 8px; font-size: 13px;">Müşterilerin kullandığı kısa isimleri ekleyin. Örnek: "kola" → "Coca Cola Şişe"</p>
                 </div>
               } @else {
                 <div class="synonyms-list">
@@ -488,7 +488,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                       <span class="synonym-target">
                         {{ syn.itemName || syn.optionName || 'Bilinmiyor' }}
                       </span>
-                      <span class="synonym-weight text-muted">Agirlik: {{ syn.weight }}</span>
+                      <span class="synonym-weight text-muted">Ağırlık: {{ syn.weight }}</span>
                       <button class="btn-icon small danger" (click)="deleteSynonym(syn)"><app-icon name="x" [size]="16"/></button>
                     </div>
                   }
@@ -502,29 +502,29 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
             <div class="modal-overlay" (click)="closeSynonymForm()">
               <div class="modal" (click)="$event.stopPropagation()">
                 <div class="modal-header">
-                  <h3>Esanlamli Ekle</h3>
+                  <h3>Eşanlamlı Ekle</h3>
                   <button class="btn-icon" (click)="closeSynonymForm()"><app-icon name="x" [size]="16"/></button>
                 </div>
                 <form class="modal-form" (ngSubmit)="saveSynonym()">
                   <div class="form-group">
-                    <label>Musterinin kullandigi ifade</label>
+                    <label>Müşterinin kullandığı ifade</label>
                     <input type="text" [(ngModel)]="synonymForm.phrase" name="phrase" required placeholder="ornek: kola, su, cips" />
                   </div>
                   <div class="form-group">
-                    <label>Eslestigi menu urunu</label>
+                    <label>Eşleştiği menü ürünü</label>
                     <select [(ngModel)]="synonymForm.mapsToItemId" name="mapsToItemId">
-                      <option [ngValue]="undefined">-- Urun Secin --</option>
+                      <option [ngValue]="undefined">-- Ürün Seçin --</option>
                       @for (item of items(); track item.id) {
                         <option [value]="item.id">{{ item.name }}</option>
                       }
                     </select>
                   </div>
                   <div class="form-group">
-                    <label>Agirlik (oncelik)</label>
+                    <label>Ağırlık (öncelik)</label>
                     <input type="number" [(ngModel)]="synonymForm.weight" name="weight" min="1" />
                   </div>
                   <div class="modal-actions">
-                    <button type="button" class="btn-secondary" (click)="closeSynonymForm()">Iptal</button>
+                    <button type="button" class="btn-secondary" (click)="closeSynonymForm()">İptal</button>
                     <button type="submit" class="btn-primary">Kaydet</button>
                   </div>
                 </form>
@@ -539,21 +539,21 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
         <div class="modal-overlay" (click)="showImportModal.set(false)">
           <div class="modal large" (click)="$event.stopPropagation()">
             <div class="modal-header">
-              <h3>Import Menu</h3>
+              <h3>Menü İçe Aktar</h3>
               <button class="btn-icon" (click)="showImportModal.set(false)"><app-icon name="x" [size]="16"/></button>
             </div>
             <div class="modal-form">
               <div class="form-group">
-                <label>Paste JSON or upload file:</label>
+                <label>JSON yapıştırın veya dosya yükleyin:</label>
                 <textarea
                   [(ngModel)]="importJson"
                   rows="15"
-                  placeholder="Paste menu JSON here..."
+                  placeholder="Menü JSON'ını buraya yapıştırın..."
                 ></textarea>
               </div>
               <div class="modal-actions">
-                <button type="button" class="btn-secondary" (click)="showImportModal.set(false)">Cancel</button>
-                <button type="button" class="btn-primary" (click)="doImport()">Import</button>
+                <button type="button" class="btn-secondary" (click)="showImportModal.set(false)">İptal</button>
+                <button type="button" class="btn-primary" (click)="doImport()">İçe Aktar</button>
               </div>
             </div>
           </div>
@@ -1317,10 +1317,10 @@ export class MenuComponent implements OnInit {
   importJson = '';
 
   tabs = [
-    { id: 'versions' as Tab, label: 'Versions', icon: 'clipboard' },
-    { id: 'items' as Tab, label: 'Items', icon: 'utensils' },
-    { id: 'options' as Tab, label: 'Options', icon: 'settings' },
-    { id: 'synonyms' as Tab, label: 'Esanlamlilar', icon: 'type' },
+    { id: 'versions' as Tab, label: 'Versiyonlar', icon: 'clipboard' },
+    { id: 'items' as Tab, label: 'Ürünler', icon: 'utensils' },
+    { id: 'options' as Tab, label: 'Seçenekler', icon: 'settings' },
+    { id: 'synonyms' as Tab, label: 'Eşanlamlılar', icon: 'type' },
   ];
 
   ngOnInit(): void {
@@ -1352,7 +1352,7 @@ export class MenuComponent implements OnInit {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err.error?.error?.message || 'Failed to load menu data');
+        this.error.set(err.error?.error?.message || 'Menü verileri yüklenemedi');
         this.loading.set(false);
       },
     });

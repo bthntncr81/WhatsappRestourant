@@ -27,7 +27,7 @@ interface ChatMessage {
       <div class="chat-header">
         <div class="header-row">
           <div>
-            <h2><app-icon name="bot" [size]="22"/> AI Chatbot Test</h2>
+            <h2><app-icon name="bot" [size]="22"/> Yapay Zekâ Chatbot Testi</h2>
             <p class="subtitle">Menü siparişlerinizi test edin</p>
           </div>
           <button class="reset-btn" (click)="resetSession()" [disabled]="isLoading()" title="Sohbeti sıfırla"><app-icon name="refresh" [size]="14"/> Sıfırla</button>

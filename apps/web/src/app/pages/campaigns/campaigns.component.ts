@@ -64,13 +64,13 @@ interface CampaignSendLog {
     <div class="campaigns-page">
       <header class="page-header">
         <h1>Kampanyalar</h1>
-        <p class="text-muted">WhatsApp broadcast kampanyalari ve musteri segmentasyonu</p>
+        <p class="text-muted">WhatsApp broadcast kampanyaları ve müşteri segmentasyonu</p>
       </header>
 
       <!-- Settings Card -->
       <div class="card settings-card">
         <div class="card-header">
-          <h2>Broadcast Ayarlari</h2>
+          <h2>Broadcast Ayarları</h2>
           <label class="toggle-label">
             <input type="checkbox" [ngModel]="settings()?.isEnabled" (ngModelChange)="toggleEnabled($event)" />
             <span>{{ settings()?.isEnabled ? 'Aktif' : 'Pasif' }}</span>
@@ -79,15 +79,15 @@ interface CampaignSendLog {
         @if (settings()?.isEnabled) {
           <div class="settings-grid">
             <div class="setting-item">
-              <label>Max Indirim %</label>
+              <label>Maks İndirim %</label>
               <input type="number" [ngModel]="settings()?.maxDiscountPct" (ngModelChange)="updateSetting('maxDiscountPct', $event)" min="0" max="100" />
             </div>
             <div class="setting-item">
-              <label>Min Gun Arasi</label>
+              <label>Min Gün Arası</label>
               <input type="number" [ngModel]="settings()?.minDaysBetweenSends" (ngModelChange)="updateSetting('minDaysBetweenSends', $event)" min="1" max="30" />
             </div>
             <div class="setting-item">
-              <label>Gunluk Limit</label>
+              <label>Günlük Limit</label>
               <input type="number" [ngModel]="settings()?.dailySendLimit" (ngModelChange)="updateSetting('dailySendLimit', $event)" min="1" max="10000" />
             </div>
           </div>
@@ -99,7 +99,7 @@ interface CampaignSendLog {
         <div class="stats-grid">
           <div class="stat-card">
             <div class="stat-value">{{ stats()!.totalCustomers }}</div>
-            <div class="stat-label">Toplam Musteri</div>
+            <div class="stat-label">Toplam Müşteri</div>
           </div>
           <div class="stat-card accent">
             <div class="stat-value">{{ stats()!.optedIn }}</div>
@@ -119,7 +119,7 @@ interface CampaignSendLog {
           </div>
           <div class="stat-card success">
             <div class="stat-value">{{ stats()!.totalConverted }}</div>
-            <div class="stat-label">Donusum</div>
+            <div class="stat-label">Dönüşüm</div>
           </div>
         </div>
 
@@ -138,11 +138,11 @@ interface CampaignSendLog {
         <div class="campaign-form">
           <div class="form-row">
             <div class="form-group">
-              <label>Kampanya Adi</label>
-              <input type="text" [(ngModel)]="newCampaign.name" placeholder="Ornek: Haftalik Indirim" />
+              <label>Kampanya Adı</label>
+              <input type="text" [(ngModel)]="newCampaign.name" placeholder="Örnek: Haftalık İndirim" />
             </div>
             <div class="form-group">
-              <label>Max Indirim %</label>
+              <label>Maks İndirim %</label>
               <input type="number" [(ngModel)]="newCampaign.maxDiscountPct" min="0" max="100" />
             </div>
           </div>
@@ -159,12 +159,12 @@ interface CampaignSendLog {
               <label>Zamanlama</label>
               <label class="toggle-label small">
                 <input type="checkbox" [(ngModel)]="newCampaign.usePersonalTime" />
-                <span>Musterinin aliskanligi saatinde gonder</span>
+                <span>Müşterinin alışkanlığı saatinde gönder</span>
               </label>
             </div>
           </div>
           <button class="btn btn-primary" (click)="createCampaign()" [disabled]="!newCampaign.name">
-            Kampanya Olustur
+            Kampanya Oluştur
           </button>
         </div>
       </div>
@@ -175,7 +175,7 @@ interface CampaignSendLog {
           <h2>Kampanyalar</h2>
         </div>
         @if (campaigns().length === 0) {
-          <div class="empty-state">Henuz kampanya yok.</div>
+          <div class="empty-state">Henüz kampanya yok.</div>
         } @else {
           <div class="table-wrapper">
             <table>
@@ -184,11 +184,11 @@ interface CampaignSendLog {
                   <th>Ad</th>
                   <th>Durum</th>
                   <th>Segment</th>
-                  <th>Indirim</th>
-                  <th>Alici</th>
-                  <th>Gonderilen</th>
-                  <th>Acilan</th>
-                  <th>Donusum</th>
+                  <th>İndirim</th>
+                  <th>Alıcı</th>
+                  <th>Gönderilen</th>
+                  <th>Açılan</th>
+                  <th>Dönüşüm</th>
                   <th>Tarih</th>
                   <th></th>
                 </tr>
@@ -210,7 +210,7 @@ interface CampaignSendLog {
                         <button class="btn btn-sm btn-primary" (click)="scheduleCampaign(c.id); $event.stopPropagation()">Zamanla</button>
                       }
                       @if (c.status === 'DRAFT' || c.status === 'SCHEDULED') {
-                        <button class="btn btn-sm btn-danger" (click)="cancelCampaign(c.id); $event.stopPropagation()">Iptal</button>
+                        <button class="btn btn-sm btn-danger" (click)="cancelCampaign(c.id); $event.stopPropagation()">İptal</button>
                       }
                     </td>
                   </tr>
@@ -225,18 +225,18 @@ interface CampaignSendLog {
       @if (selectedCampaign() && campaignLogs().length > 0) {
         <div class="card">
           <div class="card-header">
-            <h2>{{ selectedCampaign()!.name }} - Gonderim Loglari</h2>
+            <h2>{{ selectedCampaign()!.name }} - Gönderim Logları</h2>
           </div>
           <div class="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>Musteri</th>
+                  <th>Müşteri</th>
                   <th>Telefon</th>
                   <th>Segment</th>
                   <th>Durum</th>
-                  <th>Indirim</th>
-                  <th>Zamanlanma</th>
+                  <th>İndirim</th>
+                  <th>Zamanlama</th>
                   <th>Mesaj</th>
                 </tr>
               </thead>
@@ -679,10 +679,10 @@ export class CampaignsComponent implements OnInit {
   getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
       DRAFT: 'Taslak',
-      SCHEDULED: 'Zamanlandi',
-      SENDING: 'Gonderiliyor',
-      COMPLETED: 'Tamamlandi',
-      CANCELLED: 'Iptal',
+      SCHEDULED: 'Zamanlandı',
+      SENDING: 'Gönderiliyor',
+      COMPLETED: 'Tamamlandı',
+      CANCELLED: 'İptal',
     };
     return labels[status] || status;
   }

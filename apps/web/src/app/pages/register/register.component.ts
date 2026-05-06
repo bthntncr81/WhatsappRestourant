@@ -19,8 +19,8 @@ import { IconComponent } from '../../shared/icon.component';
             <img src="/logo.jpeg" alt="Superpersonel" style="height:32px; width:32px; border-radius:8px; object-fit:cover;"/>
             <span class="logo-text">Superpersonel</span>
           </div>
-          <h1 class="auth-title">Create your workspace</h1>
-          <p class="auth-subtitle text-muted">Get started with a free account</p>
+          <h1 class="auth-title">Çalışma alanınızı oluşturun</h1>
+          <p class="auth-subtitle text-muted">Ücretsiz hesap oluşturun</p>
         </div>
 
         <form class="auth-form" (ngSubmit)="onSubmit()">
@@ -33,14 +33,14 @@ import { IconComponent } from '../../shared/icon.component';
 
           <div class="form-row">
             <div class="form-group">
-              <label for="name" class="form-label">Your name</label>
+              <label for="name" class="form-label">Adınız</label>
               <input
                 type="text"
                 id="name"
                 class="form-input"
                 [(ngModel)]="name"
                 name="name"
-                placeholder="John Doe"
+                placeholder="Ahmet Yılmaz"
                 required
                 [disabled]="loading()"
               />
@@ -48,28 +48,28 @@ import { IconComponent } from '../../shared/icon.component';
           </div>
 
           <div class="form-group">
-            <label for="email" class="form-label">Email</label>
+            <label for="email" class="form-label">E-posta</label>
             <input
               type="email"
               id="email"
               class="form-input"
               [(ngModel)]="email"
               name="email"
-              placeholder="you@example.com"
+              placeholder="ornek@example.com"
               required
               [disabled]="loading()"
             />
           </div>
 
           <div class="form-group">
-            <label for="password" class="form-label">Password</label>
+            <label for="password" class="form-label">Şifre</label>
             <input
               type="password"
               id="password"
               class="form-input"
               [(ngModel)]="password"
               name="password"
-              placeholder="Min. 8 characters"
+              placeholder="En az 8 karakter"
               required
               minlength="8"
               [disabled]="loading()"
@@ -77,25 +77,25 @@ import { IconComponent } from '../../shared/icon.component';
           </div>
 
           <div class="form-divider">
-            <span class="divider-text text-muted">Workspace details</span>
+            <span class="divider-text text-muted">İşletme detayları</span>
           </div>
 
           <div class="form-group">
-            <label for="tenantName" class="form-label">Workspace name</label>
+            <label for="tenantName" class="form-label">İşletme adı</label>
             <input
               type="text"
               id="tenantName"
               class="form-input"
               [(ngModel)]="tenantName"
               name="tenantName"
-              placeholder="My Company"
+              placeholder="İşletmem"
               required
               [disabled]="loading()"
             />
           </div>
 
           <div class="form-group">
-            <label for="tenantSlug" class="form-label">Workspace URL</label>
+            <label for="tenantSlug" class="form-label">İşletme URL'si</label>
             <div class="input-with-prefix">
               <span class="input-prefix text-muted">superpersonel.com/</span>
               <input
@@ -104,13 +104,13 @@ import { IconComponent } from '../../shared/icon.component';
                 class="form-input slug-input"
                 [(ngModel)]="tenantSlug"
                 name="tenantSlug"
-                placeholder="my-company"
+                placeholder="isletmem"
                 required
                 pattern="[a-z0-9-]+"
                 [disabled]="loading()"
               />
             </div>
-            <span class="form-hint text-muted">Lowercase letters, numbers, and hyphens only</span>
+            <span class="form-hint text-muted">Yalnızca küçük harfler, sayılar ve tire</span>
           </div>
 
           <!-- Legal Consent Checkboxes -->

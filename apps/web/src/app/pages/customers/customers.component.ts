@@ -69,8 +69,8 @@ interface Stats {
     <div class="page">
       <div class="page-header">
         <div>
-          <h1 class="page-title">Musteriler</h1>
-          <p class="page-subtitle">Musteri profilleri ve siparis gecmisleri</p>
+          <h1 class="page-title">Müşteriler</h1>
+          <p class="page-subtitle">Müşteri profilleri ve sipariş geçmişleri</p>
         </div>
         <div class="header-actions">
           <button class="btn btn-secondary" (click)="syncProfiles()" [disabled]="syncing()">
@@ -83,7 +83,7 @@ interface Stats {
       <div class="stats-row">
         <div class="stat-card">
           <div class="stat-value">{{ stats()?.totalCustomers || 0 }}</div>
-          <div class="stat-label">Toplam Musteri</div>
+          <div class="stat-label">Toplam Müşteri</div>
         </div>
         <div class="stat-card stat-active">
           <div class="stat-value">{{ stats()?.segments?.['ACTIVE'] || 0 }}</div>
@@ -99,7 +99,7 @@ interface Stats {
         </div>
         <div class="stat-card stat-optin">
           <div class="stat-value">{{ stats()?.optedIn || 0 }}</div>
-          <div class="stat-label">Kampanya Izinli</div>
+          <div class="stat-label">Kampanya İzinli</div>
         </div>
       </div>
 
@@ -109,7 +109,7 @@ interface Stats {
           <span class="search-icon">&#128269;</span>
           <input
             type="text"
-            placeholder="Isim veya telefon ara..."
+            placeholder="İsim veya telefon ara..."
             [ngModel]="searchQuery()"
             (ngModelChange)="searchQuery.set($event)"
             class="search-input"
@@ -117,22 +117,22 @@ interface Stats {
         </div>
         <div class="filter-group">
           <select [ngModel]="segmentFilter()" (ngModelChange)="onSegmentChange($event)" class="filter-select">
-            <option value="">Tum Segmentler</option>
+            <option value="">Tüm Segmentler</option>
             <option value="ACTIVE">Aktif</option>
             <option value="SLEEPING">Uyuyan</option>
             <option value="NEW">Yeni</option>
           </select>
           <select [ngModel]="optInFilter()" (ngModelChange)="onOptInChange($event)" class="filter-select">
-            <option value="">Tum Izinler</option>
-            <option value="OPTED_IN">Kampanya Izinli</option>
+            <option value="">Tüm İzinler</option>
+            <option value="OPTED_IN">Kampanya İzinli</option>
             <option value="OPTED_OUT">Reddetti</option>
             <option value="PENDING">Bekliyor</option>
           </select>
           <select [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)" class="filter-select">
-            <option value="orderCount">Siparis Sayisi</option>
+            <option value="orderCount">Sipariş Sayısı</option>
             <option value="totalSpent">Toplam Harcama</option>
-            <option value="lastOrderAt">Son Siparis</option>
-            <option value="name">Isim</option>
+            <option value="lastOrderAt">Son Sipariş</option>
+            <option value="name">İsim</option>
           </select>
         </div>
       </div>
@@ -142,14 +142,14 @@ interface Stats {
         <!-- Customer List -->
         <div class="customer-list">
           @if (loading()) {
-            <div class="loading-state">Yukleniyor...</div>
+            <div class="loading-state">Yükleniyor...</div>
           } @else if (filteredCustomers().length === 0) {
             <div class="empty-state">
               @if (customers().length === 0) {
-                <p>Henuz musteri profili yok.</p>
-                <p class="text-muted">Profilleri senkronlayarak mevcut musterileri yukleyin.</p>
+                <p>Henüz müşteri profili yok.</p>
+                <p class="text-muted">Profilleri senkronlayarak mevcut müşterileri yükleyin.</p>
               } @else {
-                <p>Filtrelere uygun musteri bulunamadi.</p>
+                <p>Filtrelere uygun müşteri bulunamadı.</p>
               }
             </div>
           } @else {
@@ -157,11 +157,11 @@ interface Stats {
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Musteri</th>
+                    <th>Müşteri</th>
                     <th>Segment</th>
-                    <th>Siparis</th>
+                    <th>Sipariş</th>
                     <th>Harcama</th>
-                    <th>Son Siparis</th>
+                    <th>Son Sipariş</th>
                     <th>Kampanya</th>
                     <th>Saat</th>
                   </tr>
@@ -176,7 +176,7 @@ interface Stats {
                       <td class="customer-cell">
                         <div class="customer-avatar">{{ getInitial(c) }}</div>
                         <div class="customer-info">
-                          <span class="customer-name">{{ c.customerName || 'Isimsiz' }}</span>
+                          <span class="customer-name">{{ c.customerName || 'İsimsiz' }}</span>
                           <span class="customer-phone">{{ formatPhone(c.customerPhone) }}</span>
                         </div>
                       </td>
@@ -203,7 +203,7 @@ interface Stats {
             <!-- Pagination -->
             @if (totalPages() > 1) {
               <div class="pagination">
-                <button class="btn btn-sm" [disabled]="currentPage() <= 1" (click)="currentPage.set(currentPage() - 1)">Onceki</button>
+                <button class="btn btn-sm" [disabled]="currentPage() <= 1" (click)="currentPage.set(currentPage() - 1)">Önceki</button>
                 <span class="page-info">{{ currentPage() }} / {{ totalPages() }}</span>
                 <button class="btn btn-sm" [disabled]="currentPage() >= totalPages()" (click)="currentPage.set(currentPage() + 1)">Sonraki</button>
               </div>
@@ -216,7 +216,7 @@ interface Stats {
           <div class="detail-panel">
             <div class="detail-header">
               <div class="detail-title-row">
-                <h2 class="detail-name">{{ customer.customerName || 'Isimsiz' }}</h2>
+                <h2 class="detail-name">{{ customer.customerName || 'İsimsiz' }}</h2>
                 <button class="close-btn" (click)="selectedCustomer.set(null)">&times;</button>
               </div>
               <p class="detail-phone">{{ formatPhone(customer.customerPhone) }}</p>
@@ -229,7 +229,7 @@ interface Stats {
             <div class="detail-stats">
               <div class="detail-stat">
                 <span class="detail-stat-value">{{ customer.orderCount }}</span>
-                <span class="detail-stat-label">Siparis</span>
+                <span class="detail-stat-label">Sipariş</span>
               </div>
               <div class="detail-stat">
                 <span class="detail-stat-value">{{ formatMoney(customer.totalSpent) }}</span>
@@ -243,11 +243,11 @@ interface Stats {
 
             <!-- Favorites -->
             @if (detailLoading()) {
-              <div class="detail-loading">Detaylar yukleniyor...</div>
+              <div class="detail-loading">Detaylar yükleniyor...</div>
             } @else {
               @if (customerFavorites().length > 0) {
                 <div class="detail-section">
-                  <h3 class="section-title">Favori Urunler</h3>
+                  <h3 class="section-title">Favori Ürünler</h3>
                   <div class="favorites-list">
                     @for (fav of customerFavorites(); track fav.menuItemId) {
                       <div class="favorite-item">
@@ -270,7 +270,7 @@ interface Stats {
               <!-- Order History -->
               @if (customerOrders().length > 0) {
                 <div class="detail-section">
-                  <h3 class="section-title">Siparis Gecmisi</h3>
+                  <h3 class="section-title">Sipariş Geçmişi</h3>
                   <div class="orders-list">
                     @for (order of customerOrders(); track order.id) {
                       <div class="order-card" (click)="toggleOrderExpand(order.id)">
@@ -1064,7 +1064,7 @@ export class CustomersComponent implements OnInit {
 
   optInLabel(s: string): string {
     switch (s) {
-      case 'OPTED_IN': return 'Izinli';
+      case 'OPTED_IN': return 'İzinli';
       case 'OPTED_OUT': return 'Reddetti';
       case 'PENDING': return 'Bekliyor';
       default: return s;
@@ -1075,11 +1075,11 @@ export class CustomersComponent implements OnInit {
     const map: Record<string, string> = {
       DRAFT: 'Taslak',
       PENDING_CONFIRMATION: 'Onay Bekliyor',
-      CONFIRMED: 'Onaylandi',
-      PREPARING: 'Hazirlaniyor',
-      READY: 'Hazir',
+      CONFIRMED: 'Onaylandı',
+      PREPARING: 'Hazırlanıyor',
+      READY: 'Hazır',
       DELIVERED: 'Teslim Edildi',
-      CANCELLED: 'Iptal',
+      CANCELLED: 'İptal',
     };
     return map[s] || s;
   }

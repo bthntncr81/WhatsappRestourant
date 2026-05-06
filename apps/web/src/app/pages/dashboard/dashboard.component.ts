@@ -44,16 +44,16 @@ interface DashboardStats {
   template: `
     <div class="dashboard">
       <div class="dashboard-header">
-        <h1 class="dashboard-title">Dashboard</h1>
+        <h1 class="dashboard-title">Panel</h1>
         <p class="dashboard-subtitle text-secondary">
-          Restoran yonetim panelinize hos geldiniz.
+          Restoran yönetim panelinize hoş geldiniz.
         </p>
       </div>
 
       @if (loading()) {
         <div class="loading-state">
           <div class="loader"></div>
-          <span class="text-muted">Veriler yukleniyor...</span>
+          <span class="text-muted">Veriler yükleniyor...</span>
         </div>
       } @else if (error()) {
         <div class="error-state">
@@ -70,7 +70,7 @@ interface DashboardStats {
             </div>
             <div class="stat-content">
               <span class="stat-value">{{ stats()!.todayOrders }}</span>
-              <span class="stat-label text-muted">Bugunku Siparisler</span>
+              <span class="stat-label text-muted">Bugünkü Siparişler</span>
             </div>
           </div>
 
@@ -80,7 +80,7 @@ interface DashboardStats {
             </div>
             <div class="stat-content">
               <span class="stat-value">{{ formatCurrency(stats()!.todayRevenue) }}</span>
-              <span class="stat-label text-muted">Bugunku Gelir</span>
+              <span class="stat-label text-muted">Bugünkü Gelir</span>
             </div>
           </div>
 
@@ -90,7 +90,7 @@ interface DashboardStats {
             </div>
             <div class="stat-content">
               <span class="stat-value">{{ stats()!.activeConversations }}</span>
-              <span class="stat-label text-muted">Aktif Konusmalar</span>
+              <span class="stat-label text-muted">Aktif Konuşmalar</span>
             </div>
           </div>
 
@@ -100,7 +100,7 @@ interface DashboardStats {
             </div>
             <div class="stat-content">
               <span class="stat-value">{{ stats()!.totalCustomers }}</span>
-              <span class="stat-label text-muted">Toplam Musteri</span>
+              <span class="stat-label text-muted">Toplam Müşteri</span>
             </div>
           </div>
         </div>
@@ -111,7 +111,7 @@ interface DashboardStats {
           <div class="dashboard-col">
             <!-- Order Status -->
             <div class="card">
-              <h2 class="card-title">Siparis Durumlari</h2>
+              <h2 class="card-title">Sipariş Durumları</h2>
               <div class="status-grid">
                 <div class="status-item">
                   <span class="status-dot pending"></span>
@@ -125,12 +125,12 @@ interface DashboardStats {
                 </div>
                 <div class="status-item">
                   <span class="status-dot preparing"></span>
-                  <span class="status-name">Hazirlanan</span>
+                  <span class="status-name">Hazırlanan</span>
                   <span class="status-count">{{ stats()!.ordersByStatus.preparing }}</span>
                 </div>
                 <div class="status-item">
                   <span class="status-dot ready"></span>
-                  <span class="status-name">Hazir</span>
+                  <span class="status-name">Hazır</span>
                   <span class="status-count">{{ stats()!.ordersByStatus.ready }}</span>
                 </div>
                 <div class="status-item">
@@ -140,7 +140,7 @@ interface DashboardStats {
                 </div>
                 <div class="status-item">
                   <span class="status-dot cancelled"></span>
-                  <span class="status-name">Iptal</span>
+                  <span class="status-name">İptal</span>
                   <span class="status-count">{{ stats()!.ordersByStatus.cancelled }}</span>
                 </div>
               </div>
@@ -148,7 +148,7 @@ interface DashboardStats {
 
             <!-- Weekly Trend -->
             <div class="card">
-              <h2 class="card-title">Son 7 Gun</h2>
+              <h2 class="card-title">Son 7 Gün</h2>
               <div class="trend-list">
                 @for (day of stats()!.weeklyTrend; track day.date) {
                   <div class="trend-row">
@@ -156,7 +156,7 @@ interface DashboardStats {
                     <div class="trend-bar-wrap">
                       <div class="trend-bar" [style.width.%]="getTrendBarWidth(day.orders)"></div>
                     </div>
-                    <span class="trend-orders">{{ day.orders }} siparis</span>
+                    <span class="trend-orders">{{ day.orders }} sipariş</span>
                     <span class="trend-revenue">{{ formatCurrency(day.revenue) }}</span>
                   </div>
                 }
@@ -166,7 +166,7 @@ interface DashboardStats {
             <!-- Satisfaction -->
             @if (stats()!.satisfaction.totalSurveys > 0) {
               <div class="card">
-                <h2 class="card-title">Musteri Memnuniyeti</h2>
+                <h2 class="card-title">Müşteri Memnuniyeti</h2>
                 <div class="satisfaction-grid">
                   <div class="satisfaction-item">
                     <span class="satisfaction-value">
@@ -183,7 +183,7 @@ interface DashboardStats {
                   </div>
                   <div class="satisfaction-item">
                     <span class="satisfaction-value complaint-val">{{ stats()!.satisfaction.complaintCount }}</span>
-                    <span class="satisfaction-label text-muted">Sikayet</span>
+                    <span class="satisfaction-label text-muted">Şikâyet</span>
                   </div>
                 </div>
               </div>
@@ -194,9 +194,9 @@ interface DashboardStats {
           <div class="dashboard-col">
             <!-- Recent Orders -->
             <div class="card">
-              <h2 class="card-title">Son Siparisler</h2>
+              <h2 class="card-title">Son Siparişler</h2>
               @if (stats()!.recentOrders.length === 0) {
-                <p class="text-muted empty-msg">Henuz siparis yok.</p>
+                <p class="text-muted empty-msg">Henüz sipariş yok.</p>
               } @else {
                 <div class="order-list">
                   @for (order of stats()!.recentOrders; track order.id) {
@@ -212,7 +212,7 @@ interface DashboardStats {
                         <span class="order-price">{{ formatCurrency(order.totalPrice) }}</span>
                       </div>
                       <div class="order-footer">
-                        <span class="text-muted order-items">{{ order.itemCount }} urun</span>
+                        <span class="text-muted order-items">{{ order.itemCount }} ürün</span>
                         <span class="text-muted order-time">{{ timeAgo(order.createdAt) }}</span>
                       </div>
                     </div>
@@ -223,9 +223,9 @@ interface DashboardStats {
 
             <!-- Popular Items -->
             <div class="card">
-              <h2 class="card-title">Populer Urunler</h2>
+              <h2 class="card-title">Popüler Ürünler</h2>
               @if (stats()!.popularItems.length === 0) {
-                <p class="text-muted empty-msg">Henuz veri yok.</p>
+                <p class="text-muted empty-msg">Henüz veri yok.</p>
               } @else {
                 <div class="popular-list">
                   @for (item of stats()!.popularItems; track item.name; let i = $index) {
@@ -677,7 +677,7 @@ export class DashboardComponent implements OnInit {
           this.loading.set(false);
         },
         error: (err) => {
-          this.error.set(err?.error?.error?.message || 'Veriler yuklenemedi');
+          this.error.set(err?.error?.error?.message || 'Veriler yüklenemedi');
           this.loading.set(false);
         },
       });
@@ -703,11 +703,11 @@ export class DashboardComponent implements OnInit {
   getStatusLabel(status: string): string {
     const map: Record<string, string> = {
       PENDING_CONFIRMATION: 'Bekliyor',
-      CONFIRMED: 'Onaylandi',
-      PREPARING: 'Hazirlaniyor',
-      READY: 'Hazir',
+      CONFIRMED: 'Onaylandı',
+      PREPARING: 'Hazırlanıyor',
+      READY: 'Hazır',
       DELIVERED: 'Teslim',
-      CANCELLED: 'Iptal',
+      CANCELLED: 'İptal',
     };
     return map[status] || status;
   }
@@ -716,11 +716,11 @@ export class DashboardComponent implements OnInit {
     const now = Date.now();
     const diff = now - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Az once';
-    if (mins < 60) return `${mins} dk once`;
+    if (mins < 1) return 'Az önce';
+    if (mins < 60) return `${mins} dk önce`;
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} saat once`;
+    if (hours < 24) return `${hours} saat önce`;
     const days = Math.floor(hours / 24);
-    return `${days} gun once`;
+    return `${days} gün önce`;
   }
 }
