@@ -661,6 +661,155 @@ export class IyzicoService {
   }
 
   /**
+   * Initialize 3DS payment with card details — platform iyzico.
+   * Returns threeDSHtmlContent that must be rendered in an iframe for 3DS verification.
+   */
+  async initializePlatform3DS(params: {
+    price: string;
+    basketId: string;
+    conversationId: string;
+    callbackUrl: string;
+    card: {
+      cardHolderName: string;
+      cardNumber: string;
+      expireMonth: string;
+      expireYear: string;
+      cvc: string;
+    };
+    buyer: {
+      id: string;
+      name: string;
+      surname: string;
+      gsmNumber: string;
+      email: string;
+      identityNumber: string;
+      ip: string;
+      city: string;
+      country: string;
+      address: string;
+      zipCode: string;
+    };
+    basketItems: Array<{
+      id: string;
+      name: string;
+      category1: string;
+      itemType: 'PHYSICAL' | 'VIRTUAL';
+      price: string;
+    }>;
+  }): Promise<{
+    success: boolean;
+    threeDSHtmlContent?: string;
+    paymentId?: string;
+    error?: string;
+  }> {
+    const body = {
+      locale: 'tr',
+      conversationId: params.conversationId,
+      price: formatPrice(params.price),
+      paidPrice: formatPrice(params.price),
+      currency: 'TRY',
+      installment: 1,
+      basketId: params.basketId,
+      paymentChannel: 'WEB',
+      paymentGroup: 'SUBSCRIPTION',
+      callbackUrl: params.callbackUrl,
+      paymentCard: {
+        cardHolderName: sanitizeForIyzico(params.card.cardHolderName),
+        cardNumber: params.card.cardNumber.replace(/\s/g, ''),
+        expireMonth: params.card.expireMonth,
+        expireYear: params.card.expireYear,
+        cvc: params.card.cvc,
+      },
+      buyer: {
+        id: params.buyer.id,
+        name: sanitizeForIyzico(params.buyer.name),
+        surname: sanitizeForIyzico(params.buyer.surname),
+        gsmNumber: formatGsmNumber(params.buyer.gsmNumber),
+        email: params.buyer.email,
+        identityNumber: params.buyer.identityNumber,
+        registrationAddress: sanitizeForIyzico(params.buyer.address),
+        ip: getValidIp(params.buyer.ip),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        zipCode: params.buyer.zipCode,
+      },
+      shippingAddress: {
+        contactName: sanitizeForIyzico(`${params.buyer.name} ${params.buyer.surname}`),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        address: sanitizeForIyzico(params.buyer.address),
+        zipCode: params.buyer.zipCode,
+      },
+      billingAddress: {
+        contactName: sanitizeForIyzico(`${params.buyer.name} ${params.buyer.surname}`),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        address: sanitizeForIyzico(params.buyer.address),
+        zipCode: params.buyer.zipCode,
+      },
+      basketItems: params.basketItems.map((item) => ({
+        id: item.id,
+        name: sanitizeForIyzico(item.name),
+        category1: sanitizeForIyzico(item.category1),
+        itemType: item.itemType,
+        price: formatPrice(item.price),
+      })),
+    };
+
+    const result = await this.platformRequest<{
+      threeDSHtmlContent: string;
+      paymentId: string;
+      status: string;
+    }>('POST', '/payment/3dsecure/initialize', body);
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        threeDSHtmlContent: result.data.threeDSHtmlContent,
+        paymentId: result.data.paymentId,
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
+  /**
+   * Complete 3DS payment after bank callback — platform iyzico
+   */
+  async completePlatform3DS(paymentId: string): Promise<{
+    success: boolean;
+    paymentStatus?: string;
+    price?: number;
+    currency?: string;
+    error?: string;
+  }> {
+    const body = {
+      locale: 'tr',
+      conversationId: generateConversationId(),
+      paymentId,
+    };
+
+    const result = await this.platformRequest<{
+      status: string;
+      paymentStatus: string;
+      paymentId: string;
+      price: number;
+      currency: string;
+    }>('POST', '/payment/3dsecure/auth', body);
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        paymentStatus: result.data.paymentStatus === 'SUCCESS' ? 'SUCCESS' : result.data.status,
+        price: result.data.price,
+        currency: result.data.currency,
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
+  /**
    * Get subscription details — platform iyzico
    */
   async getSubscription(subscriptionRefCode: string): Promise<{

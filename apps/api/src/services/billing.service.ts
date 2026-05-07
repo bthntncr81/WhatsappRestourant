@@ -370,6 +370,112 @@ export class BillingService {
     return !!recent;
   }
 
+  async start3DSPayment(
+    tenantId: string,
+    planKey: SubscriptionPlan,
+    billingCycle: BillingCycle,
+    card: { cardHolderName: string; cardNumber: string; expireMonth: string; expireYear: string; cvc: string },
+    buyer: { email: string; name: string; surname: string; gsmNumber: string; identityNumber: string; city: string; country: string; address: string; zipCode: string },
+    callbackUrl: string,
+    clientIp: string,
+  ): Promise<{ success: boolean; threeDSHtmlContent?: string; error?: string; tryAmount?: number }> {
+    const plan = this.getPlan(planKey);
+    if (plan.isFree) throw new AppError(400, 'INVALID_PLAN', 'Deneme planı ödeme gerektirmez');
+
+    const usdPrice = billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.annualPrice;
+    const rate = await getUsdToTryRate();
+    const tryPrice = convertUsdToTry(usdPrice, rate);
+    const tryPriceStr = tryPrice.toFixed(2);
+    const conversationId = `SUB3DS-${tenantId}-${Date.now()}`;
+    const basketId = `BASKET-${tenantId}-${planKey}-${billingCycle}`;
+
+    logger.info({ planKey, billingCycle, usdPrice, rate, tryPrice }, '3DS payment: USD→TRY');
+
+    const result = await iyzicoService.initializePlatform3DS({
+      price: tryPriceStr,
+      basketId,
+      conversationId,
+      callbackUrl,
+      card,
+      buyer: {
+        id: `BUYER-${tenantId}`,
+        name: buyer.name, surname: buyer.surname,
+        gsmNumber: buyer.gsmNumber, email: buyer.email,
+        identityNumber: buyer.identityNumber, ip: clientIp,
+        city: buyer.city, country: buyer.country, address: buyer.address, zipCode: buyer.zipCode,
+      },
+      basketItems: [{
+        id: `PLAN-${planKey}-${billingCycle}`,
+        name: `${plan.name} Plan (${billingCycle === 'MONTHLY' ? 'Aylık' : 'Yıllık'})`,
+        category1: 'Yazılım Aboneliği',
+        itemType: 'VIRTUAL',
+        price: tryPriceStr,
+      }],
+    });
+
+    if (result.success && result.paymentId) {
+      await prisma.billingTransaction.create({
+        data: {
+          tenantId, type: 'SUBSCRIPTION_PAYMENT', status: 'PENDING',
+          amount: tryPrice, currency: 'TRY',
+          plan: planKey, billingCycle,
+          iyzicoPaymentId: result.paymentId,
+          iyzicoConversationId: conversationId,
+          metadata: { usdPrice, exchangeRate: rate, tryPrice },
+        },
+      });
+    }
+
+    return { success: result.success, threeDSHtmlContent: result.threeDSHtmlContent, error: result.error, tryAmount: tryPrice };
+  }
+
+  async complete3DSPayment(paymentId: string): Promise<{
+    success: boolean;
+    alreadyProcessed?: boolean;
+    subscription?: SubscriptionDto;
+    error?: string;
+  }> {
+    const transaction = await prisma.billingTransaction.findFirst({
+      where: { iyzicoPaymentId: paymentId, type: 'SUBSCRIPTION_PAYMENT' },
+    });
+    if (!transaction) {
+      return { success: false, error: 'Ödeme oturumu bulunamadı' };
+    }
+    if (transaction.status === 'SUCCESS') {
+      const existing = await this.getSubscription(transaction.tenantId);
+      return { success: true, alreadyProcessed: true, subscription: existing || undefined };
+    }
+    if (transaction.status === 'FAILED') {
+      return { success: false, alreadyProcessed: true, error: transaction.errorMessage || 'Ödeme reddedildi' };
+    }
+
+    const result = await iyzicoService.completePlatform3DS(paymentId);
+
+    if (!result.success || result.paymentStatus !== 'SUCCESS') {
+      await prisma.billingTransaction.update({
+        where: { id: transaction.id },
+        data: { status: 'FAILED', errorMessage: result.error || `Durum: ${result.paymentStatus}`, processedAt: new Date() },
+      });
+      return { success: false, error: result.error || 'Ödeme doğrulanamadı' };
+    }
+
+    if (!transaction.plan || !transaction.billingCycle) {
+      return { success: false, error: 'İşlem verisi eksik' };
+    }
+
+    const subscription = await this.activateSubscription(
+      transaction.tenantId, transaction.plan, transaction.billingCycle, paymentId, `CUST-${transaction.tenantId}`,
+    );
+
+    await prisma.billingTransaction.update({
+      where: { id: transaction.id },
+      data: { status: 'SUCCESS', processedAt: new Date() },
+    });
+
+    logger.info({ tenantId: transaction.tenantId, plan: transaction.plan, paymentId }, 'Subscription activated via 3DS');
+    return { success: true, subscription };
+  }
+
   /**
    * Complete a 3DS subscription checkout flow. Called from
    * /api/billing/callback after iyzico POSTs the token back to us.

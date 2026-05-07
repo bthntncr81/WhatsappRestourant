@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -375,7 +375,7 @@ interface ComparisonRow {
       <!-- Subscribe Modal -->
       @if (showSubscribeModal && selectedPlanData()) {
         <div class="modal-overlay" (click)="closeSubscribeModal()">
-          <div class="modal" (click)="$event.stopPropagation()">
+          <div class="modal" [class.wide]="modalStep() === 'threeds'" (click)="$event.stopPropagation()">
             <button class="modal-close" (click)="closeSubscribeModal()" aria-label="Kapat">
               <app-icon name="x" [size]="16"/>
             </button>
@@ -393,75 +393,134 @@ interface ComparisonRow {
               }
             </header>
 
-            <div class="secure-notice">
-              <app-icon name="lock" [size]="14"/>
-              <span>Kart bilgileriniz bir sonraki adımda iyzico'nun güvenli sayfasında alınır — Superpersonel hiçbir kart verisine erişmez.</span>
-            </div>
+            <!-- Step indicators -->
+            @if (modalStep() !== 'threeds') {
+              <div class="step-indicators">
+                <div class="step-dot" [class.active]="modalStep() === 'buyer'" [class.done]="modalStep() === 'card'">1</div>
+                <div class="step-line" [class.done]="modalStep() === 'card'"></div>
+                <div class="step-dot" [class.active]="modalStep() === 'card'">2</div>
+              </div>
+            }
 
-            <form (ngSubmit)="startCheckout()" class="modal-form">
-              <div class="form-group-title">
-                <app-icon name="user" [size]="14"/>
-                <span>Fatura bilgileri</span>
-              </div>
-              <div class="form-row-2">
-                <div class="form-group">
-                  <label>Ad</label>
-                  <input type="text" [(ngModel)]="buyerForm.name" name="name" required>
+            <!-- Step 1: Buyer info -->
+            @if (modalStep() === 'buyer') {
+              <form (ngSubmit)="goToCardStep()" class="modal-form">
+                <div class="form-group-title">
+                  <app-icon name="user" [size]="14"/>
+                  <span>Fatura bilgileri</span>
+                </div>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>Ad</label>
+                    <input type="text" [(ngModel)]="buyerForm.name" name="name" required>
+                  </div>
+                  <div class="form-group">
+                    <label>Soyad</label>
+                    <input type="text" [(ngModel)]="buyerForm.surname" name="surname" required>
+                  </div>
                 </div>
                 <div class="form-group">
-                  <label>Soyad</label>
-                  <input type="text" [(ngModel)]="buyerForm.surname" name="surname" required>
+                  <label>E-posta</label>
+                  <input type="email" [(ngModel)]="buyerForm.email" name="email" required>
                 </div>
-              </div>
-              <div class="form-group">
-                <label>E-posta</label>
-                <input type="email" [(ngModel)]="buyerForm.email" name="email" required>
-              </div>
-              <div class="form-row-2">
-                <div class="form-group">
-                  <label>Telefon</label>
-                  <input type="text" [(ngModel)]="buyerForm.gsmNumber" name="gsmNumber" required placeholder="+905xxxxxxxxx">
-                </div>
-                <div class="form-group">
-                  <label>TC Kimlik No</label>
-                  <input type="text" [(ngModel)]="buyerForm.identityNumber" name="identityNumber" required placeholder="11111111111" maxlength="11">
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Adres</label>
-                <input type="text" [(ngModel)]="buyerForm.address" name="address" required>
-              </div>
-              <div class="form-row-2">
-                <div class="form-group">
-                  <label>Şehir</label>
-                  <input type="text" [(ngModel)]="buyerForm.city" name="city" required>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>Telefon</label>
+                    <input type="text" [(ngModel)]="buyerForm.gsmNumber" name="gsmNumber" required placeholder="+905xxxxxxxxx">
+                  </div>
+                  <div class="form-group">
+                    <label>TC Kimlik No</label>
+                    <input type="text" [(ngModel)]="buyerForm.identityNumber" name="identityNumber" required placeholder="11111111111" maxlength="11">
+                  </div>
                 </div>
                 <div class="form-group">
-                  <label>Posta kodu</label>
-                  <input type="text" [(ngModel)]="buyerForm.zipCode" name="zipCode" required>
+                  <label>Adres</label>
+                  <input type="text" [(ngModel)]="buyerForm.address" name="address" required>
                 </div>
-              </div>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>Şehir</label>
+                    <input type="text" [(ngModel)]="buyerForm.city" name="city" required>
+                  </div>
+                  <div class="form-group">
+                    <label>Posta kodu</label>
+                    <input type="text" [(ngModel)]="buyerForm.zipCode" name="zipCode" required>
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button type="button" class="btn btn-ghost" (click)="closeSubscribeModal()">İptal</button>
+                  <button type="submit" class="btn btn-primary">
+                    Kart bilgilerine geç
+                    <app-icon name="chevron-right" [size]="14"/>
+                  </button>
+                </div>
+              </form>
+            }
 
-              @if (subscribeError()) {
-                <div class="form-error">
-                  <app-icon name="alert-triangle" [size]="14"/>
-                  {{ subscribeError() }}
+            <!-- Step 2: Card info -->
+            @if (modalStep() === 'card') {
+              <form (ngSubmit)="startPayment()" class="modal-form">
+                <div class="form-group-title">
+                  <app-icon name="credit-card" [size]="14"/>
+                  <span>Kart bilgileri</span>
                 </div>
-              }
+                <div class="secure-notice">
+                  <app-icon name="lock" [size]="14"/>
+                  <span>Kart bilgileriniz SSL ile şifrelenerek iyzico altyapısına gönderilir. Superpersonel kart verilerinizi saklamaz.</span>
+                </div>
+                <div class="form-group">
+                  <label>Kart üzerindeki isim</label>
+                  <input type="text" [(ngModel)]="cardForm.cardHolderName" name="cardHolderName" required placeholder="AD SOYAD">
+                </div>
+                <div class="form-group">
+                  <label>Kart numarası</label>
+                  <input type="text" [(ngModel)]="cardForm.cardNumber" name="cardNumber" required placeholder="0000 0000 0000 0000" maxlength="19" autocomplete="cc-number">
+                </div>
+                <div class="form-row-3">
+                  <div class="form-group">
+                    <label>Ay</label>
+                    <input type="text" [(ngModel)]="cardForm.expireMonth" name="expireMonth" required placeholder="MM" maxlength="2" autocomplete="cc-exp-month">
+                  </div>
+                  <div class="form-group">
+                    <label>Yıl</label>
+                    <input type="text" [(ngModel)]="cardForm.expireYear" name="expireYear" required placeholder="YYYY" maxlength="4" autocomplete="cc-exp-year">
+                  </div>
+                  <div class="form-group">
+                    <label>CVC</label>
+                    <input type="password" [(ngModel)]="cardForm.cvc" name="cvc" required placeholder="***" maxlength="4" autocomplete="cc-csc">
+                  </div>
+                </div>
 
-              <div class="form-actions">
-                <button type="button" class="btn btn-ghost" (click)="closeSubscribeModal()">İptal</button>
-                <button type="submit" class="btn btn-primary" [disabled]="subscribing()">
-                  @if (subscribing()) {
-                    <span class="btn-spin"></span>
-                    Yönlendiriliyor…
-                  } @else {
-                    <app-icon name="lock" [size]="14"/>
-                    Güvenli ödemeye devam et
-                  }
-                </button>
+                @if (subscribeError()) {
+                  <div class="form-error">
+                    <app-icon name="alert-triangle" [size]="14"/>
+                    {{ subscribeError() }}
+                  </div>
+                }
+
+                <div class="form-actions">
+                  <button type="button" class="btn btn-ghost" (click)="modalStep.set('buyer')">
+                    <app-icon name="chevron-left" [size]="14"/> Geri
+                  </button>
+                  <button type="submit" class="btn btn-primary" [disabled]="subscribing()">
+                    @if (subscribing()) {
+                      <span class="btn-spin"></span>
+                      İşleniyor…
+                    } @else {
+                      <app-icon name="lock" [size]="14"/>
+                      Ödemeyi tamamla
+                    }
+                  </button>
+                </div>
+              </form>
+            }
+
+            <!-- Step 3: 3DS iframe -->
+            @if (modalStep() === 'threeds') {
+              <div class="threeds-container">
+                <iframe #threeDSFrame class="threeds-iframe" sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-top-navigation"></iframe>
               </div>
-            </form>
+            }
           </div>
         </div>
       }
@@ -787,6 +846,32 @@ interface ComparisonRow {
       font-weight: 600;
       margin-top: 4px;
     }
+
+    .step-indicators {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin: 16px 0;
+    }
+    .step-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      background: var(--color-bg-tertiary); color: var(--color-text-muted);
+      border: 2px solid var(--color-border);
+    }
+    .step-dot.active { background: var(--color-accent-primary); color: #fff; border-color: var(--color-accent-primary); }
+    .step-dot.done { background: #10b981; color: #fff; border-color: #10b981; }
+    .step-line { width: 40px; height: 2px; background: var(--color-border); }
+    .step-line.done { background: #10b981; }
+
+    .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+    .modal.wide { max-width: 560px; }
+
+    .threeds-container { width: 100%; min-height: 400px; }
+    .threeds-iframe { width: 100%; min-height: 400px; border: none; border-radius: 8px; }
 
     .plan-features {
       list-style: none;
@@ -1321,10 +1406,20 @@ export class BillingComponent implements OnInit, OnDestroy {
   showSubscribeModal = false;
   subscribing = signal(false);
   subscribeError = signal<string | null>(null);
+  modalStep = signal<'buyer' | 'card' | 'threeds'>('buyer');
+
+  cardForm = {
+    cardHolderName: '',
+    cardNumber: '',
+    expireMonth: '',
+    expireYear: '',
+    cvc: '',
+  };
+
+  @ViewChild('threeDSFrame') threeDSFrame?: ElementRef<HTMLIFrameElement>;
 
   currentPlanKey = computed(() => this.overview()?.subscription?.plan ?? null);
 
-  private checkoutWindow: Window | null = null;
   private messageHandler?: (event: MessageEvent) => void;
 
   buyerForm = {
@@ -1396,7 +1491,8 @@ export class BillingComponent implements OnInit, OnDestroy {
     // Listen for postMessage from the iyzico checkout popup (via our /callback)
     this.messageHandler = (event: MessageEvent) => {
       const data = event.data as { type?: string; success?: boolean; message?: string } | null;
-      if (!data || data.type !== 'WHATRES_BILLING_RESULT') return;
+      if (!data) return;
+      if (data.type !== 'WHATRES_BILLING_RESULT' && data.type !== 'WHATRES_3DS_RESULT') return;
 
       this.subscribing.set(false);
       if (data.success) {
@@ -1404,6 +1500,7 @@ export class BillingComponent implements OnInit, OnDestroy {
         this.loadData();
         this.dialog.success(data.message || 'Aboneliğiniz başarıyla aktifleştirildi!');
       } else {
+        this.modalStep.set('card');
         this.subscribeError.set(data.message || 'Ödeme tamamlanamadı');
       }
     };
@@ -1413,9 +1510,6 @@ export class BillingComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.messageHandler) {
       window.removeEventListener('message', this.messageHandler);
-    }
-    if (this.checkoutWindow && !this.checkoutWindow.closed) {
-      this.checkoutWindow.close();
     }
   }
 
@@ -1476,9 +1570,7 @@ export class BillingComponent implements OnInit, OnDestroy {
   }
 
   selectPlan(plan: PlanDefinition): void {
-    this.selectedPlanData.set(plan);
-    this.subscribeError.set(null);
-    this.showSubscribeModal = true;
+    this.openSubscribeModal(plan);
   }
 
   closeSubscribeModal(): void {
@@ -1487,39 +1579,31 @@ export class BillingComponent implements OnInit, OnDestroy {
     this.subscribeError.set(null);
   }
 
-  /**
-   * Start the 3DS checkout flow. Submits buyer info to the backend, gets
-   * iyzico's checkoutFormContent (an HTML snippet with embedded scripts),
-   * and opens it in a popup window. iyzico handles card entry and 3DS;
-   * the popup POSTs back to /api/billing/callback which in turn postMessages
-   * the result to this window.
-   *
-   * We DO NOT collect card details ourselves — this is required for PCI-DSS
-   * compliance. The Superpersonel API never sees the card number, CVC, or expiry.
-   */
-  startCheckout(): void {
+  goToCardStep(): void {
+    this.subscribeError.set(null);
+    this.modalStep.set('card');
+  }
+
+  startPayment(): void {
     if (!this.selectedPlanData()) return;
 
     this.subscribing.set(true);
     this.subscribeError.set(null);
 
-    // Build absolute callback URL. iyzico requires a publicly reachable URL.
-    const callbackUrl = `${window.location.origin}/api/billing/callback`;
-
     this.billingService
-      .getCheckoutForm({
+      .subscribe3DS({
         planKey: this.selectedPlanData()!.key,
         billingCycle: this.selectedCycle(),
+        card: this.cardForm,
         buyer: this.buyerForm,
-        callbackUrl,
       })
       .subscribe({
         next: (res) => {
-          if (res.success && res.data?.checkoutFormContent) {
-            this.openCheckoutPopup(res.data.checkoutFormContent);
+          if (res.success && res.data?.threeDSHtmlContent) {
+            this.show3DSIframe(res.data.threeDSHtmlContent);
           } else {
             this.subscribing.set(false);
-            this.subscribeError.set(res.error?.message || 'Ödeme sayfası oluşturulamadı');
+            this.subscribeError.set((res as any).error?.message || 'Ödeme başlatılamadı');
           }
         },
         error: (err) => {
@@ -1529,65 +1613,27 @@ export class BillingComponent implements OnInit, OnDestroy {
       });
   }
 
-  private openCheckoutPopup(checkoutFormContent: string): void {
-    const width = 600;
-    const height = 780;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
+  private show3DSIframe(htmlContent: string): void {
+    this.modalStep.set('threeds');
+    setTimeout(() => {
+      const iframe = this.threeDSFrame?.nativeElement;
+      if (!iframe) return;
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
+      const decoded = document.createElement('textarea');
+      decoded.innerHTML = htmlContent;
+      doc.open();
+      doc.write(decoded.value);
+      doc.close();
+    }, 100);
+  }
 
-    this.checkoutWindow = window.open(
-      '',
-      'whatres-iyzico-checkout',
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`,
-    );
-
-    if (!this.checkoutWindow) {
-      this.subscribing.set(false);
-      this.subscribeError.set(
-        'Popup penceresi engellendi. Lütfen tarayıcınızın popup ayarlarını kontrol edin.',
-      );
-      return;
-    }
-
-    const html = `<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="utf-8">
-  <title>Güvenli Ödeme — iyzico</title>
-  <style>
-    body { font-family: -apple-system, sans-serif; margin: 0; padding: 20px; background: #f9fafb; }
-    .wrap { max-width: 560px; margin: 0 auto; }
-    .header { text-align: center; padding: 8px 0 16px; color: #111827; }
-    .header h1 { font-size: 1.1rem; margin: 0 0 4px; }
-    .header p { font-size: 0.85rem; color: #6b7280; margin: 0; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="header">
-      <h1>Güvenli Ödeme</h1>
-      <p>Kart bilgileriniz iyzico altyapısı üzerinden işlenir.</p>
-    </div>
-    <div id="iyzipay-checkout-form" class="responsive"></div>
-    ${checkoutFormContent}
-  </div>
-</body>
-</html>`;
-
-    this.checkoutWindow.document.open();
-    this.checkoutWindow.document.write(html);
-    this.checkoutWindow.document.close();
-
-    // Poll for popup close — if user closes without completing, reset state
-    const pollTimer = setInterval(() => {
-      if (this.checkoutWindow && this.checkoutWindow.closed) {
-        clearInterval(pollTimer);
-        this.checkoutWindow = null;
-        // If we never received a postMessage, revert the loading state
-        if (this.subscribing()) {
-          this.subscribing.set(false);
-        }
-      }
-    }, 500);
+  openSubscribeModal(plan: PlanDefinition): void {
+    this.selectedPlanData.set(plan);
+    this.showSubscribeModal = true;
+    this.modalStep.set('buyer');
+    this.subscribeError.set(null);
+    this.subscribing.set(false);
+    this.cardForm = { cardHolderName: '', cardNumber: '', expireMonth: '', expireYear: '', cvc: '' };
   }
 }

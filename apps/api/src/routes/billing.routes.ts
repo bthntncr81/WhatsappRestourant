@@ -43,6 +43,19 @@ const checkoutFormSchema = z.object({
   callbackUrl: z.string().url('callbackUrl geçerli bir URL olmalı'),
 });
 
+const threeDSSchema = z.object({
+  planKey: z.enum(['TRIAL', 'SILVER', 'GOLD', 'PLATINUM'], { message: 'Geçersiz plan seçimi' }),
+  billingCycle: z.enum(['MONTHLY', 'ANNUAL'], { message: 'Geçersiz faturalama dönemi' }),
+  buyer: buyerSchema,
+  card: z.object({
+    cardHolderName: z.string().min(3),
+    cardNumber: z.string().min(15).max(19),
+    expireMonth: z.string().length(2),
+    expireYear: z.string().length(4),
+    cvc: z.string().min(3).max(4),
+  }),
+});
+
 const cancelSchema = z.object({
   immediate: z.boolean().optional(),
   reason: z.string().max(500).optional(),
@@ -245,10 +258,81 @@ router.get('/exchange-rate', async (_req: Request, res: Response, next: NextFunc
   }
 });
 
+/**
+ * POST /api/billing/3ds-callback
+ * iyzico 3DS callback — bank posts here after 3DS verification (no auth required)
+ */
+router.post('/3ds-callback', async (req: Request, res: Response) => {
+  const paymentId = (req.body?.paymentId as string)?.trim();
+  const mdStatus = req.body?.mdStatus as string;
+
+  logger.info({ hasPaymentId: Boolean(paymentId), mdStatus }, '3DS callback received');
+
+  const html = (success: boolean, message: string) => {
+    const safeMessage = escapeHtml(message);
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>Ödeme</title></head><body>
+<script>try{if(window.parent!==window){window.parent.postMessage({type:'WHATRES_3DS_RESULT',success:${success},message:'${safeMessage}'},'*')}}catch(e){}
+setTimeout(function(){try{if(window.parent!==window){window.parent.postMessage({type:'WHATRES_3DS_RESULT',success:${success},message:'${safeMessage}'},'*')}}catch(e){}},500)</script>
+</body></html>`;
+  };
+
+  if (!paymentId || mdStatus !== '1') {
+    res.send(html(false, 'Ödeme doğrulanamadı.'));
+    return;
+  }
+
+  try {
+    const result = await billingService.complete3DSPayment(paymentId);
+    res.send(html(result.success, result.success
+      ? (result.alreadyProcessed ? 'Aboneliğiniz zaten aktif.' : 'Aboneliğiniz aktifleştirildi!')
+      : (result.error || 'Ödeme tamamlanamadı.')));
+  } catch (error) {
+    logger.error({ error, paymentId }, '3DS callback error');
+    res.send(html(false, 'İşlem sırasında bir hata oluştu.'));
+  }
+});
+
 // ==================== PROTECTED ROUTES ====================
 
 // All routes below require authentication
 router.use(requireAuth);
+
+/**
+ * POST /api/billing/subscribe/3ds
+ * Start 3DS payment with card details collected in our own form.
+ */
+router.post('/subscribe/3ds', async (req: Request, res: Response, next: NextFunction) => {
+  const parsed = threeDSSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json(zodErrorResponse(parsed.error));
+  }
+
+  try {
+    const tenantId = req.user!.tenantId;
+    const { planKey, billingCycle, buyer, card } = parsed.data;
+
+    const recent = await billingService.hasRecentPendingSubscription(tenantId, 60);
+    if (recent) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'PAYMENT_IN_PROGRESS', message: 'Yakın zamanda başlatılmış bir ödeme işlemi var. Lütfen 1 dakika bekleyip tekrar deneyin.' },
+      });
+    }
+
+    const callbackUrl = `${process.env.APP_BASE_URL || 'https://panel.superpersonel.com'}/api/billing/3ds-callback`;
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '127.0.0.1';
+
+    const result = await billingService.start3DSPayment(tenantId, planKey, billingCycle, card, buyer, callbackUrl, clientIp);
+
+    if (result.success && result.threeDSHtmlContent) {
+      res.json({ success: true, data: { threeDSHtmlContent: result.threeDSHtmlContent, tryAmount: result.tryAmount } });
+    } else {
+      res.status(400).json({ success: false, error: { code: 'PAYMENT_FAILED', message: result.error || 'Ödeme başlatılamadı' } });
+    }
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * GET /api/billing/overview

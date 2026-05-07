@@ -203,6 +203,19 @@ export class BillingService {
     );
   }
 
+  subscribe3DS(data: {
+    planKey: SubscriptionPlan;
+    billingCycle: BillingCycle;
+    card: { cardHolderName: string; cardNumber: string; expireMonth: string; expireYear: string; cvc: string };
+    buyer: { email: string; name: string; surname: string; gsmNumber: string; identityNumber: string; city: string; country: string; address: string; zipCode: string };
+  }): Observable<ApiResponse<{ threeDSHtmlContent: string; tryAmount: number }>> {
+    return this.http.post<ApiResponse<{ threeDSHtmlContent: string; tryAmount: number }>>(
+      `${environment.apiBaseUrl}/billing/subscribe/3ds`,
+      data,
+      this.headers
+    );
+  }
+
   cancelSubscription(immediate: boolean, reason?: string): Observable<ApiResponse<SubscriptionDto>> {
     return this.http.post<ApiResponse<SubscriptionDto>>(
       `${environment.apiBaseUrl}/billing/cancel`,
