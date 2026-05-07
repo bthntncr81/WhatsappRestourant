@@ -95,22 +95,17 @@ import { IconComponent } from '../../shared/icon.component';
           </div>
 
           <div class="form-group">
-            <label for="tenantSlug" class="form-label">İşletme URL'si</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix text-muted">superpersonel.com/</span>
-              <input
-                type="text"
-                id="tenantSlug"
-                class="form-input slug-input"
-                [(ngModel)]="tenantSlug"
-                name="tenantSlug"
-                placeholder="isletmem"
-                required
-                pattern="[a-z0-9-]+"
-                [disabled]="loading()"
-              />
-            </div>
-            <span class="form-hint text-muted">Yalnızca küçük harfler, sayılar ve tire</span>
+            <label for="phone" class="form-label">Telefon</label>
+            <input
+              type="tel"
+              id="phone"
+              class="form-input"
+              [(ngModel)]="phone"
+              name="phone"
+              placeholder="05XX XXX XX XX"
+              required
+              [disabled]="loading()"
+            />
           </div>
 
           <!-- Legal Consent Checkboxes -->
@@ -326,36 +321,6 @@ import { IconComponent } from '../../shared/icon.component';
         &:disabled {
           opacity: 0.6;
           cursor: not-allowed;
-        }
-      }
-
-      .input-with-prefix {
-        display: flex;
-        align-items: center;
-        background: var(--color-bg-tertiary);
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius-md);
-        overflow: hidden;
-
-        &:focus-within {
-          border-color: var(--color-accent-primary);
-          box-shadow: 0 0 0 3px rgba(27, 85, 131, 0.15);
-        }
-      }
-
-      .input-prefix {
-        padding: 0 0 0 var(--spacing-md);
-        font-size: 0.875rem;
-        white-space: nowrap;
-      }
-
-      .slug-input {
-        border: none;
-        background: transparent;
-        padding-left: var(--spacing-xs);
-
-        &:focus {
-          box-shadow: none;
         }
       }
 
@@ -580,8 +545,8 @@ export class RegisterComponent implements OnInit {
   name = '';
   email = '';
   password = '';
+  phone = '';
   tenantName = '';
-  tenantSlug = '';
   loading = signal(false);
   error = signal<string | null>(null);
 
@@ -653,7 +618,7 @@ export class RegisterComponent implements OnInit {
   }
 
   onSubmit(): void {
-    if (!this.name || !this.email || !this.password || !this.tenantName || !this.tenantSlug) {
+    if (!this.name || !this.email || !this.password || !this.phone || !this.tenantName) {
       this.error.set('Lütfen tüm alanları doldurun');
       return;
     }
@@ -676,8 +641,8 @@ export class RegisterComponent implements OnInit {
         name: this.name,
         email: this.email,
         password: this.password,
+        phone: this.phone,
         tenantName: this.tenantName,
-        tenantSlug: this.tenantSlug.toLowerCase(),
         consents: this.consents,
       })
       .subscribe({

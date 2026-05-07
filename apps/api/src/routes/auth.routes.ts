@@ -17,12 +17,8 @@ const registerSchema = z.object({
   email: z.string().email('Geçersiz e-posta formatı'),
   password: z.string().min(8, 'Şifre en az 8 karakter olmalı'),
   name: z.string().min(2, 'Ad en az 2 karakter olmalı'),
+  phone: z.string().min(10, 'Geçerli bir telefon numarası girin'),
   tenantName: z.string().min(2, 'İşletme adı en az 2 karakter olmalı'),
-  tenantSlug: z
-    .string()
-    .min(2)
-    .max(50)
-    .regex(/^[a-z0-9-]+$/, 'Slug küçük harf, rakam ve tire içermeli'),
   consents: z.object({
     terms: z.literal(true, { errorMap: () => ({ message: 'Mesafeli Satış Sözleşmesi kabul edilmeli' }) }),
     kvkk: z.literal(true, { errorMap: () => ({ message: 'KVKK Aydınlatma Metni kabul edilmeli' }) }),

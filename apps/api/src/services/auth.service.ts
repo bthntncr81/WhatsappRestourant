@@ -17,42 +17,58 @@ const SALT_ROUNDS = 12;
 export class AuthService {
   private config = getConfig();
 
+  private generateSlug(name: string): string {
+    const turkishMap: Record<string, string> = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', Ç: 'c', Ğ: 'g', İ: 'i', Ö: 'o', Ş: 's', Ü: 'u' };
+    return name
+      .replace(/[çğıöşüÇĞİÖŞÜ]/g, (ch) => turkishMap[ch] || ch)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 50);
+  }
+
   async register(dto: RegisterDto): Promise<AuthResponseDto> {
-    // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email: dto.email },
     });
 
     if (existingUser) {
-      throw new AppError(400, 'USER_EXISTS', 'User with this email already exists');
+      throw new AppError(400, 'USER_EXISTS', 'Bu e-posta adresi zaten kayıtlı');
     }
 
-    // Check if tenant slug exists
-    const existingTenant = await prisma.tenant.findUnique({
-      where: { slug: dto.tenantSlug },
-    });
-
-    if (existingTenant) {
-      throw new AppError(400, 'TENANT_EXISTS', 'Tenant with this slug already exists');
+    // Auto-generate unique slug from tenant name
+    let baseSlug = this.generateSlug(dto.tenantName);
+    if (baseSlug.length < 2) baseSlug = 'isletme';
+    let slug = baseSlug;
+    let attempt = 0;
+    while (await prisma.tenant.findUnique({ where: { slug } })) {
+      attempt++;
+      slug = `${baseSlug}-${attempt}`;
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
-    // Create tenant, user, and membership in a transaction
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name: dto.tenantName,
-          slug: dto.tenantSlug,
+          slug,
         },
       });
+
+      if (dto.phone) {
+        await tx.tenant.update({
+          where: { id: tenant.id },
+          data: { orderNotifyPhones: [dto.phone] },
+        });
+      }
 
       const user = await tx.user.create({
         data: {
           email: dto.email,
           passwordHash,
           name: dto.name,
+          phone: dto.phone || null,
         },
       });
 
