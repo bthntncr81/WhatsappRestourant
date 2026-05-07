@@ -231,6 +231,20 @@ router.get('/callback', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/billing/exchange-rate
+ * Returns current USD/TRY exchange rate for frontend price display
+ */
+router.get('/exchange-rate', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { getUsdToTryRate } = await import('../services/currency.service');
+    const rate = await getUsdToTryRate();
+    res.json({ success: true, data: { rate, currency: 'TRY', base: 'USD' } });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== PROTECTED ROUTES ====================
 
 // All routes below require authentication
@@ -316,12 +330,14 @@ router.post('/subscribe/checkout-form', async (req: Request, res: Response, next
       });
     }
 
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '127.0.0.1';
     const result = await billingService.getSubscriptionCheckoutForm(
       tenantId,
       planKey,
       billingCycle,
       buyer,
       callbackUrl,
+      clientIp,
     );
 
     if (result.success) {

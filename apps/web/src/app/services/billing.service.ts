@@ -127,6 +127,12 @@ export class BillingService {
     );
   }
 
+  getExchangeRate(): Observable<ApiResponse<{ rate: number; currency: string; base: string }>> {
+    return this.http.get<ApiResponse<{ rate: number; currency: string; base: string }>>(
+      `${environment.apiBaseUrl}/billing/exchange-rate`
+    );
+  }
+
   // ==================== SUBSCRIPTION ====================
 
   getBillingOverview(): Observable<ApiResponse<BillingOverviewDto>> {

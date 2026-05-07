@@ -3,6 +3,7 @@ import { createLogger } from '../logger';
 import { AppError } from '../middleware/error-handler';
 
 import { iyzicoService, sanitizeForIyzico, formatGsmNumber } from './iyzico.service';
+import { getUsdToTryRate, convertUsdToTry } from './currency.service';
 import {
   SubscriptionPlan,
   SubscriptionStatus,
@@ -277,60 +278,76 @@ export class BillingService {
       address: string;
       zipCode: string;
     },
-    callbackUrl: string
-  ): Promise<{ success: boolean; checkoutFormContent?: string; token?: string; error?: string }> {
+    callbackUrl: string,
+    clientIp?: string,
+  ): Promise<{ success: boolean; checkoutFormContent?: string; token?: string; error?: string; tryAmount?: number; usdAmount?: number; exchangeRate?: number }> {
     const plan = this.getPlan(planKey);
 
     if (plan.isFree) {
       throw new AppError(400, 'INVALID_PLAN', 'Deneme planı ödeme gerektirmez');
     }
 
-    const iyzicoPlanRef = getPlanIyzicoRef(planKey, billingCycle);
-    if (!iyzicoPlanRef) {
-      throw new AppError(
-        500,
-        'IYZICO_PLAN_NOT_CONFIGURED',
-        `${planKey} planı için ${billingCycle === 'MONTHLY' ? 'aylık' : 'yıllık'} iyzico pricing plan yapılandırılmamış.`,
-      );
-    }
+    const usdPrice = billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.annualPrice;
+    const rate = await getUsdToTryRate();
+    const tryPrice = convertUsdToTry(usdPrice, rate);
+    const tryPriceStr = tryPrice.toFixed(2);
 
-    const customerRefCode = `CUST-${tenantId}`;
+    logger.info({ planKey, billingCycle, usdPrice, rate, tryPrice }, 'USD→TRY conversion for subscription');
 
-    const result = await iyzicoService.initializeSubscriptionCheckoutForm({
-      pricingPlanRefCode: iyzicoPlanRef,
-      customerRefCode,
-      email: buyer.email,
-      name: buyer.name,
-      surname: buyer.surname,
-      gsmNumber: buyer.gsmNumber,
-      identityNumber: buyer.identityNumber,
-      address: {
+    const conversationId = `SUB-${tenantId}-${Date.now()}`;
+    const basketId = `BASKET-${tenantId}-${planKey}-${billingCycle}`;
+
+    const result = await iyzicoService.initializePlatformCheckoutForm({
+      price: tryPriceStr,
+      basketId,
+      conversationId,
+      callbackUrl,
+      buyer: {
+        id: `BUYER-${tenantId}`,
+        name: buyer.name,
+        surname: buyer.surname,
+        gsmNumber: buyer.gsmNumber,
+        email: buyer.email,
+        identityNumber: buyer.identityNumber,
+        ip: clientIp || '127.0.0.1',
         city: buyer.city,
         country: buyer.country,
         address: buyer.address,
         zipCode: buyer.zipCode,
       },
-      callbackUrl,
+      basketItems: [
+        {
+          id: `PLAN-${planKey}-${billingCycle}`,
+          name: `${plan.name} Plan (${billingCycle === 'MONTHLY' ? 'Aylık' : 'Yıllık'})`,
+          category1: 'Yazılım Aboneliği',
+          itemType: 'VIRTUAL',
+          price: tryPriceStr,
+        },
+      ],
     });
 
-    // Persist a PENDING transaction so /api/billing/callback can look up
-    // the tenant + plan + cycle by the token once iyzico calls us back.
     if (result.success && result.token) {
       await prisma.billingTransaction.create({
         data: {
           tenantId,
           type: 'SUBSCRIPTION_PAYMENT',
           status: 'PENDING',
-          amount: billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.annualPrice,
-          currency: plan.currency,
+          amount: tryPrice,
+          currency: 'TRY',
           plan: planKey,
           billingCycle,
           iyzicoConversationId: result.token,
+          metadata: { usdPrice, exchangeRate: rate, tryPrice },
         },
       });
     }
 
-    return result;
+    return {
+      ...result,
+      tryAmount: tryPrice,
+      usdAmount: usdPrice,
+      exchangeRate: rate,
+    };
   }
 
   /**
@@ -388,14 +405,14 @@ export class BillingService {
       return { success: false, alreadyProcessed: true, error: transaction.errorMessage || 'Ödeme reddedildi' };
     }
 
-    const result = await iyzicoService.retrieveSubscriptionCheckoutFormResult(token);
+    const result = await iyzicoService.retrievePlatformCheckoutFormResult(token);
 
-    if (!result.success || result.subscriptionStatus !== 'ACTIVE' || !result.referenceCode) {
+    if (!result.success || result.paymentStatus !== 'SUCCESS') {
       await prisma.billingTransaction.update({
         where: { id: transaction.id },
         data: {
           status: 'FAILED',
-          errorMessage: result.error || `Durum: ${result.subscriptionStatus || 'bilinmiyor'}`,
+          errorMessage: result.error || `Durum: ${result.paymentStatus || 'bilinmiyor'}`,
           processedAt: new Date(),
         },
       });
@@ -410,22 +427,22 @@ export class BillingService {
       transaction.tenantId,
       transaction.plan,
       transaction.billingCycle,
-      result.referenceCode,
-      result.parentReferenceCode || `CUST-${transaction.tenantId}`,
+      result.paymentId || token,
+      `CUST-${transaction.tenantId}`,
     );
 
     await prisma.billingTransaction.update({
       where: { id: transaction.id },
       data: {
         status: 'SUCCESS',
-        iyzicoPaymentId: result.referenceCode,
+        iyzicoPaymentId: result.paymentId,
         processedAt: new Date(),
       },
     });
 
     logger.info(
-      { tenantId: transaction.tenantId, plan: transaction.plan, subscriptionRef: result.referenceCode },
-      'Subscription activated via 3DS checkout form',
+      { tenantId: transaction.tenantId, plan: transaction.plan, paymentId: result.paymentId, tryAmount: result.price },
+      'Subscription activated via checkout form (TRY payment)',
     );
 
     return { success: true, subscription };

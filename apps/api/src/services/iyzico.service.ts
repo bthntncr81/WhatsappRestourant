@@ -529,6 +529,138 @@ export class IyzicoService {
   }
 
   /**
+   * Initialize regular checkout form for platform subscription payments (TRY).
+   * Uses platform iyzico credentials, NOT tenant credentials.
+   */
+  async initializePlatformCheckoutForm(params: {
+    price: string;
+    basketId: string;
+    conversationId: string;
+    callbackUrl: string;
+    buyer: {
+      id: string;
+      name: string;
+      surname: string;
+      gsmNumber: string;
+      email: string;
+      identityNumber: string;
+      ip: string;
+      city: string;
+      country: string;
+      address: string;
+      zipCode: string;
+    };
+    basketItems: Array<{
+      id: string;
+      name: string;
+      category1: string;
+      itemType: 'PHYSICAL' | 'VIRTUAL';
+      price: string;
+    }>;
+  }): Promise<{
+    success: boolean;
+    checkoutFormContent?: string;
+    token?: string;
+    error?: string;
+  }> {
+    const body = {
+      locale: 'tr',
+      conversationId: params.conversationId,
+      price: formatPrice(params.price),
+      paidPrice: formatPrice(params.price),
+      currency: 'TRY',
+      basketId: params.basketId,
+      paymentGroup: 'SUBSCRIPTION',
+      callbackUrl: params.callbackUrl,
+      enabledInstallments: [1],
+      buyer: {
+        id: params.buyer.id,
+        name: sanitizeForIyzico(params.buyer.name),
+        surname: sanitizeForIyzico(params.buyer.surname),
+        gsmNumber: formatGsmNumber(params.buyer.gsmNumber),
+        email: params.buyer.email,
+        identityNumber: params.buyer.identityNumber,
+        registrationAddress: sanitizeForIyzico(params.buyer.address),
+        ip: getValidIp(params.buyer.ip),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        zipCode: params.buyer.zipCode,
+      },
+      shippingAddress: {
+        contactName: sanitizeForIyzico(`${params.buyer.name} ${params.buyer.surname}`),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        address: sanitizeForIyzico(params.buyer.address),
+        zipCode: params.buyer.zipCode,
+      },
+      billingAddress: {
+        contactName: sanitizeForIyzico(`${params.buyer.name} ${params.buyer.surname}`),
+        city: sanitizeForIyzico(params.buyer.city),
+        country: sanitizeForIyzico(params.buyer.country),
+        address: sanitizeForIyzico(params.buyer.address),
+        zipCode: params.buyer.zipCode,
+      },
+      basketItems: params.basketItems.map((item) => ({
+        id: item.id,
+        name: sanitizeForIyzico(item.name),
+        category1: sanitizeForIyzico(item.category1),
+        itemType: item.itemType,
+        price: formatPrice(item.price),
+      })),
+    };
+
+    const result = await this.platformRequest<{
+      token: string;
+      checkoutFormContent: string;
+      tokenExpireTime: number;
+    }>('POST', '/payment/iyzipos/checkoutform/initialize/auth/ecom', body);
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        checkoutFormContent: result.data.checkoutFormContent,
+        token: result.data.token,
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
+  /**
+   * Retrieve platform checkout form payment result
+   */
+  async retrievePlatformCheckoutFormResult(token: string): Promise<{
+    success: boolean;
+    paymentStatus?: string;
+    paymentId?: string;
+    price?: number;
+    currency?: string;
+    error?: string;
+  }> {
+    const body = { locale: 'tr', conversationId: generateConversationId(), token };
+
+    const result = await this.platformRequest<{
+      paymentStatus: string;
+      paymentId: string;
+      price: number;
+      currency: string;
+      iyziCommissionFee: number;
+    }>('POST', '/payment/iyzipos/checkoutform/auth/ecom/detail', body);
+
+    if (result.success && result.data) {
+      return {
+        success: true,
+        paymentStatus: result.data.paymentStatus,
+        paymentId: result.data.paymentId,
+        price: result.data.price,
+        currency: result.data.currency,
+      };
+    }
+
+    return { success: false, error: result.error };
+  }
+
+  /**
    * Get subscription details — platform iyzico
    */
   async getSubscription(subscriptionRefCode: string): Promise<{

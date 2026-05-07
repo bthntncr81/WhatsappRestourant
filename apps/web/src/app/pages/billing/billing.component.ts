@@ -122,8 +122,11 @@ interface ComparisonRow {
                     <span class="amount">{{ displayedPrice(plan) }}</span>
                     <span class="per">/ay</span>
                   </div>
+                  @if (exchangeRate()) {
+                    <span class="try-equiv">{{ tryEquivalent(displayedPrice(plan)) }}/ay</span>
+                  }
                   @if (selectedCycle() === 'ANNUAL') {
-                    <span class="period">Yıllık {{ plan.annualPrice }}$ peşin</span>
+                    <span class="period">Yıllık {{ plan.annualPrice }}$ peşin {{ tryEquivalent(plan.annualPrice) }}</span>
                   } @else {
                     <span class="period">Aylık faturalanır</span>
                   }
@@ -383,6 +386,11 @@ interface ComparisonRow {
                 {{ selectedCycle() === 'MONTHLY' ? selectedPlanData()!.monthlyPrice : selectedPlanData()!.annualPrice }}$
                 <span>/ {{ selectedCycle() === 'MONTHLY' ? 'ay' : 'yıl' }}</span>
               </div>
+              @if (exchangeRate()) {
+                <div class="modal-try-price">
+                  Ödeme: {{ tryEquivalent(selectedCycle() === 'MONTHLY' ? selectedPlanData()!.monthlyPrice : selectedPlanData()!.annualPrice) }} (anlık kur)
+                </div>
+              }
             </header>
 
             <div class="secure-notice">
@@ -763,6 +771,21 @@ interface ComparisonRow {
       margin-top: 6px;
       font-size: 0.8rem;
       color: var(--color-text-muted);
+    }
+
+    .try-equiv {
+      display: block;
+      margin-top: 4px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--color-accent-primary);
+    }
+
+    .modal-try-price {
+      font-size: 0.85rem;
+      color: var(--color-accent-primary);
+      font-weight: 600;
+      margin-top: 4px;
     }
 
     .plan-features {
@@ -1293,6 +1316,7 @@ export class BillingComponent implements OnInit, OnDestroy {
   plans = signal<PlanDefinition[]>([]);
   selectedCycle = signal<BillingCycle>('MONTHLY');
   selectedPlanData = signal<PlanDefinition | null>(null);
+  exchangeRate = signal<number | null>(null);
 
   showSubscribeModal = false;
   subscribing = signal(false);
@@ -1406,6 +1430,14 @@ export class BillingComponent implements OnInit, OnDestroy {
       },
     });
 
+    this.billingService.getExchangeRate().subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.exchangeRate.set(res.data.rate);
+        }
+      },
+    });
+
     this.billingService.getBillingOverview().subscribe({
       next: (res) => {
         if (res.success && res.data) {
@@ -1420,6 +1452,12 @@ export class BillingComponent implements OnInit, OnDestroy {
   displayedPrice(plan: PlanDefinition): number {
     if (this.selectedCycle() === 'MONTHLY') return plan.monthlyPrice;
     return Math.round(plan.annualPrice / 12);
+  }
+
+  tryEquivalent(usdAmount: number): string {
+    const rate = this.exchangeRate();
+    if (!rate) return '';
+    return `≈ ${Math.round(usdAmount * rate).toLocaleString('tr-TR')} ₺`;
   }
 
   limitText(n: number): string {
