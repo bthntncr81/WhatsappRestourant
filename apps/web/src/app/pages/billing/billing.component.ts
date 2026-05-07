@@ -54,6 +54,32 @@ interface ComparisonRow {
         </div>
       </nav>
 
+      <!-- Expiry Warning Banner -->
+      @if (overview()?.subscription?.status === 'EXPIRED' || overview()?.subscription?.status === 'UNPAID') {
+        <div class="expiry-banner">
+          <app-icon name="alert-triangle" [size]="18"/>
+          <div class="expiry-text">
+            <strong>Aboneliğinizin süresi doldu!</strong>
+            Hesabınız askıya alınmıştır. Hizmetlere erişmek için lütfen ödemenizi yapın.
+          </div>
+          <button class="btn btn-primary btn-sm" (click)="selectPlan(getCurrentPlanDef()!)">
+            Şimdi Öde
+          </button>
+        </div>
+      }
+      @if (overview()?.subscription?.status === 'ACTIVE' && getDaysRemaining() !== null && getDaysRemaining()! <= 3) {
+        <div class="expiry-banner warn">
+          <app-icon name="clock" [size]="18"/>
+          <div class="expiry-text">
+            <strong>Aboneliğiniz {{ getDaysRemaining() }} gün sonra sona erecek.</strong>
+            Kesintisiz hizmet için lütfen ödemenizi zamanında yapın.
+          </div>
+          <button class="btn btn-primary btn-sm" (click)="selectPlan(getCurrentPlanDef()!)">
+            Yenile
+          </button>
+        </div>
+      }
+
       <!-- Hero -->
       <section class="hero">
         <span class="eyebrow">Fiyatlandırma</span>
@@ -294,6 +320,84 @@ interface ComparisonRow {
                 </div>
               </div>
             </div>
+          </section>
+        }
+
+        <!-- Subscription Status & Payment History -->
+        @if (overview()?.subscription) {
+          <section class="payments-section">
+            <header class="section-head">
+              <h2>Abonelik ve Ödemeler</h2>
+              <p>Mevcut aboneliğiniz ve fatura geçmişiniz</p>
+            </header>
+
+            <!-- Subscription status banner -->
+            <div class="sub-status-card" [class.expired]="overview()!.subscription.status === 'EXPIRED'" [class.active]="overview()!.subscription.status === 'ACTIVE'" [class.unpaid]="overview()!.subscription.status === 'UNPAID'">
+              <div class="sub-status-left">
+                <div class="sub-plan-name">
+                  <app-icon name="zap" [size]="18"/>
+                  {{ getPlanDisplayName(overview()!.subscription.plan) }} Plan
+                </div>
+                <div class="sub-status-badge" [attr.data-status]="overview()!.subscription.status">
+                  {{ getStatusText(overview()!.subscription.status) }}
+                </div>
+              </div>
+              <div class="sub-status-right">
+                @if (overview()!.subscription.status === 'ACTIVE' && overview()!.subscription.currentPeriodEnd) {
+                  <div class="sub-period">
+                    <span class="sub-period-label">Dönem sonu:</span>
+                    <span class="sub-period-date">{{ overview()!.subscription.currentPeriodEnd | date:'dd MMM yyyy' }}</span>
+                  </div>
+                  @if (getDaysRemaining() !== null && getDaysRemaining()! <= 7) {
+                    <div class="sub-warning">
+                      <app-icon name="alert-triangle" [size]="14"/>
+                      {{ getDaysRemaining() }} gün kaldı — ödemenizi yapın
+                    </div>
+                  }
+                }
+                @if (overview()!.subscription.status === 'EXPIRED' || overview()!.subscription.status === 'UNPAID') {
+                  <button class="btn btn-primary btn-renew" (click)="selectPlan(getCurrentPlanDef()!)">
+                    <app-icon name="credit-card" [size]="14"/>
+                    Şimdi Öde ve Yenile
+                  </button>
+                }
+              </div>
+            </div>
+
+            <!-- Transaction history -->
+            @if (overview()!.recentTransactions.length > 0) {
+              <div class="tx-table-wrap">
+                <table class="tx-table">
+                  <thead>
+                    <tr>
+                      <th>Tarih</th>
+                      <th>Açıklama</th>
+                      <th>Tutar</th>
+                      <th>Durum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (tx of overview()!.recentTransactions; track tx.id) {
+                      <tr>
+                        <td>{{ tx.createdAt | date:'dd.MM.yyyy HH:mm' }}</td>
+                        <td>{{ getTxDescription(tx) }}</td>
+                        <td class="tx-amount">{{ tx.amount | number:'1.2-2' }} {{ tx.currency }}</td>
+                        <td>
+                          <span class="tx-status" [attr.data-status]="tx.status">
+                            {{ getTxStatusText(tx.status) }}
+                          </span>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="tx-empty">
+                <app-icon name="file-text" [size]="24"/>
+                <p>Henüz ödeme geçmişi yok</p>
+              </div>
+            }
           </section>
         }
 
@@ -872,6 +976,56 @@ interface ComparisonRow {
 
     .threeds-container { width: 100%; min-height: 400px; }
     .threeds-iframe { width: 100%; min-height: 400px; border: none; border-radius: 8px; }
+
+    /* Expiry Banner */
+    .expiry-banner {
+      display: flex; align-items: center; gap: 12px; padding: 14px 24px;
+      background: #ef4444; color: white; border-radius: 12px;
+      margin: 16px 32px 0; font-size: 0.9rem;
+    }
+    .expiry-banner.warn { background: #f59e0b; }
+    .expiry-text { flex: 1; }
+    .expiry-text strong { display: block; margin-bottom: 2px; }
+    .btn-sm { padding: 8px 16px; font-size: 0.8rem; white-space: nowrap; }
+
+    /* Payments Section */
+    .payments-section { max-width: 900px; margin: 0 auto; padding: 0 32px; }
+
+    .sub-status-card {
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+      padding: 20px 24px; border-radius: 12px; margin-bottom: 24px;
+      border: 1px solid var(--color-border); background: var(--color-bg-secondary);
+    }
+    .sub-status-card.active { border-left: 4px solid #10b981; }
+    .sub-status-card.expired { border-left: 4px solid #ef4444; background: rgba(239,68,68,0.05); }
+    .sub-status-card.unpaid { border-left: 4px solid #f59e0b; background: rgba(245,158,11,0.05); }
+    .sub-status-left { display: flex; align-items: center; gap: 12px; }
+    .sub-plan-name { font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .sub-status-badge { padding: 4px 12px; border-radius: 100px; font-size: 0.75rem; font-weight: 600; }
+    [data-status="ACTIVE"] { background: rgba(16,185,129,0.15); color: #059669; }
+    [data-status="EXPIRED"] { background: rgba(239,68,68,0.15); color: #dc2626; }
+    [data-status="UNPAID"] { background: rgba(245,158,11,0.15); color: #d97706; }
+    [data-status="CANCELLED"] { background: rgba(107,114,128,0.15); color: #6b7280; }
+    .sub-status-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .sub-period { font-size: 0.85rem; color: var(--color-text-secondary); }
+    .sub-period-label { margin-right: 4px; }
+    .sub-period-date { font-weight: 600; color: var(--color-text-primary); }
+    .sub-warning { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #f59e0b; font-weight: 600; }
+    .btn-renew { display: flex; align-items: center; gap: 6px; }
+
+    /* Transaction Table */
+    .tx-table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--color-border); }
+    .tx-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .tx-table th { padding: 12px 16px; text-align: left; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); background: var(--color-bg-tertiary); border-bottom: 1px solid var(--color-border); }
+    .tx-table td { padding: 12px 16px; border-bottom: 1px solid var(--color-border); }
+    .tx-table tr:last-child td { border-bottom: none; }
+    .tx-amount { font-weight: 600; font-family: var(--font-mono); }
+    .tx-status { padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 600; }
+    .tx-status[data-status="SUCCESS"] { background: rgba(16,185,129,0.15); color: #059669; }
+    .tx-status[data-status="FAILED"] { background: rgba(239,68,68,0.15); color: #dc2626; }
+    .tx-status[data-status="PENDING"] { background: rgba(245,158,11,0.15); color: #d97706; }
+    .tx-status[data-status="REFUNDED"] { background: rgba(107,114,128,0.15); color: #6b7280; }
+    .tx-empty { text-align: center; padding: 32px; color: var(--color-text-muted); display: flex; flex-direction: column; align-items: center; gap: 8px; }
 
     .plan-features {
       list-style: none;
@@ -1546,6 +1700,47 @@ export class BillingComponent implements OnInit, OnDestroy {
   displayedPrice(plan: PlanDefinition): number {
     if (this.selectedCycle() === 'MONTHLY') return plan.monthlyPrice;
     return Math.round(plan.annualPrice / 12);
+  }
+
+  getDaysRemaining(): number | null {
+    const sub = this.overview()?.subscription;
+    if (!sub?.currentPeriodEnd) return null;
+    const end = new Date(sub.currentPeriodEnd).getTime();
+    const days = Math.ceil((end - Date.now()) / 86400000);
+    return days > 0 ? days : 0;
+  }
+
+  getPlanDisplayName(plan: string): string {
+    const map: Record<string, string> = { TRIAL: 'Deneme', SILVER: 'Gümüş', GOLD: 'Gold', PLATINUM: 'Platinyum', STARTER: 'Starter', PRO: 'Pro' };
+    return map[plan] || plan;
+  }
+
+  getStatusText(status: string): string {
+    const map: Record<string, string> = { ACTIVE: 'Aktif', EXPIRED: 'Süresi Dolmuş', CANCELLED: 'İptal', UNPAID: 'Ödenmemiş', PENDING: 'Beklemede' };
+    return map[status] || status;
+  }
+
+  getTxDescription(tx: any): string {
+    const plan = tx.plan ? this.getPlanDisplayName(tx.plan) : '';
+    const cycle = tx.billingCycle === 'MONTHLY' ? 'Aylık' : tx.billingCycle === 'ANNUAL' ? 'Yıllık' : '';
+    const type: Record<string, string> = {
+      SUBSCRIPTION_PAYMENT: `${plan} ${cycle} Abonelik`,
+      SUBSCRIPTION_RENEWAL: `${plan} Yenileme`,
+      SUBSCRIPTION_UPGRADE: `${plan} Yükseltme`,
+      REFUND: 'İade',
+    };
+    return type[tx.type] || tx.type;
+  }
+
+  getTxStatusText(status: string): string {
+    const map: Record<string, string> = { PENDING: 'Beklemede', SUCCESS: 'Başarılı', FAILED: 'Başarısız', REFUNDED: 'İade Edildi' };
+    return map[status] || status;
+  }
+
+  getCurrentPlanDef(): PlanDefinition | null {
+    const plan = this.overview()?.subscription?.plan;
+    if (!plan) return this.plans().find(p => p.key === 'SILVER') || null;
+    return this.plans().find(p => p.key === plan) || this.plans().find(p => p.key === 'SILVER') || null;
   }
 
   tryEquivalent(usdAmount: number): string {

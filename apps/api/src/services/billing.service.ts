@@ -828,21 +828,35 @@ export class BillingService {
       logger.info({ count: expiredTrials.count }, 'Expired trial subscriptions');
     }
 
-    // 2. Expire paid subscriptions whose period has ended
-    const expiredPaid = await prisma.subscription.updateMany({
+    // 2. Mark paid subscriptions as UNPAID when period ends (2-day grace period)
+    const justExpiredPaid = await prisma.subscription.updateMany({
       where: {
         status: 'ACTIVE',
         plan: { not: 'TRIAL' },
         currentPeriodEnd: { not: null, lte: now },
       },
-      data: { status: 'EXPIRED' },
+      data: { status: 'UNPAID' },
     });
-    expired += expiredPaid.count;
-    if (expiredPaid.count > 0) {
-      logger.info({ count: expiredPaid.count }, 'Expired paid subscriptions');
+    if (justExpiredPaid.count > 0) {
+      logger.info({ count: justExpiredPaid.count }, 'Subscriptions marked UNPAID (grace period started)');
     }
 
-    // 3. Mark subscriptions expiring within 3 days (for warning display)
+    // 3. Suspend UNPAID subscriptions after 2-day grace period
+    const twoDaysAgo = new Date(now.getTime() - 2 * 86400000);
+    const suspendedPaid = await prisma.subscription.updateMany({
+      where: {
+        status: 'UNPAID',
+        plan: { not: 'TRIAL' },
+        currentPeriodEnd: { not: null, lte: twoDaysAgo },
+      },
+      data: { status: 'EXPIRED' },
+    });
+    expired += suspendedPaid.count;
+    if (suspendedPaid.count > 0) {
+      logger.info({ count: suspendedPaid.count }, 'UNPAID subscriptions suspended after 2-day grace period');
+    }
+
+    // 4. Mark subscriptions expiring within 3 days (for warning display)
     const threeDaysFromNow = new Date(now.getTime() + 3 * 86400000);
     const expiringSoon = await prisma.subscription.findMany({
       where: {
@@ -881,7 +895,14 @@ export class BillingService {
       return { active: false, reason: 'CANCELLED', plan: subscription.plan };
     }
     if (subscription.status === 'UNPAID') {
-      return { active: false, reason: 'UNPAID', plan: subscription.plan };
+      // 2-day grace period: allow access but flag as unpaid
+      const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : new Date();
+      const graceDaysUsed = Math.floor((Date.now() - periodEnd.getTime()) / 86400000);
+      if (graceDaysUsed >= 2) {
+        return { active: false, reason: 'UNPAID', plan: subscription.plan };
+      }
+      // Still within grace — allow but warn
+      return { active: true, reason: 'UNPAID', plan: subscription.plan, daysRemaining: 0 };
     }
 
     // Check trial expiry
