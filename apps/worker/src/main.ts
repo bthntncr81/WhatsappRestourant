@@ -1,6 +1,7 @@
 import { getConfig } from '@whatres/config';
 import { broadcastService } from '../../api/src/services/broadcast.service';
 import { inactivityTimeoutService } from '../../api/src/services/inactivity-timeout.service';
+import { billingService } from '../../api/src/services/billing.service';
 import prisma from '../../api/src/db/prisma';
 
 const config = getConfig();
@@ -64,6 +65,22 @@ async function processInactivityTimeouts() {
   }
 }
 
+// Subscription lifecycle: runs every 5 minutes
+const SUBSCRIPTION_CHECK_INTERVAL_MS = 5 * 60_000;
+
+async function processSubscriptionLifecycle() {
+  try {
+    const result = await billingService.processSubscriptionLifecycle();
+    if (result.expired > 0 || result.warned > 0) {
+      console.log(
+        `Subscription lifecycle: ${result.expired} expired, ${result.warned} expiring soon`,
+      );
+    }
+  } catch (err) {
+    console.error('Subscription lifecycle error:', err);
+  }
+}
+
 async function main() {
   console.log('Worker is ready');
 
@@ -71,6 +88,7 @@ async function main() {
   setInterval(processCampaignSends, SEND_INTERVAL_MS);
   setInterval(syncProfiles, SYNC_INTERVAL_MS);
   setInterval(processInactivityTimeouts, INACTIVITY_CHECK_INTERVAL_MS);
+  setInterval(processSubscriptionLifecycle, SUBSCRIPTION_CHECK_INTERVAL_MS);
 
   // Run initial sync after 10 seconds
   setTimeout(syncProfiles, 10_000);

@@ -24,6 +24,7 @@ import { menuMediaRouter } from './routes/menu-media.routes';
 import { webhookRouter } from './routes/webhook.routes';
 import { integrationRouter } from './routes/integration.routes';
 import { dashboardRouter } from './routes/dashboard.routes';
+import { requireActiveSubscription } from './middleware/subscription-gate.middleware';
 import prisma from './db/prisma';
 import redis from './db/redis';
 
@@ -77,26 +78,28 @@ app.use((req, res, next) => {
 // Serve uploaded files (menu media images/PDFs)
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// Routes
+// Routes — always open (no subscription gate)
 app.use(`${config.server.apiPrefix}/health`, healthRouter);
 app.use(`${config.server.apiPrefix}/auth`, authRouter);
-app.use(`${config.server.apiPrefix}/menu`, menuRouter);
-app.use(`${config.server.apiPrefix}/whatsapp`, whatsappRouter);
-app.use(`${config.server.apiPrefix}/inbox`, inboxRouter);
-app.use(`${config.server.apiPrefix}/nlu`, nluRouter);
-app.use(`${config.server.apiPrefix}/orders`, orderRouter);
-app.use(`${config.server.apiPrefix}/print-jobs`, printJobRouter);
-app.use(`${config.server.apiPrefix}/stores`, storeRouter);
-app.use(`${config.server.apiPrefix}/chatbot`, chatbotRouter);
 app.use(`${config.server.apiPrefix}/billing`, billingRouter);
-app.use(`${config.server.apiPrefix}/payments`, paymentRouter);
-app.use(`${config.server.apiPrefix}/whatsapp-config`, whatsappConfigRouter);
-app.use(`${config.server.apiPrefix}/surveys`, surveyRouter);
-app.use(`${config.server.apiPrefix}/broadcast`, broadcastRouter);
-app.use(`${config.server.apiPrefix}/menu-media`, menuMediaRouter);
+app.use(`${config.server.apiPrefix}/whatsapp`, whatsappRouter);
+
+// Routes — gated by active subscription
+app.use(`${config.server.apiPrefix}/menu`, requireActiveSubscription, menuRouter);
+app.use(`${config.server.apiPrefix}/inbox`, requireActiveSubscription, inboxRouter);
+app.use(`${config.server.apiPrefix}/nlu`, requireActiveSubscription, nluRouter);
+app.use(`${config.server.apiPrefix}/orders`, requireActiveSubscription, orderRouter);
+app.use(`${config.server.apiPrefix}/print-jobs`, requireActiveSubscription, printJobRouter);
+app.use(`${config.server.apiPrefix}/stores`, requireActiveSubscription, storeRouter);
+app.use(`${config.server.apiPrefix}/chatbot`, requireActiveSubscription, chatbotRouter);
+app.use(`${config.server.apiPrefix}/payments`, requireActiveSubscription, paymentRouter);
+app.use(`${config.server.apiPrefix}/whatsapp-config`, requireActiveSubscription, whatsappConfigRouter);
+app.use(`${config.server.apiPrefix}/surveys`, requireActiveSubscription, surveyRouter);
+app.use(`${config.server.apiPrefix}/broadcast`, requireActiveSubscription, broadcastRouter);
+app.use(`${config.server.apiPrefix}/menu-media`, requireActiveSubscription, menuMediaRouter);
 app.use(`${config.server.apiPrefix}/webhooks`, webhookRouter);
-app.use(`${config.server.apiPrefix}/integrations`, integrationRouter);
-app.use(`${config.server.apiPrefix}/dashboard`, dashboardRouter);
+app.use(`${config.server.apiPrefix}/integrations`, requireActiveSubscription, integrationRouter);
+app.use(`${config.server.apiPrefix}/dashboard`, requireActiveSubscription, dashboardRouter);
 
 // Public endpoints (no auth required)
 app.get(`${config.server.apiPrefix}/public/busy-status/:tenantId`, async (req, res) => {

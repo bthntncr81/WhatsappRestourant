@@ -801,6 +801,118 @@ export class BillingService {
     }
   }
 
+  // ==================== SUBSCRIPTION LIFECYCLE ====================
+
+  /**
+   * Check all subscriptions for expiry/trial end. Called by worker every 5 minutes.
+   * - Trial ended → set status EXPIRED
+   * - Paid subscription period ended → set status EXPIRED
+   * - Already expired/cancelled → skip
+   */
+  async processSubscriptionLifecycle(): Promise<{ expired: number; warned: number }> {
+    const now = new Date();
+    let expired = 0;
+    let warned = 0;
+
+    // 1. Expire trials that ended
+    const expiredTrials = await prisma.subscription.updateMany({
+      where: {
+        plan: 'TRIAL',
+        status: 'ACTIVE',
+        trialEndsAt: { not: null, lte: now },
+      },
+      data: { status: 'EXPIRED' },
+    });
+    expired += expiredTrials.count;
+    if (expiredTrials.count > 0) {
+      logger.info({ count: expiredTrials.count }, 'Expired trial subscriptions');
+    }
+
+    // 2. Expire paid subscriptions whose period has ended
+    const expiredPaid = await prisma.subscription.updateMany({
+      where: {
+        status: 'ACTIVE',
+        plan: { not: 'TRIAL' },
+        currentPeriodEnd: { not: null, lte: now },
+      },
+      data: { status: 'EXPIRED' },
+    });
+    expired += expiredPaid.count;
+    if (expiredPaid.count > 0) {
+      logger.info({ count: expiredPaid.count }, 'Expired paid subscriptions');
+    }
+
+    // 3. Mark subscriptions expiring within 3 days (for warning display)
+    const threeDaysFromNow = new Date(now.getTime() + 3 * 86400000);
+    const expiringSoon = await prisma.subscription.findMany({
+      where: {
+        status: 'ACTIVE',
+        currentPeriodEnd: { not: null, gt: now, lte: threeDaysFromNow },
+      },
+      select: { tenantId: true },
+    });
+    warned = expiringSoon.length;
+
+    return { expired, warned };
+  }
+
+  /**
+   * Check if tenant's subscription is active and within limits.
+   * Used by the subscription gate middleware.
+   */
+  async isSubscriptionActive(tenantId: string): Promise<{
+    active: boolean;
+    reason?: 'EXPIRED' | 'CANCELLED' | 'UNPAID' | 'LIMIT_REACHED' | 'NO_SUBSCRIPTION';
+    plan?: string;
+    daysRemaining?: number;
+  }> {
+    const subscription = await prisma.subscription.findUnique({
+      where: { tenantId },
+    });
+
+    if (!subscription) {
+      return { active: true, reason: 'NO_SUBSCRIPTION' };
+    }
+
+    if (subscription.status === 'EXPIRED') {
+      return { active: false, reason: 'EXPIRED', plan: subscription.plan };
+    }
+    if (subscription.status === 'CANCELLED') {
+      return { active: false, reason: 'CANCELLED', plan: subscription.plan };
+    }
+    if (subscription.status === 'UNPAID') {
+      return { active: false, reason: 'UNPAID', plan: subscription.plan };
+    }
+
+    // Check trial expiry
+    if (subscription.plan === 'TRIAL' && subscription.trialEndsAt) {
+      const trialEnd = new Date(subscription.trialEndsAt);
+      if (trialEnd <= new Date()) {
+        await prisma.subscription.update({
+          where: { tenantId },
+          data: { status: 'EXPIRED' },
+        });
+        return { active: false, reason: 'EXPIRED', plan: 'TRIAL' };
+      }
+    }
+
+    // Check period end for paid plans
+    if (subscription.currentPeriodEnd) {
+      const periodEnd = new Date(subscription.currentPeriodEnd);
+      if (periodEnd <= new Date()) {
+        await prisma.subscription.update({
+          where: { tenantId },
+          data: { status: 'EXPIRED' },
+        });
+        return { active: false, reason: 'EXPIRED', plan: subscription.plan };
+      }
+      const daysRemaining = Math.ceil((periodEnd.getTime() - Date.now()) / 86400000);
+      return { active: true, plan: subscription.plan, daysRemaining };
+    }
+
+    return { active: true, plan: subscription.plan };
+  }
+
   // ==================== STORED CARDS ====================
 
   async getStoredCards(tenantId: string): Promise<StoredCardDto[]> {
