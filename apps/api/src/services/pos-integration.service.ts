@@ -31,6 +31,35 @@ interface PosMenuResponse {
   totalCategories: number;
 }
 
+interface PosBundleOptionGroupItem {
+  menuItem: { id: string; name: string };
+  extraPrice: number;
+}
+
+interface PosBundleAssignment {
+  optionGroupId: string;
+  quantity: number;
+  sortOrder?: number;
+  optionGroup: {
+    id: string;
+    name: string;
+    minSelect: number;
+    maxSelect: number;
+    items: PosBundleOptionGroupItem[];
+  };
+}
+
+interface PosBundle {
+  id: string;
+  name: string;
+  description: string | null;
+  image: string | null;
+  bundlePrice: number | string;
+  isActive: boolean;
+  categoryId: string;
+  optionGroupAssignments: PosBundleAssignment[];
+}
+
 interface MenuSyncResult {
   versionId: string;
   itemsCreated: number;
@@ -167,6 +196,86 @@ export class PosIntegrationService {
           });
         }
       }
+    }
+
+    // Sync bundle deals as menu items with option groups
+    try {
+      const bundlesResponse = await fetch(`${apiUrl}/api/bundles`, {
+        headers: { 'X-API-Key': tenant.posApiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (bundlesResponse.ok) {
+        const bundlesData = await bundlesResponse.json() as { bundles: PosBundle[] };
+        const bundles = bundlesData.bundles?.filter((b) => b.isActive) || [];
+
+        for (const bundle of bundles) {
+          const bundleCat = menuData.categories.find((c) => c.id === bundle.categoryId);
+          const catName = bundleCat?.name || 'Paket Menüler';
+
+          const bundleItem = await prisma.menuItem.create({
+            data: {
+              tenantId,
+              versionId: version.id,
+              name: bundle.name,
+              description: bundle.description,
+              basePrice: Number(bundle.bundlePrice),
+              category: catName,
+              isActive: true,
+              externalItemId: bundle.id,
+              sortOrder: itemsCreated,
+            },
+          });
+          itemsCreated++;
+
+          for (const assignment of bundle.optionGroupAssignments) {
+            const og = assignment.optionGroup;
+            if (!og?.items?.length) continue;
+
+            const group = await prisma.menuOptionGroup.create({
+              data: {
+                tenantId,
+                versionId: version.id,
+                name: `${og.name} (${assignment.quantity}x)`,
+                type: 'MULTI',
+                required: true,
+                minSelect: assignment.quantity,
+                maxSelect: assignment.quantity,
+              },
+            });
+            optionGroupsCreated++;
+
+            await prisma.menuItemOptionGroup.create({
+              data: { itemId: bundleItem.id, groupId: group.id, sortOrder: assignment.sortOrder || 0 },
+            });
+
+            for (const ogItem of og.items) {
+              await prisma.menuOption.create({
+                data: {
+                  tenantId,
+                  versionId: version.id,
+                  groupId: group.id,
+                  name: ogItem.menuItem.name,
+                  priceDelta: ogItem.extraPrice || 0,
+                  isActive: true,
+                },
+              });
+              optionsCreated++;
+            }
+          }
+
+          const synonyms = this.generateSynonyms(bundle.name);
+          for (const phrase of synonyms) {
+            await prisma.menuSynonym.create({
+              data: { tenantId, versionId: version.id, phrase, mapsToItemId: bundleItem.id, weight: 2 },
+            });
+          }
+        }
+
+        logger.info({ tenantId, bundleCount: bundles.length }, 'POS bundle menüler senkronize edildi');
+      }
+    } catch (bundleErr) {
+      logger.warn({ error: bundleErr }, 'POS bundle sync skipped (endpoint not available)');
     }
 
     // Publish the new version

@@ -258,8 +258,13 @@ export class NluOrchestratorService {
             result.draftOrderId = order.id;
           }
           const questions = missingOptions.map((m) => {
-            const optionList = m.options.map((o) => o.name).join(', ');
-            return `${m.itemName} için ${m.groupName} seçin: ${optionList}`;
+            const remaining = m.minSelect - m.selectedCount;
+            const optionList = m.options.map((o) => {
+              const extra = o.priceDelta > 0 ? ` (+${o.priceDelta}₺)` : '';
+              return `${o.name}${extra}`;
+            }).join(', ');
+            const qtyText = remaining > 1 ? ` (${remaining} adet seçin)` : '';
+            return `${m.itemName} için ${m.groupName}${qtyText}: ${optionList}`;
           });
           result.clarificationQuestion = questions.join('\n');
         } else {
@@ -389,8 +394,8 @@ export class NluOrchestratorService {
     items: LlmExtractedItem[],
     optionGroups: OptionGroupsMap,
     candidates: Array<{ menuItemId: string; name: string }>
-  ): Array<{ itemName: string; groupName: string; options: Array<{ name: string; priceDelta: number }> }> {
-    const missing: Array<{ itemName: string; groupName: string; options: Array<{ name: string; priceDelta: number }> }> = [];
+  ): Array<{ itemName: string; groupName: string; minSelect: number; maxSelect: number | null; selectedCount: number; options: Array<{ name: string; priceDelta: number }> }> {
+    const missing: Array<{ itemName: string; groupName: string; minSelect: number; maxSelect: number | null; selectedCount: number; options: Array<{ name: string; priceDelta: number }> }> = [];
 
     for (const item of items) {
       if (item.action === 'remove') continue;
@@ -403,14 +408,18 @@ export class NluOrchestratorService {
       for (const group of groups) {
         if (!group.required) continue;
 
-        const hasSelection = item.optionSelections.some(
+        const selections = item.optionSelections.filter(
           (s) => s.groupName.toLowerCase() === group.name.toLowerCase()
         );
+        const minNeeded = (group as any).minSelect || 1;
 
-        if (!hasSelection) {
+        if (selections.length < minNeeded) {
           missing.push({
             itemName,
             groupName: group.name,
+            minSelect: minNeeded,
+            maxSelect: (group as any).maxSelect || null,
+            selectedCount: selections.length,
             options: group.options.map((o) => ({ name: o.name, priceDelta: o.priceDelta })),
           });
         }

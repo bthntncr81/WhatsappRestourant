@@ -528,6 +528,8 @@ export class MenuCandidateService {
         name: og.group.name,
         type: og.group.type as 'SINGLE' | 'MULTI',
         required: og.group.required,
+        minSelect: og.group.minSelect,
+        maxSelect: og.group.maxSelect,
         options: og.group.options.map((opt) => ({
           id: opt.id,
           name: opt.name,
