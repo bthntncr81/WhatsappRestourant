@@ -247,19 +247,30 @@ export class NluOrchestratorService {
           .join(', ');
         result.clarificationQuestion = `${itemNames} icin emin olamadim. Tam olarak ne istediginizi belirtir misiniz?`;
       } else if (extraction.items.length > 0) {
-        // High confidence - create/update draft order with smart merge
-        const order = await this.createDraftOrder(
-          tenantId,
-          conversationId,
-          extraction,
-          candidates,
-          optionGroups,
-          existingDraft
-        );
-
-        if (order) {
-          result.draftOrderId = order.id;
-          result.confirmationMessage = this.generateConfirmationMessage(order);
+        // Check for missing required options before creating draft
+        const missingOptions = this.findMissingRequiredOptions(extraction.items, optionGroups, candidates);
+        if (missingOptions.length > 0) {
+          // Create draft order anyway (so items are saved), but ask for missing options
+          const order = await this.createDraftOrder(
+            tenantId, conversationId, extraction, candidates, optionGroups, existingDraft
+          );
+          if (order) {
+            result.draftOrderId = order.id;
+          }
+          const questions = missingOptions.map((m) => {
+            const optionList = m.options.map((o) => o.name).join(', ');
+            return `${m.itemName} için ${m.groupName} seçin: ${optionList}`;
+          });
+          result.clarificationQuestion = questions.join('\n');
+        } else {
+          // High confidence, all required options filled - create/update draft order
+          const order = await this.createDraftOrder(
+            tenantId, conversationId, extraction, candidates, optionGroups, existingDraft
+          );
+          if (order) {
+            result.draftOrderId = order.id;
+            result.confirmationMessage = this.generateConfirmationMessage(order);
+          }
         }
       }
 
@@ -368,6 +379,45 @@ export class NluOrchestratorService {
         clarificationQuestion: extraction.clarificationQuestion,
       },
     });
+  }
+
+  /**
+   * Check for missing required option groups on extracted items.
+   * Returns list of items with missing required selections.
+   */
+  private findMissingRequiredOptions(
+    items: LlmExtractedItem[],
+    optionGroups: OptionGroupsMap,
+    candidates: Array<{ menuItemId: string; name: string }>
+  ): Array<{ itemName: string; groupName: string; options: Array<{ name: string; priceDelta: number }> }> {
+    const missing: Array<{ itemName: string; groupName: string; options: Array<{ name: string; priceDelta: number }> }> = [];
+
+    for (const item of items) {
+      if (item.action === 'remove') continue;
+      const groups = optionGroups.get(item.menuItemId);
+      if (!groups) continue;
+
+      const candidate = candidates.find((c) => c.menuItemId === item.menuItemId);
+      const itemName = candidate?.name || item.menuItemId;
+
+      for (const group of groups) {
+        if (!group.required) continue;
+
+        const hasSelection = item.optionSelections.some(
+          (s) => s.groupName.toLowerCase() === group.name.toLowerCase()
+        );
+
+        if (!hasSelection) {
+          missing.push({
+            itemName,
+            groupName: group.name,
+            options: group.options.map((o) => ({ name: o.name, priceDelta: o.priceDelta })),
+          });
+        }
+      }
+    }
+
+    return missing;
   }
 
   /**
