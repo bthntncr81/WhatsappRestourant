@@ -81,8 +81,8 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
     key: 'SILVER',
     name: 'Gümüş',
     description: 'Küçük ve orta ölçekli işletmeler için',
-    monthlyPrice: 3600, // iyzico pricing plan: Gümüş ₺3.600/ay
-    annualPrice: 37800, // iyzico yıllık plan "GÜMÜŞ-2" sabit ₺37.800/yıl (₺3.150/ay)
+    monthlyPrice: 1000, // OtOrder WhatsApp modulu: sabit ₺1.000/ay
+    annualPrice: 10000, // yillik 10 ay (2 ay hediye)
     currency: 'TRY',
     isFree: false,
     features: {
