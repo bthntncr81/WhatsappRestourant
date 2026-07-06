@@ -738,11 +738,13 @@ router.post(
         );
       }
 
-      // 3) Kimlikleri tenant'a yaz
+      // 3) Kimlikleri tenant'a yaz — posApiUrl BASE olmali; pos-integration.service
+      //    zaten "/api/external/..." ekler, aksi halde cift path (/api/external/api/external) olur.
+      const posBaseUrl = String(connectData.config.posApiUrl || '').replace(/\/api\/external\/?$/, '');
       await prisma.tenant.update({
         where: { id: req.tenantId! },
         data: {
-          posApiUrl: connectData.config.posApiUrl,
+          posApiUrl: posBaseUrl,
           posApiKey: connectData.config.posApiKey,
         },
       });
