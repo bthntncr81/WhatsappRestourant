@@ -51,7 +51,7 @@ interface ApiResponse<T> {
     <div class="surveys-page">
       <div class="page-header">
         <h1>Memnuniyet Anketleri</h1>
-        <p class="text-secondary">Müşteri geri bildirimleri ve şikâyetler</p>
+        <p class="text-secondary">Müşteri geri bildirimleri ve anketler</p>
       </div>
 
       <!-- Stats Cards -->
@@ -66,7 +66,7 @@ interface ApiResponse<T> {
         </div>
         <div class="stat-card accent">
           <div class="stat-value">{{ stats()!.complaintCount }}</div>
-          <div class="stat-label">Şikâyet</div>
+          <div class="stat-label">Olumsuz</div>
         </div>
         <div class="stat-card warn" *ngIf="stats()!.unresolvedCount > 0">
           <div class="stat-value">{{ stats()!.unresolvedCount }}</div>
@@ -125,7 +125,7 @@ interface ApiResponse<T> {
         </div>
 
         <div class="empty-state" *ngIf="complaints().length === 0">
-          Şikâyet bulunamadı.
+          Anket bulunamadı.
         </div>
       </div>
 
@@ -135,7 +135,7 @@ interface ApiResponse<T> {
       <div class="detail-overlay" *ngIf="selectedComplaint()" (click)="closeDetail()"></div>
       <div class="detail-panel" *ngIf="selectedComplaint()">
         <div class="detail-header">
-          <h2>Şikâyet Detayı</h2>
+          <h2>Anket Detayı</h2>
           <button class="close-btn" (click)="closeDetail()">&times;</button>
         </div>
 

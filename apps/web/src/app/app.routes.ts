@@ -71,6 +71,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    path: 'kilavuz',
+    loadComponent: () =>
+      import('./pages/guide/guide.component').then((m) => m.GuideComponent),
+    canActivate: [authGuard],
+  },
+  {
     path: 'billing',
     loadComponent: () =>
       import('./pages/billing/billing.component').then((m) => m.BillingComponent),

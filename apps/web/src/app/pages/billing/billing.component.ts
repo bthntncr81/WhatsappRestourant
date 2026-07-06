@@ -105,7 +105,7 @@ interface ComparisonRow {
             (click)="selectedCycle.set('ANNUAL')"
           >
             Yıllık
-            <span class="save-chip">2 ay bedava</span>
+            <span class="save-chip">İndirimli</span>
           </button>
         </div>
       </section>
@@ -143,17 +143,19 @@ interface ComparisonRow {
                   </div>
                   <span class="period">14 gün deneme</span>
                 } @else {
-                  <div class="amount-row">
-                    <span class="currency">$</span>
-                    <span class="amount">{{ displayedPrice(plan) }}</span>
-                    <span class="per">/ay</span>
-                  </div>
-                  @if (exchangeRate()) {
-                    <span class="try-equiv">{{ tryEquivalent(displayedPrice(plan)) }}/ay</span>
-                  }
                   @if (selectedCycle() === 'ANNUAL') {
-                    <span class="period">Yıllık {{ plan.annualPrice }}$ peşin {{ tryEquivalent(plan.annualPrice) }}</span>
+                    <div class="amount-row">
+                      <span class="currency">₺</span>
+                      <span class="amount">{{ annualMonthly(plan).toLocaleString('tr-TR') }}</span>
+                      <span class="per">/ay</span>
+                    </div>
+                    <span class="period">Yıllık ₺{{ plan.annualPrice.toLocaleString('tr-TR') }} peşin</span>
                   } @else {
+                    <div class="amount-row">
+                      <span class="currency">₺</span>
+                      <span class="amount">{{ plan.monthlyPrice.toLocaleString('tr-TR') }}</span>
+                      <span class="per">/ay</span>
+                    </div>
                     <span class="period">Aylık faturalanır</span>
                   }
                 }
@@ -172,10 +174,6 @@ interface ComparisonRow {
                   <app-icon name="check" [size]="14"/>
                   <span>{{ limitText(plan.features.maxStores) }} şube</span>
                 </li>
-                <li>
-                  <app-icon name="check" [size]="14"/>
-                  <span>{{ limitText(plan.features.maxUsers) }} kullanıcı</span>
-                </li>
                 <li [class.off]="!plan.features.whatsappIntegration">
                   <app-icon [name]="plan.features.whatsappIntegration ? 'check' : 'x'" [size]="14"/>
                   <span>WhatsApp entegrasyonu</span>
@@ -187,10 +185,6 @@ interface ComparisonRow {
                 <li [class.off]="!plan.features.prioritySupport">
                   <app-icon [name]="plan.features.prioritySupport ? 'check' : 'x'" [size]="14"/>
                   <span>Öncelikli destek</span>
-                </li>
-                <li [class.off]="!plan.features.apiAccess">
-                  <app-icon [name]="plan.features.apiAccess ? 'check' : 'x'" [size]="14"/>
-                  <span>API erişimi</span>
                 </li>
               </ul>
 
@@ -245,9 +239,9 @@ interface ComparisonRow {
                 <h3>Ekstra Sipariş Paketleri</h3>
                 <p>Aylık limitiniz dolduğunda ek sipariş hakkı satın alın.</p>
                 <div class="extra-packs">
-                  <span class="pack">500 sipariş — $50</span>
-                  <span class="pack">1.000 sipariş — $85</span>
-                  <span class="pack">2.000 sipariş — $125</span>
+                  <span class="pack">500 sipariş — ₺750</span>
+                  <span class="pack">1.000 sipariş — ₺1.300</span>
+                  <span class="pack">2.000 sipariş — ₺2.200</span>
                 </div>
               </div>
             </div>
@@ -306,17 +300,6 @@ interface ComparisonRow {
                 <div class="usage-text big">
                   {{ overview()!.usage.stores.used }}
                   <span>/ {{ overview()!.usage.stores.limit === -1 ? '∞' : overview()!.usage.stores.limit }}</span>
-                </div>
-              </div>
-
-              <div class="usage-card">
-                <div class="usage-top">
-                  <app-icon name="users" [size]="16"/>
-                  <span>Kullanıcı</span>
-                </div>
-                <div class="usage-text big">
-                  {{ overview()!.usage.users.used }}
-                  <span>/ {{ overview()!.usage.users.limit === -1 ? '∞' : overview()!.usage.users.limit }}</span>
                 </div>
               </div>
             </div>
@@ -487,14 +470,14 @@ interface ComparisonRow {
             <header class="modal-head">
               <h2>{{ selectedPlanData()!.name }} planına geçiş</h2>
               <div class="modal-price">
-                {{ selectedCycle() === 'MONTHLY' ? selectedPlanData()!.monthlyPrice : selectedPlanData()!.annualPrice }}$
-                <span>/ {{ selectedCycle() === 'MONTHLY' ? 'ay' : 'yıl' }}</span>
+                @if (selectedCycle() === 'ANNUAL') {
+                  ₺{{ selectedPlanData()!.annualPrice.toLocaleString('tr-TR') }}
+                  <span>/ yıl</span>
+                } @else {
+                  ₺{{ selectedPlanData()!.monthlyPrice.toLocaleString('tr-TR') }}
+                  <span>/ ay</span>
+                }
               </div>
-              @if (exchangeRate()) {
-                <div class="modal-try-price">
-                  Ödeme: {{ tryEquivalent(selectedCycle() === 'MONTHLY' ? selectedPlanData()!.monthlyPrice : selectedPlanData()!.annualPrice) }} (anlık kur)
-                </div>
-              }
             </header>
 
             <!-- Step indicators -->
@@ -554,75 +537,28 @@ interface ComparisonRow {
                 <div class="form-actions">
                   <button type="button" class="btn btn-ghost" (click)="closeSubscribeModal()">İptal</button>
                   <button type="submit" class="btn btn-primary">
-                    Kart bilgilerine geç
+                    Ödemeye geç
                     <app-icon name="chevron-right" [size]="14"/>
                   </button>
                 </div>
               </form>
             }
 
-            <!-- Step 2: Card info -->
+            <!-- Step 2: iyzico hosted recurring subscription form (card + 3DS, inline) -->
             @if (modalStep() === 'card') {
-              <form (ngSubmit)="startPayment()" class="modal-form">
-                <div class="form-group-title">
-                  <app-icon name="credit-card" [size]="14"/>
-                  <span>Kart bilgileri</span>
-                </div>
-                <div class="secure-notice">
-                  <app-icon name="lock" [size]="14"/>
-                  <span>Kart bilgileriniz SSL ile şifrelenerek iyzico altyapısına gönderilir. Superpersonel kart verilerinizi saklamaz.</span>
-                </div>
-                <div class="form-group">
-                  <label>Kart üzerindeki isim</label>
-                  <input type="text" [(ngModel)]="cardForm.cardHolderName" name="cardHolderName" required placeholder="AD SOYAD">
-                </div>
-                <div class="form-group">
-                  <label>Kart numarası</label>
-                  <input type="text" [(ngModel)]="cardForm.cardNumber" name="cardNumber" required placeholder="0000 0000 0000 0000" maxlength="19" autocomplete="cc-number">
-                </div>
-                <div class="form-row-3">
-                  <div class="form-group">
-                    <label>Ay</label>
-                    <input type="text" [(ngModel)]="cardForm.expireMonth" name="expireMonth" required placeholder="MM" maxlength="2" autocomplete="cc-exp-month">
-                  </div>
-                  <div class="form-group">
-                    <label>Yıl</label>
-                    <input type="text" [(ngModel)]="cardForm.expireYear" name="expireYear" required placeholder="YYYY" maxlength="4" autocomplete="cc-exp-year">
-                  </div>
-                  <div class="form-group">
-                    <label>CVC</label>
-                    <input type="password" [(ngModel)]="cardForm.cvc" name="cvc" required placeholder="***" maxlength="4" autocomplete="cc-csc">
-                  </div>
-                </div>
-
+              <div class="iyzico-checkout">
                 @if (subscribeError()) {
                   <div class="form-error">
                     <app-icon name="alert-triangle" [size]="14"/>
                     {{ subscribeError() }}
                   </div>
                 }
-
+                <div id="iyzipay-checkout-form" class="responsive" style="min-height:220px;"></div>
                 <div class="form-actions">
                   <button type="button" class="btn btn-ghost" (click)="modalStep.set('buyer')">
                     <app-icon name="chevron-left" [size]="14"/> Geri
                   </button>
-                  <button type="submit" class="btn btn-primary" [disabled]="subscribing()">
-                    @if (subscribing()) {
-                      <span class="btn-spin"></span>
-                      İşleniyor…
-                    } @else {
-                      <app-icon name="lock" [size]="14"/>
-                      Ödemeyi tamamla
-                    }
-                  </button>
                 </div>
-              </form>
-            }
-
-            <!-- Step 3: 3DS iframe -->
-            @if (modalStep() === 'threeds') {
-              <div class="threeds-container">
-                <iframe #threeDSFrame class="threeds-iframe" sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-top-navigation"></iframe>
               </div>
             }
           </div>
@@ -1555,22 +1491,12 @@ export class BillingComponent implements OnInit, OnDestroy {
   plans = signal<PlanDefinition[]>([]);
   selectedCycle = signal<BillingCycle>('MONTHLY');
   selectedPlanData = signal<PlanDefinition | null>(null);
-  exchangeRate = signal<number | null>(null);
 
   showSubscribeModal = false;
   subscribing = signal(false);
   subscribeError = signal<string | null>(null);
   modalStep = signal<'buyer' | 'card' | 'threeds'>('buyer');
 
-  cardForm = {
-    cardHolderName: '',
-    cardNumber: '',
-    expireMonth: '',
-    expireYear: '',
-    cvc: '',
-  };
-
-  @ViewChild('threeDSFrame') threeDSFrame?: ElementRef<HTMLIFrameElement>;
 
   currentPlanKey = computed(() => this.overview()?.subscription?.plan ?? null);
 
@@ -1591,19 +1517,15 @@ export class BillingComponent implements OnInit, OnDestroy {
   readonly comparisonRows: ComparisonRow[] = [
     {
       label: 'Aylık sipariş limiti',
-      values: { TRIAL: '50', SILVER: '750', GOLD: '1.500', PLATINUM: '3.000' },
+      values: { TRIAL: '50', SILVER: '1.000', GOLD: '2.000', PLATINUM: '6.000' },
     },
     {
       label: 'Aylık mesaj limiti',
-      values: { TRIAL: '200', SILVER: '3.000', GOLD: '6.000', PLATINUM: '15.000' },
+      values: { TRIAL: '200', SILVER: '4.000', GOLD: '8.000', PLATINUM: '24.000' },
     },
     {
       label: 'Şube sayısı',
-      values: { TRIAL: '1', SILVER: '1', GOLD: '2', PLATINUM: '5' },
-    },
-    {
-      label: 'Kullanıcı sayısı',
-      values: { TRIAL: '2', SILVER: '3', GOLD: '5', PLATINUM: '15' },
+      values: { TRIAL: '1', SILVER: '1', GOLD: '1', PLATINUM: '3' },
     },
     {
       label: 'WhatsApp entegrasyonu',
@@ -1618,18 +1540,6 @@ export class BillingComponent implements OnInit, OnDestroy {
       values: { TRIAL: false, SILVER: false, GOLD: true, PLATINUM: true },
     },
     {
-      label: 'API erişimi',
-      values: { TRIAL: false, SILVER: false, GOLD: true, PLATINUM: true },
-    },
-    {
-      label: 'Çoklu dil',
-      values: { TRIAL: false, SILVER: false, GOLD: false, PLATINUM: true },
-    },
-    {
-      label: 'Özel markalama',
-      values: { TRIAL: false, SILVER: false, GOLD: false, PLATINUM: true },
-    },
-    {
       label: 'POS entegrasyonu',
       values: { TRIAL: false, SILVER: '+₺1.000/ay', GOLD: '+₺1.000/ay', PLATINUM: '+₺1.000/ay' },
     },
@@ -1641,6 +1551,7 @@ export class BillingComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadData();
+    this.checkRedirectStatus();
 
     // Listen for postMessage from the iyzico checkout popup (via our /callback)
     this.messageHandler = (event: MessageEvent) => {
@@ -1661,6 +1572,28 @@ export class BillingComponent implements OnInit, OnDestroy {
     window.addEventListener('message', this.messageHandler);
   }
 
+  /**
+   * After iyzico's hosted subscription form completes, the browser is full-page
+   * redirected to /api/billing/callback, which redirects back to
+   * /billing?status=success|failed. Surface that result here.
+   */
+  private checkRedirectStatus(): void {
+    try {
+      const status = new URLSearchParams(window.location.search).get('status');
+      if (status === 'success') {
+        this.dialog.success('Aboneliğiniz başarıyla aktifleştirildi!');
+        this.loadData();
+      } else if (status === 'failed') {
+        this.dialog.error('Ödeme tamamlanamadı. Lütfen tekrar deneyin.');
+      }
+      if (status) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    } catch {
+      // ignore malformed query strings
+    }
+  }
+
   ngOnDestroy(): void {
     if (this.messageHandler) {
       window.removeEventListener('message', this.messageHandler);
@@ -1670,18 +1603,12 @@ export class BillingComponent implements OnInit, OnDestroy {
   loadData(): void {
     this.loading.set(true);
 
-    this.billingService.getPlans().subscribe({
+    // Hidden ₺1 test plan is only shown when the page is opened with ?test=1.
+    const includeTest = new URLSearchParams(window.location.search).get('test') === '1';
+    this.billingService.getPlans(includeTest).subscribe({
       next: (res) => {
         if (res.success && res.data) {
           this.plans.set(res.data.plans);
-        }
-      },
-    });
-
-    this.billingService.getExchangeRate().subscribe({
-      next: (res) => {
-        if (res.success && res.data) {
-          this.exchangeRate.set(res.data.rate);
         }
       },
     });
@@ -1697,8 +1624,8 @@ export class BillingComponent implements OnInit, OnDestroy {
     });
   }
 
-  displayedPrice(plan: PlanDefinition): number {
-    if (this.selectedCycle() === 'MONTHLY') return plan.monthlyPrice;
+  /** Yıllık planın aylık karşılığı (gösterim için): annualPrice / 12, yuvarlanmış. */
+  annualMonthly(plan: PlanDefinition): number {
     return Math.round(plan.annualPrice / 12);
   }
 
@@ -1711,7 +1638,7 @@ export class BillingComponent implements OnInit, OnDestroy {
   }
 
   getPlanDisplayName(plan: string): string {
-    const map: Record<string, string> = { TRIAL: 'Deneme', SILVER: 'Gümüş', GOLD: 'Gold', PLATINUM: 'Platinyum', STARTER: 'Starter', PRO: 'Pro' };
+    const map: Record<string, string> = { TRIAL: 'Deneme', SILVER: 'Gümüş', GOLD: 'Altın', PLATINUM: 'Platin', STARTER: 'Starter', PRO: 'Pro' };
     return map[plan] || plan;
   }
 
@@ -1743,12 +1670,6 @@ export class BillingComponent implements OnInit, OnDestroy {
     return this.plans().find(p => p.key === plan) || this.plans().find(p => p.key === 'SILVER') || null;
   }
 
-  tryEquivalent(usdAmount: number): string {
-    const rate = this.exchangeRate();
-    if (!rate) return '';
-    return `≈ ${Math.round(usdAmount * rate).toLocaleString('tr-TR')} ₺`;
-  }
-
   limitText(n: number): string {
     if (n === -1) return 'Sınırsız';
     return n.toLocaleString('tr-TR');
@@ -1756,7 +1677,7 @@ export class BillingComponent implements OnInit, OnDestroy {
 
   planRank(plan: SubscriptionPlan | null): number {
     if (!plan) return 0;
-    const order: Record<SubscriptionPlan, number> = { TRIAL: 0, STARTER: 1, SILVER: 1, PRO: 2, GOLD: 2, PLATINUM: 3 };
+    const order: Record<SubscriptionPlan, number> = { TRIAL: 0, TEST: 0, STARTER: 1, SILVER: 1, PRO: 2, GOLD: 2, PLATINUM: 3 };
     return order[plan];
   }
 
@@ -1775,52 +1696,57 @@ export class BillingComponent implements OnInit, OnDestroy {
   }
 
   goToCardStep(): void {
-    this.subscribeError.set(null);
-    this.modalStep.set('card');
-  }
-
-  startPayment(): void {
     if (!this.selectedPlanData()) return;
-
-    this.subscribing.set(true);
+    const b = this.buyerForm;
+    if (!b.name || !b.surname || !b.email || !b.gsmNumber || !b.identityNumber || !b.city || !b.address) {
+      this.subscribeError.set('Lütfen tüm zorunlu alanları doldurun.');
+      return;
+    }
+    if (b.identityNumber.length !== 11) {
+      this.subscribeError.set('TC Kimlik numarası 11 haneli olmalıdır.');
+      return;
+    }
     this.subscribeError.set(null);
+    this.subscribing.set(true);
 
     this.billingService
-      .subscribe3DS({
+      .getCheckoutForm({
         planKey: this.selectedPlanData()!.key,
         billingCycle: this.selectedCycle(),
-        card: this.cardForm,
         buyer: this.buyerForm,
       })
       .subscribe({
         next: (res) => {
-          if (res.success && res.data?.threeDSHtmlContent) {
-            this.show3DSIframe(res.data.threeDSHtmlContent);
+          this.subscribing.set(false);
+          if (res.success && res.data?.checkoutFormContent) {
+            this.modalStep.set('card');
+            setTimeout(() => this.injectCheckoutForm(res.data!.checkoutFormContent), 50);
           } else {
-            this.subscribing.set(false);
-            this.subscribeError.set((res as any).error?.message || 'Ödeme başlatılamadı');
+            this.subscribeError.set((res as any).error?.message || 'Ödeme formu oluşturulamadı.');
           }
         },
         error: (err) => {
           this.subscribing.set(false);
-          this.subscribeError.set(err.error?.error?.message || 'Bir hata oluştu');
+          this.subscribeError.set(err.error?.error?.message || 'Ödeme başlatılamadı.');
         },
       });
   }
 
-  private show3DSIframe(htmlContent: string): void {
-    this.modalStep.set('threeds');
-    setTimeout(() => {
-      const iframe = this.threeDSFrame?.nativeElement;
-      if (!iframe) return;
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) return;
-      const decoded = document.createElement('textarea');
-      decoded.innerHTML = htmlContent;
-      doc.open();
-      doc.write(decoded.value);
-      doc.close();
-    }, 100);
+  private injectCheckoutForm(content: string): void {
+    const container = document.getElementById('iyzipay-checkout-form');
+    if (!container) return;
+    container.innerHTML = '';
+    const temp = document.createElement('div');
+    temp.innerHTML = content;
+    Array.from(temp.childNodes).forEach((node) => {
+      if ((node as HTMLElement).tagName !== 'SCRIPT') container.appendChild(node);
+    });
+    Array.from(temp.querySelectorAll('script')).forEach((old) => {
+      const sc = document.createElement('script');
+      if (old.src) sc.src = old.src;
+      else sc.text = old.textContent || '';
+      document.body.appendChild(sc);
+    });
   }
 
   openSubscribeModal(plan: PlanDefinition): void {
@@ -1829,6 +1755,5 @@ export class BillingComponent implements OnInit, OnDestroy {
     this.modalStep.set('buyer');
     this.subscribeError.set(null);
     this.subscribing.set(false);
-    this.cardForm = { cardHolderName: '', cardNumber: '', expireMonth: '', expireYear: '', cvc: '' };
   }
 }

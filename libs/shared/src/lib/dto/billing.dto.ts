@@ -1,6 +1,6 @@
 // ==================== SUBSCRIPTION PLANS ====================
 
-export type SubscriptionPlan = 'TRIAL' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'STARTER' | 'PRO';
+export type SubscriptionPlan = 'TRIAL' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'STARTER' | 'PRO' | 'TEST';
 export type SubscriptionStatus = 'ACTIVE' | 'PENDING' | 'CANCELLED' | 'EXPIRED' | 'UNPAID';
 export type BillingCycle = 'MONTHLY' | 'ANNUAL';
 export type TransactionType = 'SUBSCRIPTION_PAYMENT' | 'SUBSCRIPTION_UPGRADE' | 'SUBSCRIPTION_RENEWAL' | 'REFUND';
@@ -29,9 +29,10 @@ export interface ExtraOrderPack {
 }
 
 export const EXTRA_ORDER_PACKS: ExtraOrderPack[] = [
-  { orders: 500, price: 50, currency: 'USD' },
-  { orders: 1000, price: 85, currency: 'USD' },
-  { orders: 2000, price: 125, currency: 'USD' },
+  { orders: 500, price: 2250, currency: 'TRY' },
+  { orders: 1000, price: 4050, currency: 'TRY' },
+  { orders: 2000, price: 5850, currency: 'TRY' },
+  { orders: 4000, price: 7650, currency: 'TRY' },
 ];
 
 export const POS_INTEGRATION_MONTHLY_PRICE = 1000; // TL/ay
@@ -80,15 +81,15 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
     key: 'SILVER',
     name: 'Gümüş',
     description: 'Küçük ve orta ölçekli işletmeler için',
-    monthlyPrice: 80,
-    annualPrice: 840, // $70/ay × 12
-    currency: 'USD',
+    monthlyPrice: 3600, // iyzico pricing plan: Gümüş ₺3.600/ay
+    annualPrice: 37800, // iyzico yıllık plan "GÜMÜŞ-2" sabit ₺37.800/yıl (₺3.150/ay)
+    currency: 'TRY',
     isFree: false,
     features: {
-      monthlyOrderLimit: 750,
-      monthlyMessageLimit: 3000,
+      monthlyOrderLimit: 1500,
+      monthlyMessageLimit: 4000,
       maxStores: 1,
-      maxUsers: 3,
+      maxUsers: 2,
       whatsappIntegration: true,
       prioritySupport: false,
       customBranding: false,
@@ -100,22 +101,22 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
   },
   GOLD: {
     key: 'GOLD',
-    name: 'Gold',
+    name: 'Altın',
     description: 'Büyüyen işletmeler için ideal',
-    monthlyPrice: 135,
-    annualPrice: 1440, // $120/ay × 12
-    currency: 'USD',
+    monthlyPrice: 6000, // iyzico pricing plan: Altın ₺6.000/ay
+    annualPrice: 64800, // iyzico yıllık plan "ALTIN-2" sabit ₺64.800/yıl (₺5.400/ay)
+    currency: 'TRY',
     isFree: false,
     popular: true,
     features: {
-      monthlyOrderLimit: 1500,
-      monthlyMessageLimit: 6000,
-      maxStores: 2,
+      monthlyOrderLimit: 3000,
+      monthlyMessageLimit: 8000,
+      maxStores: 1,
       maxUsers: 5,
       whatsappIntegration: true,
       prioritySupport: true,
       customBranding: false,
-      apiAccess: true,
+      apiAccess: false,
       analytics: true,
       multiLanguage: false,
       posIntegration: false,
@@ -123,23 +124,23 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
   },
   PLATINUM: {
     key: 'PLATINUM',
-    name: 'Platinyum',
+    name: 'Platin',
     description: 'Yüksek hacimli işletmeler ve zincirler için',
-    monthlyPrice: 380,
-    annualPrice: 4080, // $340/ay × 12
-    currency: 'USD',
+    monthlyPrice: 18000, // iyzico pricing plan: Platinium ₺18.000/ay
+    annualPrice: 180000, // iyzico yıllık plan "Platinium-2" sabit ₺180.000/yıl (₺15.000/ay)
+    currency: 'TRY',
     isFree: false,
     features: {
-      monthlyOrderLimit: 3000,
-      monthlyMessageLimit: 15000,
-      maxStores: 5,
+      monthlyOrderLimit: 15000,
+      monthlyMessageLimit: 24000,
+      maxStores: 3,
       maxUsers: 15,
       whatsappIntegration: true,
       prioritySupport: true,
-      customBranding: true,
-      apiAccess: true,
+      customBranding: false,
+      apiAccess: false,
       analytics: true,
-      multiLanguage: true,
+      multiLanguage: false,
       posIntegration: false,
     },
   },
@@ -170,6 +171,23 @@ export const PLAN_DEFINITIONS: Record<SubscriptionPlan, PlanDefinition> = {
       monthlyOrderLimit: 2000, monthlyMessageLimit: 10000, maxStores: 3, maxUsers: 10,
       whatsappIntegration: true, prioritySupport: true, customBranding: true,
       apiAccess: true, analytics: true, multiLanguage: true, posIntegration: false,
+    },
+  },
+  // Hidden test plan — ₺1/ay. Not listed in getPlans(); only reachable via the
+  // hidden /billing?test=1 view. Used to verify the real iyzico recurring flow
+  // end-to-end without charging a full plan price. iyzico ref: IYZICO_TEST_MONTHLY_REF.
+  TEST: {
+    key: 'TEST',
+    name: 'Test (₺1)',
+    description: 'Sadece test amaçlı — ₺1/ay',
+    monthlyPrice: 1,
+    annualPrice: 1,
+    currency: 'TRY',
+    isFree: false,
+    features: {
+      monthlyOrderLimit: 50, monthlyMessageLimit: 200, maxStores: 1, maxUsers: 2,
+      whatsappIntegration: true, prioritySupport: false, customBranding: false,
+      apiAccess: false, analytics: true, multiLanguage: false, posIntegration: false,
     },
   },
 };

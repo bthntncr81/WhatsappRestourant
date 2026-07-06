@@ -63,17 +63,28 @@ import { IconComponent } from '../../shared/icon.component';
 
           <div class="form-group">
             <label for="password" class="form-label">Şifre</label>
-            <input
-              type="password"
-              id="password"
-              class="form-input"
-              [(ngModel)]="password"
-              name="password"
-              placeholder="En az 8 karakter"
-              required
-              minlength="8"
-              [disabled]="loading()"
-            />
+            <div class="password-wrap">
+              <input
+                [type]="showPassword() ? 'text' : 'password'"
+                id="password"
+                class="form-input"
+                [(ngModel)]="password"
+                name="password"
+                placeholder="En az 8 karakter"
+                required
+                minlength="8"
+                [disabled]="loading()"
+              />
+              <button
+                type="button"
+                class="password-toggle"
+                (click)="showPassword.set(!showPassword())"
+                [attr.aria-label]="showPassword() ? 'Şifreyi gizle' : 'Şifreyi göster'"
+                tabindex="-1"
+              >
+                <app-icon [name]="showPassword() ? 'eye-off' : 'eye'" [size]="18"/>
+              </button>
+            </div>
           </div>
 
           <div class="form-divider">
@@ -295,6 +306,33 @@ import { IconComponent } from '../../shared/icon.component';
         font-size: 0.875rem;
         font-weight: 500;
         color: var(--color-text-secondary);
+      }
+
+      .password-wrap {
+        position: relative;
+      }
+      .password-wrap .form-input {
+        padding-right: 44px;
+      }
+      .password-toggle {
+        position: absolute;
+        right: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        color: var(--color-text-muted);
+        cursor: pointer;
+        border-radius: var(--radius-sm);
+        transition: color var(--transition-fast);
+      }
+      .password-toggle:hover {
+        color: var(--color-text-primary);
       }
 
       .form-input {
@@ -545,6 +583,7 @@ export class RegisterComponent implements OnInit {
   name = '';
   email = '';
   password = '';
+  showPassword = signal(false);
   phone = '';
   tenantName = '';
   loading = signal(false);

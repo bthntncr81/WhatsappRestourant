@@ -261,6 +261,7 @@ export class SidebarComponent {
     { label: 'Müşteriler', icon: 'users', path: '/customers' },
     { label: 'Kampanyalar', icon: 'megaphone', path: '/campaigns' },
     { label: 'Ayarlar', icon: 'settings', path: '/settings' },
+    { label: 'Kullanım Kılavuzu', icon: 'help-circle', path: '/kilavuz' },
   ];
 
   logout(): void {

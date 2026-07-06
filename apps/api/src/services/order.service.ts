@@ -17,6 +17,7 @@ import { TEMPLATES } from './message-templates';
 import { orderPaymentService } from './order-payment.service';
 import { posIntegrationService } from './pos-integration.service';
 import { inboxService } from './inbox.service';
+import { billingService } from './billing.service';
 
 const logger = createLogger();
 
@@ -228,6 +229,17 @@ export class OrderService {
 
       return updated;
     });
+
+    // Count this toward the tenant's monthly order quota. Additions to an
+    // existing order don't count as a new order. Failures here must never block
+    // the confirmation, so we swallow errors.
+    if (!confirmedOrder.parentOrderId) {
+      try {
+        await billingService.incrementOrderUsage(tenantId);
+      } catch (error) {
+        logger.error({ error, tenantId, orderId }, 'Failed to increment order usage counter');
+      }
+    }
 
     // Send WhatsApp notification to customer
     try {

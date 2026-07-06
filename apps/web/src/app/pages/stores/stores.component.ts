@@ -234,7 +234,7 @@ import { DialogService } from '../../shared/dialog.service';
       padding: 10px 20px;
       border-radius: 8px;
       border: none;
-      background: var(--color-primary);
+      background: var(--color-accent-primary);
       color: white;
       font-weight: 500;
       cursor: pointer;
@@ -260,7 +260,7 @@ import { DialogService } from '../../shared/dialog.service';
     }
 
     .store-card:hover {
-      border-color: var(--color-primary);
+      border-color: var(--color-accent-primary);
     }
 
     .store-card.inactive {
@@ -344,9 +344,9 @@ import { DialogService } from '../../shared/dialog.service';
       width: 24px;
       height: 24px;
       border-radius: 50%;
-      border: 1px solid var(--color-primary);
+      border: 1px solid var(--color-accent-primary);
       background: transparent;
-      color: var(--color-primary);
+      color: var(--color-accent-primary);
       font-size: 1rem;
       cursor: pointer;
       display: flex;
@@ -355,7 +355,7 @@ import { DialogService } from '../../shared/dialog.service';
     }
 
     .add-rule-btn:hover {
-      background: var(--color-primary);
+      background: var(--color-accent-primary);
       color: white;
     }
 
@@ -570,7 +570,7 @@ import { DialogService } from '../../shared/dialog.service';
       padding: 10px 20px;
       border-radius: 8px;
       border: none;
-      background: var(--color-primary);
+      background: var(--color-accent-primary);
       color: white;
       cursor: pointer;
     }
@@ -587,7 +587,7 @@ import { DialogService } from '../../shared/dialog.service';
     .coords-display {
       margin-top: 8px;
       font-size: 0.85rem;
-      color: var(--color-primary);
+      color: var(--color-accent-primary);
     }
 
     /* Geo Test Section */
@@ -612,7 +612,7 @@ import { DialogService } from '../../shared/dialog.service';
       padding: 10px 20px;
       border-radius: 8px;
       border: none;
-      background: var(--color-primary);
+      background: var(--color-accent-primary);
       color: white;
       cursor: pointer;
       white-space: nowrap;
@@ -803,23 +803,19 @@ export class StoresComponent implements OnInit, OnDestroy {
 
   saveStore(): void {
     const editing = this.editingStore();
-    if (editing) {
-      this.storeService.updateStore(editing.id, this.storeForm).subscribe({
-        next: () => {
-          this.closeStoreModal();
-          this.loadStores();
-        },
-        error: (err) => console.error('Update store failed:', err),
-      });
-    } else {
-      this.storeService.createStore(this.storeForm).subscribe({
-        next: () => {
-          this.closeStoreModal();
-          this.loadStores();
-        },
-        error: (err) => console.error('Create store failed:', err),
-      });
-    }
+    const req$ = editing
+      ? this.storeService.updateStore(editing.id, this.storeForm)
+      : this.storeService.createStore(this.storeForm);
+    req$.subscribe({
+      next: () => {
+        this.closeStoreModal();
+        this.loadStores();
+        this.dialog.success(editing ? 'Şube güncellendi.' : 'Şube eklendi.');
+      },
+      error: (err) => {
+        this.dialog.error(err?.error?.error?.message || 'Şube kaydedilemedi.');
+      },
+    });
   }
 
   toggleStoreOpen(store: StoreDto): void {

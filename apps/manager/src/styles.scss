@@ -1,0 +1,27 @@
+/* Superpersonel Yönetim Paneli — global styles */
+:root {
+  --bg: #0f1115;
+  --bg2: #171a21;
+  --bg3: #1e222b;
+  --border: #2a2f3a;
+  --text: #e6e9ef;
+  --text2: #9aa3b2;
+  --accent: #3b82f6;
+  --accent-h: #2563eb;
+  --green: #10b981;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+a { color: var(--accent); text-decoration: none; }
+button { font-family: inherit; }

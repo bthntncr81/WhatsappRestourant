@@ -223,6 +223,7 @@ export class LlmOrderExtractorService {
     if (this.config.openai.apiKey) {
       this.client = new OpenAI({
         apiKey: this.config.openai.apiKey,
+        baseURL: this.config.openai.baseUrl, // Ollama/Qwen icin; bos ise OpenAI varsayilani
       });
     } else {
       logger.warn('OpenAI API key not configured - LLM extraction disabled');

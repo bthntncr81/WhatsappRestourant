@@ -6,7 +6,7 @@ import { AuthService } from './auth.service';
 
 // ==================== TYPES ====================
 
-export type SubscriptionPlan = 'TRIAL' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'STARTER' | 'PRO';
+export type SubscriptionPlan = 'TRIAL' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'STARTER' | 'PRO' | 'TEST';
 export type SubscriptionStatus = 'ACTIVE' | 'PENDING' | 'CANCELLED' | 'EXPIRED' | 'UNPAID';
 export type BillingCycle = 'MONTHLY' | 'ANNUAL';
 
@@ -121,15 +121,10 @@ export class BillingService {
 
   // ==================== PLANS ====================
 
-  getPlans(): Observable<ApiResponse<{ plans: PlanDefinition[] }>> {
+  getPlans(includeTest = false): Observable<ApiResponse<{ plans: PlanDefinition[] }>> {
+    const q = includeTest ? '?test=1' : '';
     return this.http.get<ApiResponse<{ plans: PlanDefinition[] }>>(
-      `${environment.apiBaseUrl}/billing/plans`
-    );
-  }
-
-  getExchangeRate(): Observable<ApiResponse<{ rate: number; currency: string; base: string }>> {
-    return this.http.get<ApiResponse<{ rate: number; currency: string; base: string }>>(
-      `${environment.apiBaseUrl}/billing/exchange-rate`
+      `${environment.apiBaseUrl}/billing/plans${q}`
     );
   }
 
@@ -194,23 +189,11 @@ export class BillingService {
       address: string;
       zipCode: string;
     };
-    callbackUrl: string;
+    // Built server-side from APP_BASE_URL; client value is ignored.
+    callbackUrl?: string;
   }): Observable<ApiResponse<{ checkoutFormContent: string; token: string }>> {
     return this.http.post<ApiResponse<{ checkoutFormContent: string; token: string }>>(
       `${environment.apiBaseUrl}/billing/subscribe/checkout-form`,
-      data,
-      this.headers
-    );
-  }
-
-  subscribe3DS(data: {
-    planKey: SubscriptionPlan;
-    billingCycle: BillingCycle;
-    card: { cardHolderName: string; cardNumber: string; expireMonth: string; expireYear: string; cvc: string };
-    buyer: { email: string; name: string; surname: string; gsmNumber: string; identityNumber: string; city: string; country: string; address: string; zipCode: string };
-  }): Observable<ApiResponse<{ threeDSHtmlContent: string; tryAmount: number }>> {
-    return this.http.post<ApiResponse<{ threeDSHtmlContent: string; tryAmount: number }>>(
-      `${environment.apiBaseUrl}/billing/subscribe/3ds`,
       data,
       this.headers
     );

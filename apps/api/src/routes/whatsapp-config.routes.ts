@@ -84,4 +84,18 @@ router.post(
   }
 );
 
+// Subscribe the WABA to the app (enables real message delivery to webhook) —
+// the "Subscribe webhooks" button equivalent, done from the panel.
+router.post(
+  '/subscribe',
+  async (req: Request, res: Response<ApiResponse<{ success: boolean; message: string }>>, next: NextFunction) => {
+    try {
+      const result = await whatsappConfigService.subscribeWebhook(req.tenantId!);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 export const whatsappConfigRouter = router;

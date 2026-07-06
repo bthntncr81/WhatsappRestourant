@@ -48,21 +48,23 @@ type OptionGroupsMap = Map<
   }>
 >;
 
+export interface OptionSelectionRequest {
+  itemName: string;
+  groupName: string;
+  stepNumber: number;
+  options: Array<{ id: string; name: string; priceDelta: number }>;
+}
+
 export interface OrchestrationResult {
   success: boolean;
-  /** The draft order ID if one was created/updated */
   draftOrderId?: string;
-  /** Clarification question if confidence is low */
   clarificationQuestion?: string;
-  /** Whether items were extracted */
+  /** Structured option selection for interactive list message */
+  pendingOptionSelection?: OptionSelectionRequest;
   itemsExtracted?: boolean;
-  /** Confidence score from LLM */
   confidence?: number;
-  /** The order intent saved */
   orderIntent?: OrderIntentDto;
-  /** Generated confirmation message (order summary) */
   confirmationMessage?: string;
-  /** Whether NLU needs agent handoff */
   needsAgentHandoff?: boolean;
   error?: string;
 }
@@ -236,7 +238,57 @@ export class NluOrchestratorService {
         (i) => i.action === 'add' && i.itemConfidence < 0.5
       );
 
-      if (extraction.clarificationQuestion || extraction.confidence < CONFIDENCE_THRESHOLD) {
+      // If items were found, check required options FIRST before falling back to LLM clarification
+      let hasExtractedItems = extraction.items.filter(i => i.action === 'add').length > 0;
+
+      // If LLM didn't extract items but candidates include bundle items with required options,
+      // force-add the best matching bundle candidate
+      if (!hasExtractedItems && candidates.length > 0) {
+        for (const c of candidates) {
+          const groups = optionGroups.get(c.menuItemId);
+          if (groups?.some(g => g.required)) {
+            extraction.items.push({
+              menuItemId: c.menuItemId,
+              qty: 1,
+              action: 'add',
+              optionSelections: [],
+              extras: [],
+              notes: '',
+              itemConfidence: 0.8,
+            });
+            hasExtractedItems = true;
+            break;
+          }
+        }
+      }
+
+      const missingOptionsEarly = hasExtractedItems
+        ? this.findMissingRequiredOptions(extraction.items, optionGroups, candidates)
+        : [];
+
+      if (missingOptionsEarly.length > 0) {
+        // Items found but required options missing — skip LLM clarification, use our option selection
+        const order = await this.createDraftOrder(
+          tenantId, conversationId, extraction, candidates, optionGroups, existingDraft
+        );
+        if (order) {
+          result.draftOrderId = order.id;
+        }
+        const first = missingOptionsEarly[0];
+        const stepNum = first.selectedCount + 1;
+        const cleanGroupName = first.groupName.replace(/ \(\d+x\)/, '');
+        result.pendingOptionSelection = {
+          itemName: first.itemName,
+          groupName: cleanGroupName,
+          stepNumber: stepNum,
+          options: first.options.map((o, idx) => ({
+            id: `opt_${idx}_${o.name.substring(0, 20).replace(/\s/g, '_')}`,
+            name: o.name,
+            priceDelta: o.priceDelta,
+          })),
+        };
+        result.clarificationQuestion = `${stepNum}. ${cleanGroupName} seçin:`;
+      } else if (!hasExtractedItems && (extraction.clarificationQuestion || extraction.confidence < CONFIDENCE_THRESHOLD)) {
         result.clarificationQuestion =
           extraction.clarificationQuestion ||
           'Siparisinizi tam anlayamadim. Lutfen ne istediginizi biraz daha aciklar misiniz?';
@@ -257,16 +309,21 @@ export class NluOrchestratorService {
           if (order) {
             result.draftOrderId = order.id;
           }
-          const questions = missingOptions.map((m) => {
-            const remaining = m.minSelect - m.selectedCount;
-            const optionList = m.options.map((o) => {
-              const extra = o.priceDelta > 0 ? ` (+${o.priceDelta}₺)` : '';
-              return `${o.name}${extra}`;
-            }).join(', ');
-            const qtyText = remaining > 1 ? ` (${remaining} adet seçin)` : '';
-            return `${m.itemName} için ${m.groupName}${qtyText}: ${optionList}`;
-          });
-          result.clarificationQuestion = questions.join('\n');
+          // Ask only the FIRST missing option step by step via interactive list
+          const first = missingOptions[0];
+          const stepNum = first.selectedCount + 1;
+          const cleanGroupName = first.groupName.replace(/ \(\d+x\)/, '');
+          result.pendingOptionSelection = {
+            itemName: first.itemName,
+            groupName: cleanGroupName,
+            stepNumber: stepNum,
+            options: first.options.map((o, idx) => ({
+              id: `opt_${idx}_${o.name.substring(0, 20).replace(/\s/g, '_')}`,
+              name: o.name,
+              priceDelta: o.priceDelta,
+            })),
+          };
+          result.clarificationQuestion = `${stepNum}. ${cleanGroupName} seçin:`;
         } else {
           // High confidence, all required options filled - create/update draft order
           const order = await this.createDraftOrder(

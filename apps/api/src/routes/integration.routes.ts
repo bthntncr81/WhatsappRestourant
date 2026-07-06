@@ -670,4 +670,105 @@ router.get(
   },
 );
 
+/**
+ * POST /integrations/pos/connect-otorder
+ * Tek tikla OtOrder baglantisi: restoran sahibi OtOrder hesabiyla (subdomain +
+ * e-posta + sifre) giris yapar; OtOrder tarafinda IntegrationPartner + API key
+ * otomatik uretilir, posApiUrl/posApiKey tenant'a yazilir ve menu senkronu baslar.
+ * Sifre SAKLANMAZ; yalnizca anlik login icin OtOrder'a iletilir.
+ */
+router.post(
+  '/pos/connect-otorder',
+  requireAuth,
+  requireRole(['OWNER', 'ADMIN']),
+  async (req: Request, res: Response<ApiResponse<any>>, next: NextFunction) => {
+    try {
+      const { subdomain, email, password } = req.body as {
+        subdomain?: string;
+        email?: string;
+        password?: string;
+      };
+      const sub = (subdomain || '')
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, '')
+        .replace(/\.otorder\.com.*$/, '')
+        .replace(/[^a-z0-9-]/g, '');
+      if (!sub || !email || !password) {
+        throw new AppError(400, 'INVALID_INPUT', 'Subdomain, e-posta ve sifre zorunlu');
+      }
+
+      const base = `https://${sub}.otorder.com`;
+      const timeout = { signal: AbortSignal.timeout(12000) };
+
+      // 1) OtOrder'a giris (subdomain host'u tenant'i cozer)
+      let loginRes: globalThis.Response;
+      try {
+        loginRes = await fetch(`${base}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+          ...timeout,
+        });
+      } catch {
+        throw new AppError(502, 'OTORDER_UNREACHABLE', `${sub}.otorder.com adresine ulasilamadi`);
+      }
+      const loginData = (await loginRes.json().catch(() => ({}))) as any;
+      if (!loginRes.ok || !loginData?.token) {
+        throw new AppError(401, 'OTORDER_LOGIN_FAILED', loginData?.error || 'OtOrder girisi basarisiz - bilgileri kontrol edin');
+      }
+
+      // 2) OtOrder tarafinda WhatsApp partner + API key uret
+      const webhookUrl = `${process.env.APP_BASE_URL || ''}${process.env.API_PREFIX || '/api'}/webhooks/pos/${req.tenantId}`;
+      const connectRes = await fetch(`${base}/api/integrations/whatsapp/connect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${loginData.token}`,
+        },
+        body: JSON.stringify({ webhookUrl }),
+        ...timeout,
+      });
+      const connectData = (await connectRes.json().catch(() => ({}))) as any;
+      if (!connectRes.ok || !connectData?.config?.posApiKey) {
+        throw new AppError(
+          connectRes.status === 403 ? 403 : 502,
+          'OTORDER_CONNECT_FAILED',
+          connectData?.error || 'OtOrder baglanti kurulamadi (paketinizde WhatsApp ozelligi aktif mi?)',
+        );
+      }
+
+      // 3) Kimlikleri tenant'a yaz
+      await prisma.tenant.update({
+        where: { id: req.tenantId! },
+        data: {
+          posApiUrl: connectData.config.posApiUrl,
+          posApiKey: connectData.config.posApiKey,
+        },
+      });
+      logger.info({ tenantId: req.tenantId, sub }, 'OtOrder baglantisi kuruldu');
+
+      // 4) Menuyu hemen cek (hata baglantiyi bozmaz)
+      let sync: any = null;
+      try {
+        sync = await posIntegrationService.pullMenu(req.tenantId!);
+      } catch (e) {
+        logger.warn({ error: e }, 'OtOrder ilk menu senkronu basarisiz - sonra tekrar denenebilir');
+      }
+
+      res.json({
+        success: true,
+        data: {
+          connected: true,
+          subdomain: sub,
+          posApiUrl: connectData.config.posApiUrl,
+          sync,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 export const integrationRouter = router;

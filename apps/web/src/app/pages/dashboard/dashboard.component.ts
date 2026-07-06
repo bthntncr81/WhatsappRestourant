@@ -1,8 +1,11 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { IconComponent } from '../../shared/icon.component';
 import { AuthService } from '../../services/auth.service';
+import { BillingService } from '../../services/billing.service';
+import { DialogService } from '../../shared/dialog.service';
 import { environment } from '../../../environments/environment';
 
 interface DashboardStats {
@@ -183,7 +186,7 @@ interface DashboardStats {
                   </div>
                   <div class="satisfaction-item">
                     <span class="satisfaction-value complaint-val">{{ stats()!.satisfaction.complaintCount }}</span>
-                    <span class="satisfaction-label text-muted">Şikâyet</span>
+                    <span class="satisfaction-label text-muted">Olumsuz</span>
                   </div>
                 </div>
               </div>
@@ -645,6 +648,9 @@ interface DashboardStats {
 export class DashboardComponent implements OnInit {
   private http = inject(HttpClient);
   private authService = inject(AuthService);
+  private billingService = inject(BillingService);
+  private dialog = inject(DialogService);
+  private router = inject(Router);
 
   loading = signal(true);
   error = signal<string | null>(null);
@@ -654,6 +660,51 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadStats();
+    this.checkUsageLimits();
+  }
+
+  /**
+   * On entering the dashboard, check whether the tenant has hit their monthly
+   * order or message quota. If so, show an upgrade-prompt dialog. Deduped so it
+   * appears once per session, not on every navigation.
+   */
+  private checkUsageLimits(): void {
+    this.billingService.getBillingOverview().subscribe({
+      next: (res) => {
+        if (!res.success || !res.data) return;
+        const u = res.data.usage;
+        const planName = res.data.currentPlan?.name || 'planınız';
+        const orderFull = u.orders.limit !== -1 && u.orders.used >= u.orders.limit;
+        const messageFull = u.messages.limit !== -1 && u.messages.used >= u.messages.limit;
+        if (!orderFull && !messageFull) return;
+
+        const which = orderFull && messageFull
+          ? 'aylık sipariş ve mesaj limitlerinize'
+          : orderFull
+            ? 'aylık sipariş limitinize'
+            : 'aylık mesaj limitinize';
+
+        this.dialog
+          .confirm(
+            `${planName} planının ${which} ulaştınız. ` +
+            'Kesintisiz hizmet ve daha yüksek limitler için planınızı yükseltebilirsiniz.',
+            {
+              title: 'Plan Limitine Ulaşıldı',
+              variant: 'warning',
+              size: 'large',
+              confirmText: 'Planı Yükselt',
+              cancelText: 'Daha Sonra',
+              dedupeKey: 'usage-limit-reached',
+            },
+          )
+          .then((upgrade) => {
+            if (upgrade) this.router.navigate(['/billing']);
+          });
+      },
+      error: () => {
+        // Non-critical — ignore failures so the dashboard still loads.
+      },
+    });
   }
 
   loadStats(): void {

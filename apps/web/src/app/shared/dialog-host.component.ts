@@ -14,6 +14,7 @@ import { IconComponent } from './icon.component';
         <div
           class="dialog"
           [class]="'variant-' + (dialog.variant || 'info')"
+          [class.dialog-large]="dialog.size === 'large'"
           role="dialog"
           aria-modal="true"
           (click)="$event.stopPropagation()"
@@ -104,6 +105,43 @@ import { IconComponent } from './icon.component';
         padding: 24px 24px 20px;
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
         animation: dialog-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* Large variant — used for prominent, account-blocking notices */
+      .dialog-large {
+        max-width: 600px;
+        padding: 40px 40px 32px;
+        text-align: center;
+      }
+      .dialog-large .dialog-head {
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 28px;
+      }
+      .dialog-large .dialog-icon {
+        width: 72px;
+        height: 72px;
+        border-radius: 20px;
+      }
+      .dialog-large .dialog-icon app-icon {
+        transform: scale(1.7);
+      }
+      .dialog-large .dialog-text h3 {
+        font-size: 1.6rem;
+        margin-bottom: 12px;
+      }
+      .dialog-large .dialog-text p {
+        font-size: 1.02rem;
+        line-height: 1.6;
+      }
+      .dialog-large .dialog-actions {
+        justify-content: center;
+      }
+      .dialog-large .btn {
+        padding: 14px 36px;
+        font-size: 1rem;
+        min-width: 180px;
       }
 
       @keyframes dialog-in {
@@ -325,8 +363,9 @@ export class DialogHostComponent {
   }
 
   onOverlayClick(dialog: DialogState): void {
-    // alerts can be dismissed with overlay click; confirms require explicit choice
-    if (dialog.type === 'alert') {
+    // alerts can be dismissed with overlay click (unless explicitly non-dismissible);
+    // confirms require an explicit choice
+    if (dialog.type === 'alert' && dialog.dismissible !== false) {
       this.resolve(dialog, true);
     }
   }

@@ -55,6 +55,7 @@ export function getConfig(): AppConfig {
       apiKey: env.OPENAI_API_KEY,
       orgId: env.OPENAI_ORG_ID,
       model: env.OPENAI_MODEL,
+      baseUrl: env.OPENAI_BASE_URL,
     },
     encryption: {
       key: env.ENCRYPTION_KEY,

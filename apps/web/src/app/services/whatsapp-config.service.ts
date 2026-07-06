@@ -83,4 +83,12 @@ export class WhatsAppConfigService {
       this.headers
     );
   }
+
+  subscribeWebhook(): Observable<ApiResponse<{ success: boolean; message: string }>> {
+    return this.http.post<ApiResponse<{ success: boolean; message: string }>>(
+      `${environment.apiBaseUrl}/whatsapp-config/subscribe`,
+      {},
+      this.headers
+    );
+  }
 }

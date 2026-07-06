@@ -70,6 +70,15 @@ export class WhatsAppConfigService {
     });
 
     logger.info({ tenantId }, 'WhatsApp config upserted');
+
+    // Auto-subscribe the WABA to the app so real messages reach our webhook —
+    // saves the user from manually pressing "Subscribe webhooks" in Meta.
+    // Best-effort: failures (e.g. token still propagating) don't block saving;
+    // the user can retry via the Settings button.
+    this.subscribeWebhook(tenantId).catch((error) => {
+      logger.warn({ tenantId, error }, 'Auto webhook subscribe after save failed (non-blocking)');
+    });
+
     return this.mapToDto(record);
   }
 
@@ -121,6 +130,43 @@ export class WhatsAppConfigService {
         success: false,
         message: msg,
       };
+    }
+  }
+
+  /**
+   * Subscribe the tenant's WABA to their Meta app so that incoming messages are
+   * delivered to our webhook. This is the equivalent of pressing the
+   * "Subscribe webhooks" button in the Meta panel — without it, Meta verifies
+   * the webhook (GET) but never POSTs real messages. Idempotent: calling it
+   * again on an already-subscribed WABA just returns success.
+   *
+   * POST https://graph.facebook.com/<ver>/<wabaId>/subscribed_apps
+   */
+  async subscribeWebhook(tenantId: string): Promise<{ success: boolean; message: string }> {
+    const decrypted = await this.getDecryptedConfig(tenantId);
+    if (!decrypted) {
+      throw new AppError(404, 'NOT_FOUND', 'WhatsApp config not found');
+    }
+
+    const config = getConfig();
+    const url = `${config.whatsapp.apiBaseUrl}/${decrypted.wabaId}/subscribed_apps?access_token=${encodeURIComponent(decrypted.accessToken)}`;
+
+    try {
+      const response = await fetch(url, { method: 'POST' });
+      const data = await response.json() as { success?: boolean; error?: { message?: string } };
+
+      if (!response.ok || !data.success) {
+        const errorMsg = data.error?.message || 'WABA webhook aboneliği başarısız';
+        logger.warn({ tenantId, wabaId: decrypted.wabaId, errorMsg }, 'WABA subscribe failed');
+        return { success: false, message: errorMsg };
+      }
+
+      logger.info({ tenantId, wabaId: decrypted.wabaId }, 'WABA subscribed to app (webhook delivery enabled)');
+      return { success: true, message: 'Webhook aboneliği başarılı — mesajlar artık panele iletilecek.' };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Abonelik başarısız';
+      logger.error({ tenantId, error }, 'WABA subscribe error');
+      return { success: false, message: msg };
     }
   }
 

@@ -1,7 +1,7 @@
 import prisma from '../db/prisma';
 import { inboxService } from './inbox.service';
 import { whatsappService } from './whatsapp.service';
-import { nluOrchestratorService } from './nlu/orchestrator.service';
+import { nluOrchestratorService, OptionSelectionRequest } from './nlu/orchestrator.service';
 import { whisperService } from './nlu/whisper.service';
 import { geoService } from './geo.service';
 import { orderService } from './order.service';
@@ -11,6 +11,7 @@ import { storeService } from './store.service';
 import { upsellService } from './upsell.service';
 import { surveyService } from './survey.service';
 import { reorderService } from './reorder.service';
+import { billingService } from './billing.service';
 import { TEMPLATES } from './message-templates';
 import { WHATSAPP_KVKK_MESSAGE, WHATSAPP_KVKK_ACCEPTED, WHATSAPP_MARKETING_ASK, WHATSAPP_MARKETING_ACCEPTED, WHATSAPP_MARKETING_DECLINED } from './legal-texts';
 import { createLogger } from '../logger';
@@ -107,6 +108,28 @@ export class ConversationFlowService {
         'Bot silenced — conversation is handled by an agent',
       );
       return;
+    }
+
+    // Subscription guard: if the restaurant's subscription is suspended
+    // (EXPIRED/CANCELLED, or UNPAID past the 2-day grace period), the bot stays
+    // completely silent — no auto-reply to the incoming WhatsApp message. The
+    // message is still stored (processIncomingMessage already ran); we only skip
+    // generating a bot response so a non-paying tenant gets no service.
+    //
+    // EXCEPTION: the in-panel chatbot test console (customerPhone "chatbot-*")
+    // is a developer/testing tool and must work regardless of subscription
+    // status, so the owner can always preview the flow.
+    const isChatbotTest = typeof conversation.customerPhone === 'string'
+      && conversation.customerPhone.startsWith('chatbot-');
+    if (!isChatbotTest) {
+      const sub = await billingService.isSubscriptionActive(tenantId);
+      if (!sub.active) {
+        logger.info(
+          { tenantId, conversationId, reason: sub.reason },
+          'Bot silenced — tenant subscription is not active',
+        );
+        return;
+      }
     }
 
     logger.info(
@@ -373,17 +396,25 @@ export class ConversationFlowService {
       const today = dayNames[trTime.getDay()];
       const currentTime = `${String(trTime.getHours()).padStart(2, '0')}:${String(trTime.getMinutes()).padStart(2, '0')}`;
 
-      const closedDays: string[] = wh.closed || [];
-      if (closedDays.includes(today)) {
+      const closedDays: string[] = Array.isArray(wh.closed) ? wh.closed : [];
+      const daySchedule = wh[today];
+      // Supports two UI shapes: top-level `closed: string[]` (settings) and per-day `closed: boolean` (onboarding).
+      if (closedDays.includes(today) || daySchedule?.closed === true) {
         const nextOpen = this.getNextOpenDay(wh, today);
         await this.sendText(ctx, `⏰ Bugun kapali gunumuz. ${nextOpen}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
         return 'IDLE';
       }
 
-      const daySchedule = wh[today];
-      if (daySchedule?.open && daySchedule?.close) {
-        if (currentTime < daySchedule.open || currentTime >= daySchedule.close) {
-          await this.sendText(ctx, `⏰ Su an siparis alamiyoruz. Bugunun calisma saati: ${daySchedule.open} - ${daySchedule.close}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
+      // 24h open (allDay flag, or open === close) is always open and skips the time check.
+      // Overnight ranges where close <= open (e.g. 18:00 - 03:00) span midnight.
+      const isAllDay = daySchedule?.allDay === true || (!!daySchedule?.open && daySchedule.open === daySchedule.close);
+      if (!isAllDay && daySchedule?.open && daySchedule?.close) {
+        const { open, close } = daySchedule;
+        const isOpenNow = open < close
+          ? currentTime >= open && currentTime < close
+          : currentTime >= open || currentTime < close;
+        if (!isOpenNow) {
+          await this.sendText(ctx, `⏰ Su an siparis alamiyoruz. Bugunun calisma saati: ${open} - ${close}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
           return 'IDLE';
         }
       }
@@ -438,20 +469,25 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // Greeting / thanks — friendly response without NLU
-    if (this.matchesKeyword(text, GREETING_KEYWORDS) || this.matchesKeyword(text, THANKS_KEYWORDS)) {
+    // Detect if message contains order signals (numbers, "istiyorum", etc.)
+    const orderSignalWords = ['istiyorum', 'siparis', 'sipariş', 'ver', 'getir', 'olsun', 'tane', 'adet', 'li ', 'lu ', 'lü ', 'lı '];
+    const hasOrderSignal = orderSignalWords.some(w => text.includes(w)) || /\d/.test(text);
+
+    // Greeting / thanks — only if message is PURELY a greeting (no order content)
+    const words = text.split(/\s+/).filter(w => w.length > 1);
+    if (!hasOrderSignal && words.length <= 3 && (this.matchesKeyword(text, GREETING_KEYWORDS) || this.matchesKeyword(text, THANKS_KEYWORDS))) {
       await this.sendText(ctx, TEMPLATES.greeting);
       return 'IDLE';
     }
 
     // Help request
-    if (this.matchesKeyword(text, HELP_KEYWORDS)) {
+    if (!hasOrderSignal && this.matchesKeyword(text, HELP_KEYWORDS)) {
       await this.sendText(ctx, '🤖 Size nasıl yardımcı olabilirim?\n\n• Sipariş vermek için ürün adını yazın\n• Menüyü görmek için "menü" yazın\n• Çalışma saatlerini öğrenmek için "saat kaçta açılıyorsunuz" yazın\n• Önceki siparişinizi tekrar vermek için "tekrar" yazın');
       return 'IDLE';
     }
 
-    // Menu request — send uploaded menu media (images/PDFs)
-    if (this.matchesKeyword(text, MENU_KEYWORDS)) {
+    // Menu request — only if no order signal (pure "menü göster" request)
+    if (!hasOrderSignal && this.matchesKeyword(text, MENU_KEYWORDS)) {
       const sent = await this.sendMenuMedia(ctx);
       if (!sent) {
         await this.sendText(ctx, TEMPLATES.menuNotAvailable);
@@ -528,15 +564,24 @@ export class ConversationFlowService {
       return 'AGENT_HANDOFF';
     }
 
-    if (result.draftOrderId) {
-      // Items found, draft created - show summary with buttons and move to ORDER_REVIEW
+    // Option selection needed — ask via interactive list before confirming order
+    if (result.pendingOptionSelection && result.clarificationQuestion) {
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          flowSubState: 'OPTION_SELECTION',
+          activeOrderId: result.draftOrderId || ctx.conversation.activeOrderId,
+        },
+      });
+      await this.sendOptionSelectionList(ctx, result.pendingOptionSelection);
+      return 'ORDER_COLLECTING';
+    }
+
+    if (result.draftOrderId && result.confirmationMessage) {
       await inboxService.updateConversationPhase(
         tenantId, conversationId, 'ORDER_REVIEW', result.draftOrderId,
       );
-      if (result.confirmationMessage) {
-        await this.sendOrderConfirmButtons(ctx, result.confirmationMessage);
-      }
-      // Adim 9: Erken minimum sepet uyarisi
+      await this.sendOrderConfirmButtons(ctx, result.confirmationMessage);
       await this.checkMinBasketWarning(ctx, result.draftOrderId);
       return 'ORDER_REVIEW';
     }
@@ -569,6 +614,152 @@ export class ConversationFlowService {
     const { tenantId, conversationId, message, conversation } = ctx;
     const text = normalizeTr(message.text || '');
     const buttonId = ctx.payload.interactive?.buttonReply?.id;
+
+    // Handle OPTION_SELECTION sub-state: user is selecting options for a bundle item
+    if (conversation.flowSubState === 'OPTION_SELECTION') {
+      const listReplyTitle = ctx.payload.interactive?.listReply?.title;
+      const selectedOption = listReplyTitle || text;
+      // Cancel intent can arrive as free text ("iptal") OR as a list/button
+      // reply whose title is "İptal" — in which case `text` is empty and we must
+      // inspect the selected option title too. Without this the bot keeps
+      // re-sending the option list forever instead of cancelling.
+      const cancelText = normalizeTr(selectedOption);
+
+      if (this.isFullCancelIntent(text) || this.matchesKeyword(cancelText, CANCEL_KEYWORDS)) {
+        await this.cancelActiveOrder(ctx);
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { flowSubState: null, flowMetadata: null },
+        });
+        await this.sendText(ctx, TEMPLATES.orderCancelled);
+        return 'IDLE';
+      }
+
+      // Add selected option directly to draft order item's optionsJson
+      const orderId = conversation.activeOrderId;
+      if (orderId) {
+        const orderItem = await prisma.orderItem.findFirst({
+          where: { orderId },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (orderItem) {
+          const currentOptions = (orderItem.optionsJson as any[]) || [];
+          // Find which option group this selection belongs to
+          const menuItem = await prisma.menuItem.findUnique({
+            where: { id: orderItem.menuItemId },
+            include: {
+              optionGroups: {
+                include: {
+                  group: { include: { options: true } },
+                },
+              },
+            },
+          });
+
+          let matchedGroupName = '';
+          let matchedPriceDelta = 0;
+          if (menuItem) {
+            for (const og of menuItem.optionGroups) {
+              const opt = og.group.options.find(
+                o => normalizeTr(o.name) === normalizeTr(selectedOption)
+              );
+              if (opt) {
+                // Check if this group still needs selections
+                const existingForGroup = currentOptions.filter(
+                  (co: any) => co.groupName === og.group.name
+                ).length;
+                if (existingForGroup < (og.group.maxSelect || og.group.minSelect || 1)) {
+                  matchedGroupName = og.group.name;
+                  matchedPriceDelta = Number(opt.priceDelta);
+                  break;
+                }
+              }
+            }
+          }
+
+          if (matchedGroupName) {
+            currentOptions.push({
+              groupName: matchedGroupName,
+              optionName: selectedOption,
+              priceDelta: matchedPriceDelta,
+            });
+
+            // Update order item with new option and recalculate price
+            const totalDelta = currentOptions.reduce((sum: number, o: any) => sum + (o.priceDelta || 0), 0);
+            await prisma.orderItem.update({
+              where: { id: orderItem.id },
+              data: {
+                optionsJson: currentOptions,
+                unitPrice: Number(orderItem.unitPrice) + matchedPriceDelta,
+              },
+            });
+
+            // Recalculate order total
+            const allItems = await prisma.orderItem.findMany({ where: { orderId } });
+            const newTotal = allItems.reduce((sum, i) => sum + Number(i.unitPrice) * i.qty, 0);
+            await prisma.order.update({
+              where: { id: orderId },
+              data: { totalPrice: newTotal },
+            });
+
+            // Check if more options needed
+            if (menuItem) {
+              const updatedOptions = currentOptions;
+              let nextMissing: { groupName: string; remaining: number; options: any[] } | null = null;
+
+              for (const og of menuItem.optionGroups) {
+                if (!og.group.required) continue;
+                const selectedCount = updatedOptions.filter(
+                  (co: any) => co.groupName === og.group.name
+                ).length;
+                const needed = og.group.minSelect || 1;
+                if (selectedCount < needed) {
+                  nextMissing = {
+                    groupName: og.group.name,
+                    remaining: needed - selectedCount,
+                    options: og.group.options.map(o => ({
+                      id: `opt_${o.name.substring(0, 20).replace(/\s/g, '_')}`,
+                      name: o.name,
+                      priceDelta: Number(o.priceDelta),
+                    })),
+                  };
+                  break;
+                }
+              }
+
+              if (nextMissing) {
+                const stepNum = (currentOptions.filter((co: any) => co.groupName === nextMissing!.groupName).length) + 1;
+                const cleanName = nextMissing.groupName.replace(/ \(\d+x\)/, '');
+                await this.sendOptionSelectionList(ctx, {
+                  itemName: menuItem.name,
+                  groupName: cleanName,
+                  stepNumber: stepNum,
+                  options: nextMissing.options,
+                });
+                return 'ORDER_COLLECTING';
+              }
+
+              // All options selected! Show order summary
+              await prisma.conversation.update({
+                where: { id: conversationId },
+                data: { flowSubState: null, flowMetadata: null },
+              });
+              const order = await orderService.getOrder(tenantId, orderId);
+              if (order) {
+                const summary = this.buildOrderSummary(order);
+                await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_REVIEW', orderId);
+                await this.sendOrderConfirmButtons(ctx, summary);
+                return 'ORDER_REVIEW';
+              }
+            }
+          }
+        }
+      }
+
+      await this.sendText(ctx, 'Seçiminizi anlayamadım. Lütfen listeden bir seçenek seçin veya iptal etmek için "iptal" yazın.');
+      return 'ORDER_COLLECTING';
+    }
 
     // Handle SEAMLESS_ADDITION sub-state: clarification answer for active order addition
     if (conversation.flowSubState === 'SEAMLESS_ADDITION') {
@@ -2294,11 +2485,12 @@ export class ConversationFlowService {
       mon: 'Pazartesi', tue: 'Sali', wed: 'Carsamba', thu: 'Persembe',
       fri: 'Cuma', sat: 'Cumartesi', sun: 'Pazar',
     };
-    const closedDays: string[] = wh.closed || [];
+    const closedDays: string[] = Array.isArray(wh.closed) ? wh.closed : [];
     const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     return days.map(d => {
-      if (closedDays.includes(d)) return `${dayLabels[d]}: Kapali`;
       const s = wh[d];
+      if (closedDays.includes(d) || s?.closed === true) return `${dayLabels[d]}: Kapali`;
+      if (s?.allDay === true || (s?.open && s.open === s.close)) return `${dayLabels[d]}: 24 Saat Acik`;
       if (s?.open && s?.close) return `${dayLabels[d]}: ${s.open} - ${s.close}`;
       return `${dayLabels[d]}: -`;
     }).join('\n');
@@ -2310,13 +2502,14 @@ export class ConversationFlowService {
       fri: 'Cuma', sat: 'Cumartesi', sun: 'Pazar',
     };
     const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    const closedDays: string[] = wh.closed || [];
+    const closedDays: string[] = Array.isArray(wh.closed) ? wh.closed : [];
     const startIdx = days.indexOf(currentDay);
     for (let i = 1; i <= 7; i++) {
       const nextDay = days[(startIdx + i) % 7];
-      if (!closedDays.includes(nextDay) && wh[nextDay]?.open) {
-        return `Bir sonraki acilis: ${dayLabels[nextDay]} ${wh[nextDay].open}`;
-      }
+      const s = wh[nextDay];
+      if (closedDays.includes(nextDay) || s?.closed === true) continue;
+      if (s?.allDay === true) return `Bir sonraki acilis: ${dayLabels[nextDay]} (24 saat acik)`;
+      if (s?.open) return `Bir sonraki acilis: ${dayLabels[nextDay]} ${s.open}`;
     }
     return '';
   }
@@ -2328,6 +2521,22 @@ export class ConversationFlowService {
       ctx.conversationId,
       summaryText,
       tmpl.buttons,
+    );
+  }
+
+  private async sendOptionSelectionList(ctx: FlowContext, selection: OptionSelectionRequest): Promise<void> {
+    const rows = selection.options.map((o) => ({
+      id: o.id,
+      title: o.name.substring(0, 24),
+      description: o.priceDelta > 0 ? `+${o.priceDelta} ₺` : undefined,
+    }));
+
+    await whatsappService.sendListMessage(
+      ctx.tenantId,
+      ctx.conversationId,
+      `${selection.itemName}\n${selection.stepNumber}. ${selection.groupName} seçiminiz:`,
+      'Seçenekler',
+      [{ title: selection.groupName, rows }],
     );
   }
 

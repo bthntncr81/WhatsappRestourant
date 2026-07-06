@@ -35,7 +35,7 @@ export class UpsellService {
 
   constructor() {
     if (this.config.openai.apiKey) {
-      this.client = new OpenAI({ apiKey: this.config.openai.apiKey });
+      this.client = new OpenAI({ apiKey: this.config.openai.apiKey, baseURL: this.config.openai.baseUrl });
     }
   }
 

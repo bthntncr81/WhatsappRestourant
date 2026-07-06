@@ -16,6 +16,7 @@ import { printJobRouter } from './routes/print-job.routes';
 import { storeRouter } from './routes/store.routes';
 import { chatbotRouter } from './routes/chatbot.routes';
 import billingRouter from './routes/billing.routes';
+import adminRouter from './routes/admin.routes';
 import { paymentRouter } from './routes/payment.routes';
 import { whatsappConfigRouter } from './routes/whatsapp-config.routes';
 import { surveyRouter } from './routes/survey.routes';
@@ -81,6 +82,7 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 // Routes — always open (no subscription gate)
 app.use(`${config.server.apiPrefix}/health`, healthRouter);
 app.use(`${config.server.apiPrefix}/auth`, authRouter);
+app.use(`${config.server.apiPrefix}/admin`, adminRouter);
 app.use(`${config.server.apiPrefix}/billing`, billingRouter);
 app.use(`${config.server.apiPrefix}/whatsapp`, whatsappRouter);
 

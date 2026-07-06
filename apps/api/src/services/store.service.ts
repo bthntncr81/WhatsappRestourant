@@ -1,5 +1,6 @@
 import prisma from '../db/prisma';
 import { AppError } from '../middleware/error-handler';
+import { billingService } from './billing.service';
 import { createLogger } from '../logger';
 import {
   StoreDto,
@@ -49,6 +50,11 @@ export class StoreService {
   }
 
   async createStore(tenantId: string, data: CreateStoreDto): Promise<StoreDto> {
+    // Enforce the plan's store quota — throws PLAN_LIMIT_REACHED (403) if the
+    // tenant is already at their maxStores, which the frontend turns into an
+    // upgrade-prompt dialog.
+    await billingService.assertCanAddStore(tenantId);
+
     const store = await prisma.store.create({
       data: {
         tenantId,

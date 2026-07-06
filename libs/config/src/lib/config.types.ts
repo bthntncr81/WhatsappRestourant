@@ -32,6 +32,8 @@ export interface OpenAIConfig {
   apiKey: string | undefined;
   orgId: string | undefined;
   model: string;
+  // OpenAI-uyumlu yerel LLM (Ollama/Qwen) endpoint'i; undefined = resmi OpenAI
+  baseUrl: string | undefined;
 }
 
 export interface EncryptionConfig {

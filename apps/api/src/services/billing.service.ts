@@ -2,8 +2,7 @@ import prisma from '../db/prisma';
 import { createLogger } from '../logger';
 import { AppError } from '../middleware/error-handler';
 
-import { iyzicoService, sanitizeForIyzico, formatGsmNumber } from './iyzico.service';
-import { getUsdToTryRate, convertUsdToTry } from './currency.service';
+import { iyzicoService } from './iyzico.service';
 import {
   SubscriptionPlan,
   SubscriptionStatus,
@@ -66,10 +65,13 @@ function getPlanIyzicoRef(
 export class BillingService {
   // ==================== PLANS ====================
 
-  getPlans(): PlanDefinition[] {
+  getPlans(includeTest = false): PlanDefinition[] {
     // Only show paid plans — TRIAL hidden, STARTER/PRO legacy
     const activePlans: SubscriptionPlan[] = ['SILVER', 'GOLD', 'PLATINUM'];
-    return activePlans.map((key) => PLAN_DEFINITIONS[key]);
+    const plans = activePlans.map((key) => PLAN_DEFINITIONS[key]);
+    // Hidden ₺1 test plan — only exposed when explicitly requested (?test=1).
+    if (includeTest) plans.push(PLAN_DEFINITIONS.TEST);
+    return plans;
   }
 
   getPlan(planKey: SubscriptionPlan): PlanDefinition {
@@ -261,7 +263,11 @@ export class BillingService {
   }
 
   /**
-   * Subscribe with Checkout Form (supports 3DS)
+   * Start a NATIVE iyzico recurring subscription via the Subscription Checkout
+   * Form (/v2/subscription/checkoutform/initialize). iyzico hosts the card +
+   * 3DS form and, on success, sets up automatic recurring billing on the
+   * pricing plan referenced by the env-configured refCode. Prices are FIXED
+   * TRY amounts defined on the iyzico pricing plan — no USD→TRY conversion.
    */
   async getSubscriptionCheckoutForm(
     tenantId: string,
@@ -279,51 +285,43 @@ export class BillingService {
       zipCode: string;
     },
     callbackUrl: string,
-    clientIp?: string,
-  ): Promise<{ success: boolean; checkoutFormContent?: string; token?: string; error?: string; tryAmount?: number; usdAmount?: number; exchangeRate?: number }> {
+  ): Promise<{ success: boolean; checkoutFormContent?: string; token?: string; error?: string; tryAmount?: number }> {
     const plan = this.getPlan(planKey);
 
     if (plan.isFree) {
       throw new AppError(400, 'INVALID_PLAN', 'Deneme planı ödeme gerektirmez');
     }
 
-    const usdPrice = billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.annualPrice;
-    const rate = await getUsdToTryRate();
-    const tryPrice = convertUsdToTry(usdPrice, rate);
-    const tryPriceStr = tryPrice.toFixed(2);
+    const iyzicoPlanRef = getPlanIyzicoRef(planKey, billingCycle);
+    if (!iyzicoPlanRef) {
+      throw new AppError(
+        500,
+        'IYZICO_PLAN_NOT_CONFIGURED',
+        `${plan.name} planı için ${billingCycle === 'MONTHLY' ? 'aylık' : 'yıllık'} iyzico abonelik planı yapılandırılmamış. IYZICO_${planKey}_${billingCycle}_REF env değişkenini ayarlayın.`,
+      );
+    }
 
-    logger.info({ planKey, billingCycle, usdPrice, rate, tryPrice }, 'USD→TRY conversion for subscription');
+    // Fixed TRY price from the iyzico pricing plan (mirrored in PLAN_DEFINITIONS)
+    const tryPrice = billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.annualPrice;
 
-    const conversationId = `SUB-${tenantId}-${Date.now()}`;
-    const basketId = `BASKET-${tenantId}-${planKey}-${billingCycle}`;
+    // Stable customer ref per tenant so iyzico keeps one parent record per tenant
+    const customerRefCode = `CUST-${tenantId}`;
 
-    const result = await iyzicoService.initializePlatformCheckoutForm({
-      price: tryPriceStr,
-      basketId,
-      conversationId,
-      callbackUrl,
-      buyer: {
-        id: `BUYER-${tenantId}`,
-        name: buyer.name,
-        surname: buyer.surname,
-        gsmNumber: buyer.gsmNumber,
-        email: buyer.email,
-        identityNumber: buyer.identityNumber,
-        ip: clientIp || '127.0.0.1',
+    const result = await iyzicoService.initializeSubscriptionCheckoutForm({
+      pricingPlanRefCode: iyzicoPlanRef,
+      customerRefCode,
+      email: buyer.email,
+      name: buyer.name,
+      surname: buyer.surname,
+      gsmNumber: buyer.gsmNumber,
+      identityNumber: buyer.identityNumber,
+      address: {
         city: buyer.city,
         country: buyer.country,
         address: buyer.address,
         zipCode: buyer.zipCode,
       },
-      basketItems: [
-        {
-          id: `PLAN-${planKey}-${billingCycle}`,
-          name: `${plan.name} Plan (${billingCycle === 'MONTHLY' ? 'Aylık' : 'Yıllık'})`,
-          category1: 'Yazılım Aboneliği',
-          itemType: 'VIRTUAL',
-          price: tryPriceStr,
-        },
-      ],
+      callbackUrl,
     });
 
     if (result.success && result.token) {
@@ -337,16 +335,17 @@ export class BillingService {
           plan: planKey,
           billingCycle,
           iyzicoConversationId: result.token,
-          metadata: { usdPrice, exchangeRate: rate, tryPrice },
+          metadata: { tryPrice, pricingPlanRefCode: iyzicoPlanRef },
         },
       });
     }
 
     return {
-      ...result,
+      success: result.success,
+      checkoutFormContent: result.checkoutFormContent,
+      token: result.token,
+      error: result.error,
       tryAmount: tryPrice,
-      usdAmount: usdPrice,
-      exchangeRate: rate,
     };
   }
 
@@ -370,114 +369,8 @@ export class BillingService {
     return !!recent;
   }
 
-  async start3DSPayment(
-    tenantId: string,
-    planKey: SubscriptionPlan,
-    billingCycle: BillingCycle,
-    card: { cardHolderName: string; cardNumber: string; expireMonth: string; expireYear: string; cvc: string },
-    buyer: { email: string; name: string; surname: string; gsmNumber: string; identityNumber: string; city: string; country: string; address: string; zipCode: string },
-    callbackUrl: string,
-    clientIp: string,
-  ): Promise<{ success: boolean; threeDSHtmlContent?: string; error?: string; tryAmount?: number }> {
-    const plan = this.getPlan(planKey);
-    if (plan.isFree) throw new AppError(400, 'INVALID_PLAN', 'Deneme planı ödeme gerektirmez');
-
-    const usdPrice = billingCycle === 'MONTHLY' ? plan.monthlyPrice : plan.annualPrice;
-    const rate = await getUsdToTryRate();
-    const tryPrice = convertUsdToTry(usdPrice, rate);
-    const tryPriceStr = tryPrice.toFixed(2);
-    const conversationId = `SUB3DS-${tenantId}-${Date.now()}`;
-    const basketId = `BASKET-${tenantId}-${planKey}-${billingCycle}`;
-
-    logger.info({ planKey, billingCycle, usdPrice, rate, tryPrice }, '3DS payment: USD→TRY');
-
-    const result = await iyzicoService.initializePlatform3DS({
-      price: tryPriceStr,
-      basketId,
-      conversationId,
-      callbackUrl,
-      card,
-      buyer: {
-        id: `BUYER-${tenantId}`,
-        name: buyer.name, surname: buyer.surname,
-        gsmNumber: buyer.gsmNumber, email: buyer.email,
-        identityNumber: buyer.identityNumber, ip: clientIp,
-        city: buyer.city, country: buyer.country, address: buyer.address, zipCode: buyer.zipCode,
-      },
-      basketItems: [{
-        id: `PLAN-${planKey}-${billingCycle}`,
-        name: `${plan.name} Plan (${billingCycle === 'MONTHLY' ? 'Aylık' : 'Yıllık'})`,
-        category1: 'Yazılım Aboneliği',
-        itemType: 'VIRTUAL',
-        price: tryPriceStr,
-      }],
-    });
-
-    if (result.success && result.paymentId) {
-      await prisma.billingTransaction.create({
-        data: {
-          tenantId, type: 'SUBSCRIPTION_PAYMENT', status: 'PENDING',
-          amount: tryPrice, currency: 'TRY',
-          plan: planKey, billingCycle,
-          iyzicoPaymentId: result.paymentId,
-          iyzicoConversationId: conversationId,
-          metadata: { usdPrice, exchangeRate: rate, tryPrice },
-        },
-      });
-    }
-
-    return { success: result.success, threeDSHtmlContent: result.threeDSHtmlContent, error: result.error, tryAmount: tryPrice };
-  }
-
-  async complete3DSPayment(paymentId: string): Promise<{
-    success: boolean;
-    alreadyProcessed?: boolean;
-    subscription?: SubscriptionDto;
-    error?: string;
-  }> {
-    const transaction = await prisma.billingTransaction.findFirst({
-      where: { iyzicoPaymentId: paymentId, type: 'SUBSCRIPTION_PAYMENT' },
-    });
-    if (!transaction) {
-      return { success: false, error: 'Ödeme oturumu bulunamadı' };
-    }
-    if (transaction.status === 'SUCCESS') {
-      const existing = await this.getSubscription(transaction.tenantId);
-      return { success: true, alreadyProcessed: true, subscription: existing || undefined };
-    }
-    if (transaction.status === 'FAILED') {
-      return { success: false, alreadyProcessed: true, error: transaction.errorMessage || 'Ödeme reddedildi' };
-    }
-
-    const result = await iyzicoService.completePlatform3DS(paymentId);
-
-    if (!result.success || result.paymentStatus !== 'SUCCESS') {
-      await prisma.billingTransaction.update({
-        where: { id: transaction.id },
-        data: { status: 'FAILED', errorMessage: result.error || `Durum: ${result.paymentStatus}`, processedAt: new Date() },
-      });
-      return { success: false, error: result.error || 'Ödeme doğrulanamadı' };
-    }
-
-    if (!transaction.plan || !transaction.billingCycle) {
-      return { success: false, error: 'İşlem verisi eksik' };
-    }
-
-    const subscription = await this.activateSubscription(
-      transaction.tenantId, transaction.plan, transaction.billingCycle, paymentId, `CUST-${transaction.tenantId}`,
-    );
-
-    await prisma.billingTransaction.update({
-      where: { id: transaction.id },
-      data: { status: 'SUCCESS', processedAt: new Date() },
-    });
-
-    logger.info({ tenantId: transaction.tenantId, plan: transaction.plan, paymentId }, 'Subscription activated via 3DS');
-    return { success: true, subscription };
-  }
-
   /**
-   * Complete a 3DS subscription checkout flow. Called from
+   * Complete a native recurring subscription checkout flow. Called from
    * /api/billing/callback after iyzico POSTs the token back to us.
    *
    * Looks up the PENDING BillingTransaction by token, retrieves the
@@ -511,18 +404,25 @@ export class BillingService {
       return { success: false, alreadyProcessed: true, error: transaction.errorMessage || 'Ödeme reddedildi' };
     }
 
-    const result = await iyzicoService.retrievePlatformCheckoutFormResult(token);
+    const result = await iyzicoService.retrieveSubscriptionCheckoutFormResult(token);
 
-    if (!result.success || result.paymentStatus !== 'SUCCESS') {
+    // A successful subscription checkout returns a subscription referenceCode.
+    // iyzico statuses: ACTIVE / PENDING / UNPAID / CANCELED / EXPIRED.
+    const accepted = result.success
+      && !!result.referenceCode
+      && result.subscriptionStatus !== 'CANCELED'
+      && result.subscriptionStatus !== 'EXPIRED';
+
+    if (!accepted) {
       await prisma.billingTransaction.update({
         where: { id: transaction.id },
         data: {
           status: 'FAILED',
-          errorMessage: result.error || `Durum: ${result.paymentStatus || 'bilinmiyor'}`,
+          errorMessage: result.error || `Abonelik durumu: ${result.subscriptionStatus || 'bilinmiyor'}`,
           processedAt: new Date(),
         },
       });
-      return { success: false, error: result.error || 'Ödeme sonucu doğrulanamadı' };
+      return { success: false, error: result.error || 'Abonelik doğrulanamadı' };
     }
 
     if (!transaction.plan || !transaction.billingCycle) {
@@ -533,25 +433,124 @@ export class BillingService {
       transaction.tenantId,
       transaction.plan,
       transaction.billingCycle,
-      result.paymentId || token,
-      `CUST-${transaction.tenantId}`,
+      result.referenceCode!,
+      result.parentReferenceCode || `CUST-${transaction.tenantId}`,
     );
 
     await prisma.billingTransaction.update({
       where: { id: transaction.id },
       data: {
         status: 'SUCCESS',
-        iyzicoPaymentId: result.paymentId,
+        iyzicoPaymentId: result.referenceCode,
         processedAt: new Date(),
       },
     });
 
     logger.info(
-      { tenantId: transaction.tenantId, plan: transaction.plan, paymentId: result.paymentId, tryAmount: result.price },
-      'Subscription activated via checkout form (TRY payment)',
+      { tenantId: transaction.tenantId, plan: transaction.plan, subscriptionRef: result.referenceCode, status: result.subscriptionStatus },
+      'Native recurring subscription activated via checkout form',
     );
 
     return { success: true, subscription };
+  }
+
+  /**
+   * Handle an iyzico SUBSCRIPTION webhook event. iyzico calls our
+   * /api/billing/webhook/iyzico endpoint on recurring lifecycle events
+   * (successful renewal charge, failed charge, cancellation, expiry).
+   *
+   * This is what keeps the LOCAL subscription period in sync with iyzico's
+   * automatic recurring billing. Without it, the worker lifecycle job would
+   * wrongly mark a still-active subscription UNPAID/EXPIRED after the first
+   * period ends. The webhook URL must be configured in the iyzico panel.
+   *
+   * Defensive parsing: iyzico's payload field names vary by event, so we probe
+   * several candidates and classify the event by keyword.
+   */
+  async handleSubscriptionWebhook(payload: any): Promise<{ handled: boolean }> {
+    const eventType: string = (
+      payload?.iyziEventType ||
+      payload?.eventType ||
+      payload?.subscriptionStatus ||
+      ''
+    ).toString().toLowerCase();
+
+    const subRef: string | undefined =
+      payload?.subscriptionReferenceCode ||
+      payload?.iyziSubscriptionReferenceCode ||
+      payload?.data?.subscriptionReferenceCode ||
+      payload?.referenceCode;
+
+    if (!subRef) {
+      logger.warn({ eventType }, 'iyzico subscription webhook: no subscriptionReferenceCode in payload');
+      return { handled: false };
+    }
+
+    const subscription = await prisma.subscription.findFirst({
+      where: { iyzicoSubscriptionRef: subRef },
+    });
+    if (!subscription) {
+      logger.warn({ subRef, eventType }, 'iyzico subscription webhook: no local subscription for ref');
+      return { handled: false };
+    }
+
+    const tenantId = subscription.tenantId;
+    const isCanceled = eventType.includes('cancel');
+    const isExpired = eventType.includes('expire');
+    const isFailure = eventType.includes('fail') || eventType.includes('unpaid');
+    const isSuccess =
+      eventType.includes('success') ||
+      eventType.includes('active') ||
+      eventType.includes('renew') ||
+      eventType.includes('paid');
+
+    if (isCanceled) {
+      await prisma.subscription.update({
+        where: { tenantId },
+        data: { status: 'CANCELLED', cancelledAt: new Date(), autoRenew: false },
+      });
+    } else if (isExpired) {
+      await prisma.subscription.update({ where: { tenantId }, data: { status: 'EXPIRED' } });
+    } else if (isFailure) {
+      await prisma.subscription.update({ where: { tenantId }, data: { status: 'UNPAID' } });
+    } else if (isSuccess) {
+      // Recurring charge succeeded → roll the local period forward by one cycle
+      const cycle = subscription.billingCycle as BillingCycle;
+      const periodEnd = new Date();
+      if (cycle === 'ANNUAL') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+      else periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+      await prisma.subscription.update({
+        where: { tenantId },
+        data: {
+          status: 'ACTIVE',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: periodEnd,
+          cancelAtPeriodEnd: false,
+        },
+      });
+
+      const plan = PLAN_DEFINITIONS[subscription.plan as SubscriptionPlan];
+      await prisma.billingTransaction.create({
+        data: {
+          tenantId,
+          type: 'SUBSCRIPTION_RENEWAL',
+          status: 'SUCCESS',
+          amount: plan ? (cycle === 'ANNUAL' ? plan.annualPrice : plan.monthlyPrice) : 0,
+          currency: 'TRY',
+          plan: subscription.plan,
+          billingCycle: cycle,
+          iyzicoPaymentId: subRef,
+          processedAt: new Date(),
+        },
+      });
+    } else {
+      logger.info({ subRef, eventType }, 'iyzico subscription webhook: unhandled event type');
+      return { handled: false };
+    }
+
+    logger.info({ tenantId, subRef, eventType }, 'iyzico subscription webhook handled');
+    return { handled: true };
   }
 
   /**
@@ -762,15 +761,64 @@ export class BillingService {
     remaining: number;
   }> {
     const subscription = await this.getOrCreateSubscription(tenantId);
-    
+
     const used = type === 'orders' ? subscription.ordersUsed : subscription.messagesUsed;
-    const limit = type === 'orders' ? subscription.monthlyOrderLimit : subscription.monthlyMessageLimit;
-    
+    // Read the limit from the CURRENT plan definition rather than the cached
+    // value on the subscription row, so plan-limit changes apply immediately to
+    // existing subscribers without needing a re-subscribe.
+    const plan = PLAN_DEFINITIONS[subscription.plan] || PLAN_DEFINITIONS.SILVER;
+    const limit = type === 'orders' ? plan.features.monthlyOrderLimit : plan.features.monthlyMessageLimit;
+
     // -1 means unlimited
     const allowed = limit === -1 || used < limit;
     const remaining = limit === -1 ? -1 : Math.max(0, limit - used);
 
     return { allowed, used, limit, remaining };
+  }
+
+  /**
+   * Check whether the tenant can open another store without exceeding their
+   * plan's store quota.
+   *
+   * The quota is read from the CURRENT plan definition (PLAN_DEFINITIONS), not
+   * from the cached number on the subscription row — so plan-limit changes take
+   * effect immediately for everyone without a re-subscribe.
+   *
+   * Throws a 403 PLAN_LIMIT_REACHED AppError (with structured details the
+   * frontend uses to show the upgrade dialog) when the limit is hit.
+   */
+  async assertCanAddStore(tenantId: string): Promise<void> {
+    const subscription = await this.getOrCreateSubscription(tenantId);
+    const plan = PLAN_DEFINITIONS[subscription.plan] || PLAN_DEFINITIONS.SILVER;
+
+    const limit = plan.features.maxStores;
+    if (limit === -1) return; // unlimited
+
+    const current = await prisma.store.count({ where: { tenantId } });
+
+    if (current >= limit) {
+      const nextPlan = this.nextPlanName(subscription.plan);
+      throw new AppError(403, 'PLAN_LIMIT_REACHED',
+        `${plan.name} planınız en fazla ${limit} şube hakkı veriyor. ` +
+        (nextPlan
+          ? `Daha fazlası için ${nextPlan} planına yükseltin.`
+          : 'Daha fazlası için bizimle iletişime geçin.'),
+        { resource: 'stores', limit, current, plan: subscription.plan, suggestedPlan: this.nextPlanKey(subscription.plan) },
+      );
+    }
+  }
+
+  /** The next paid plan up from the given plan (for upgrade suggestions). */
+  private nextPlanKey(plan: SubscriptionPlan): SubscriptionPlan | null {
+    const ladder: SubscriptionPlan[] = ['SILVER', 'GOLD', 'PLATINUM'];
+    const i = ladder.indexOf(plan);
+    if (i === -1 || i === ladder.length - 1) return null;
+    return ladder[i + 1];
+  }
+
+  private nextPlanName(plan: SubscriptionPlan): string | null {
+    const next = this.nextPlanKey(plan);
+    return next ? PLAN_DEFINITIONS[next].name : null;
   }
 
   /**

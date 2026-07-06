@@ -719,6 +719,7 @@ enum SubscriptionPlan {
   SILVER
   GOLD
   PLATINUM
+  TEST
 }
 
 enum SubscriptionStatus {

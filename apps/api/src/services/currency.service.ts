@@ -6,6 +6,8 @@ let cachedRate: { rate: number; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 export async function getUsdToTryRate(): Promise<number> {
+  // PRICING_CURRENCY=TRY: plan fiyatlari dogrudan TL kabul edilir (kur donusumu yok)
+  if (process.env.PRICING_CURRENCY === 'TRY') return 1;
   if (cachedRate && Date.now() - cachedRate.fetchedAt < CACHE_TTL_MS) {
     return cachedRate.rate;
   }

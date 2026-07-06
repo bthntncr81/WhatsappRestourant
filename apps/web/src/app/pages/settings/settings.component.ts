@@ -145,6 +145,9 @@ import { DialogService } from '../../shared/dialog.service';
                     <button type="button" class="btn btn-secondary" (click)="testConnection()" [disabled]="isTesting()">
                       {{ isTesting() ? 'Test ediliyor...' : 'Bağlantıyı Test Et' }}
                     </button>
+                    <button type="button" class="btn btn-secondary" (click)="subscribeWebhook()" [disabled]="isSubscribing()">
+                      {{ isSubscribing() ? 'Etkinleştiriliyor...' : 'Webhook\\'u Etkinleştir' }}
+                    </button>
                     <button type="button" class="btn btn-danger" (click)="disconnectWhatsApp()">
                       Bağlantıyı Kes
                     </button>
@@ -346,6 +349,40 @@ import { DialogService } from '../../shared/dialog.service';
               </div>
             }
 
+            <!-- OtOrder tek-tik baglanti -->
+            <div class="setting-item column otorder-connect">
+              <span class="setting-label">OtOrder'a Bağla</span>
+              <span class="setting-description text-muted">
+                OtOrder hesabınızla giriş yapın; API anahtarı otomatik oluşturulur ve menünüz senkronlanır.
+              </span>
+              <form [formGroup]="otorderForm" (ngSubmit)="connectOtorder()" class="otorder-form">
+                <div class="otorder-row">
+                  <input type="text" class="setting-input" formControlName="subdomain" placeholder="restoraniniz" />
+                  <span class="otorder-suffix">.otorder.com</span>
+                </div>
+                <input type="email" class="setting-input" formControlName="email" placeholder="OtOrder e-postanız" />
+                <input type="password" class="setting-input" formControlName="password" placeholder="OtOrder şifreniz" autocomplete="off" />
+                <button type="submit" class="btn btn-primary" [disabled]="isOtorderConnecting() || otorderForm.invalid">
+                  {{ isOtorderConnecting() ? 'Bağlanıyor...' : 'OtOrder ile Bağlan' }}
+                </button>
+              </form>
+              @if (otorderResult()) {
+                <div class="test-result success">
+                  <p class="test-message">✓ {{ otorderResult()!.subdomain }}.otorder.com bağlandı</p>
+                  @if (otorderResult()!.sync) {
+                    <p class="test-detail">
+                      Menü senkronu: {{ otorderResult()!.sync!.categoriesFound || 0 }} kategori,
+                      {{ otorderResult()!.sync!.itemsCreated || 0 }} ürün
+                    </p>
+                  }
+                </div>
+              }
+              @if (otorderError()) {
+                <div class="error-banner">{{ otorderError() }}</div>
+              }
+              <span class="setting-description text-muted otorder-divider">veya API bilgilerini elle girin:</span>
+            </div>
+
             <!-- POS Credentials Form -->
             <form [formGroup]="posForm" (ngSubmit)="savePosConfig()">
               <div class="setting-item column">
@@ -421,6 +458,8 @@ import { DialogService } from '../../shared/dialog.service';
             <div class="setting-item column">
               <span class="setting-description text-muted">
                 Çalışma saatleri dışında gelen siparişlerde müşteri bilgilendirilir.
+                Kesintisiz çalışıyorsanız <strong>24 saat</strong> kutusunu işaretleyin.
+                Kapanış saati açılıştan önceyse (ör. 18:00 - 03:00) gece yarısını geçen çalışma olarak kabul edilir.
               </span>
             </div>
             @for (day of weekDays; track day.key) {
@@ -431,11 +470,19 @@ import { DialogService } from '../../shared/dialog.service';
                   Açık
                 </label>
                 @if (!isDayClosed(day.key)) {
-                  <input type="time" [value]="getDayOpen(day.key)" (change)="setDayTime(day.key, 'open', $event)"
-                         style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 12px;"/>
-                  <span style="font-size: 12px;">-</span>
-                  <input type="time" [value]="getDayClose(day.key)" (change)="setDayTime(day.key, 'close', $event)"
-                         style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 12px;"/>
+                  <label style="display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" [checked]="isDayAllDay(day.key)" (change)="toggleDayAllDay(day.key)"/>
+                    24 saat
+                  </label>
+                  @if (!isDayAllDay(day.key)) {
+                    <input type="time" [value]="getDayOpen(day.key)" (change)="setDayTime(day.key, 'open', $event)"
+                           style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 12px;"/>
+                    <span style="font-size: 12px;">-</span>
+                    <input type="time" [value]="getDayClose(day.key)" (change)="setDayTime(day.key, 'close', $event)"
+                           style="padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-primary); font-size: 12px;"/>
+                  } @else {
+                    <span style="font-size: 12px; color: var(--color-text-secondary);">Kesintisiz açık</span>
+                  }
                 }
               </div>
             }
@@ -447,30 +494,6 @@ import { DialogService } from '../../shared/dialog.service';
             @if (hoursSaved()) {
               <div class="test-result success">
                 <p class="test-message">Çalışma saatleri kaydedildi!</p>
-              </div>
-            }
-          </div>
-        </div>
-
-        <!-- Google Maps API -->
-        <div class="settings-section">
-          <h2 class="section-title">Google Maps API</h2>
-          <div class="settings-card">
-            <div class="setting-item column">
-              <span class="setting-label">API Key</span>
-              <span class="setting-description text-muted">
-                Konum servisleri için gerekli. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: var(--color-accent-primary);">Google Cloud Console</a> > Credentials > Create Credentials > API Key ile oluşturun. Geocoding API ve Maps JavaScript API aktif olmalı.
-              </span>
-              <input type="text" class="setting-input" [value]="googleMapsKey()" (input)="googleMapsKey.set($any($event.target).value)" placeholder="AIzaSy..."/>
-            </div>
-            <div class="setting-item action-row">
-              <button class="btn btn-primary" (click)="saveGoogleMaps()" [disabled]="isSavingGoogleMaps()">
-                {{ isSavingGoogleMaps() ? 'Kaydediliyor...' : 'Kaydet' }}
-              </button>
-            </div>
-            @if (googleMapsSaved()) {
-              <div class="test-result success">
-                <p class="test-message">Google Maps API key kaydedildi!</p>
               </div>
             }
           </div>
@@ -646,6 +669,12 @@ import { DialogService } from '../../shared/dialog.service';
   styles: [
     `
       .settings { max-width: 800px; margin: 0 auto; }
+      .otorder-connect { border-bottom: 1px dashed var(--color-border); }
+      .otorder-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+      .otorder-row { display: flex; align-items: center; gap: 8px; }
+      .otorder-row .setting-input { flex: 1; }
+      .otorder-suffix { color: var(--color-text-secondary); font-size: 0.9rem; white-space: nowrap; }
+      .otorder-divider { margin-top: 14px; }
       .settings-header { margin-bottom: var(--spacing-xl); }
       .settings-title { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: var(--spacing-xs); }
       .settings-section { margin-bottom: var(--spacing-xl); }
@@ -867,6 +896,7 @@ export class SettingsComponent implements OnInit {
   isLoading = signal(false);
   isSaving = signal(false);
   isTesting = signal(false);
+  isSubscribing = signal(false);
   testResult = signal<WhatsAppTestConnectionDto | null>(null);
   errorMessage = signal<string | null>(null);
   copyFeedback = signal<string | null>(null);
@@ -886,6 +916,45 @@ export class SettingsComponent implements OnInit {
     apiKey: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     locationId: new FormControl('', { nonNullable: true }),
   });
+
+  // OtOrder tek-tik baglanti
+  isOtorderConnecting = signal(false);
+  otorderResult = signal<{ subdomain: string; sync?: { categoriesFound?: number; itemsCreated?: number } | null } | null>(null);
+  otorderError = signal<string | null>(null);
+  otorderForm = new FormGroup({
+    subdomain: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    email: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email] }),
+    password: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+  });
+
+  connectOtorder() {
+    if (this.otorderForm.invalid || this.isOtorderConnecting()) return;
+    this.isOtorderConnecting.set(true);
+    this.otorderError.set(null);
+    this.otorderResult.set(null);
+    this.http
+      .post<any>(
+        `${environment.apiBaseUrl}/integrations/pos/connect-otorder`,
+        this.otorderForm.getRawValue(),
+        { headers: this.authService.getAuthHeaders() },
+      )
+      .subscribe({
+        next: (res) => {
+          this.isOtorderConnecting.set(false);
+          if (res.success) {
+            this.otorderResult.set(res.data);
+            this.otorderForm.controls.password.reset();
+            this.loadPosConfig();
+          } else {
+            this.otorderError.set(res.error?.message || 'Baglanti kurulamadi');
+          }
+        },
+        error: (err) => {
+          this.isOtorderConnecting.set(false);
+          this.otorderError.set(err?.error?.error?.message || err?.error?.message || 'Baglanti kurulamadi');
+        },
+      });
+  }
 
   // Pickup Discount
   pickupDiscountPercent = signal<number>(0);
@@ -1011,6 +1080,25 @@ export class SettingsComponent implements OnInit {
       error: (err) => {
         this.errorMessage.set(err.error?.error?.message || 'Bağlantı testi başarısız');
         this.isTesting.set(false);
+      },
+    });
+  }
+
+  subscribeWebhook() {
+    this.isSubscribing.set(true);
+    this.errorMessage.set(null);
+    this.waConfigService.subscribeWebhook().subscribe({
+      next: (res) => {
+        this.isSubscribing.set(false);
+        if (res.success && res.data?.success) {
+          this.dialog.success(res.data.message || 'Webhook etkinleştirildi.');
+        } else {
+          this.dialog.error(res.data?.message || 'Webhook etkinleştirilemedi.');
+        }
+      },
+      error: (err) => {
+        this.isSubscribing.set(false);
+        this.dialog.error(err.error?.error?.message || 'Webhook etkinleştirilemedi.');
       },
     });
   }
@@ -1225,6 +1313,24 @@ export class SettingsComponent implements OnInit {
     } else {
       wh.closed = [...closed, day];
     }
+    this.workingHours.set(wh);
+  }
+
+  isDayAllDay(day: string): boolean {
+    const d = this.workingHours()?.[day];
+    return d?.allDay === true || (!!d?.open && d.open === d.close);
+  }
+
+  toggleDayAllDay(day: string): void {
+    const wh = { ...this.workingHours() };
+    const cur = { ...(wh[day] || { open: '10:00', close: '22:00' }) };
+    if (this.isDayAllDay(day)) {
+      cur.allDay = false;
+      if (!cur.open || cur.open === cur.close) { cur.open = '10:00'; cur.close = '22:00'; }
+    } else {
+      cur.allDay = true;
+    }
+    wh[day] = cur;
     this.workingHours.set(wh);
   }
 

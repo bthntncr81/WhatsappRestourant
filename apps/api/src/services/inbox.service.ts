@@ -16,6 +16,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { whatsappProviderService } from './whatsapp-provider.service';
 import { whatsappConfigService } from './whatsapp-config.service';
+import { billingService } from './billing.service';
 
 const logger = createLogger();
 
@@ -243,13 +244,17 @@ export class InboxService {
         where: { id: conversationId },
         data: {
           lastMessageAt: new Date(),
-          // Set to PENDING_AGENT if incoming message and currently OPEN
-          ...(direction === 'IN' && conversation.status === 'OPEN'
-            ? { status: 'PENDING_AGENT' }
-            : {}),
         },
       }),
     ]);
+
+    // Count outbound messages toward the tenant's monthly message quota.
+    // Fire-and-forget: never block or fail message creation on the counter.
+    if (direction === 'OUT') {
+      billingService.incrementMessageUsage(tenantId).catch((error) => {
+        logger.error({ error, tenantId }, 'Failed to increment message usage counter');
+      });
+    }
 
     return this.mapMessageToDto(message);
   }
