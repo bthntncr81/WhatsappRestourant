@@ -38,9 +38,9 @@ interface GuideSection {
 
         <!-- GİRİŞ -->
         <section [hidden]="active() !== 'intro'">
-          <h1>Superpersonel'e Hoş Geldiniz 👋</h1>
+          <h1>OtOrder AI'ya Hoş Geldiniz 👋</h1>
           <p class="lead">
-            Superpersonel, müşterilerinizin WhatsApp üzerinden sipariş vermesini sağlayan
+            OtOrder AI, müşterilerinizin WhatsApp üzerinden sipariş vermesini sağlayan
             yapay zekâ destekli bir sipariş yönetim sistemidir. Müşteri mesaj yazar, sistem
             siparişi otomatik anlar ve panelinize düşürür.
           </p>
@@ -136,7 +136,7 @@ interface GuideSection {
               <div class="callout warn">⚠️ API Setup sayfasındaki token <b>24 saatte</b> ölür. Aşağıdaki kalıcı tokeni oluşturmazsanız sistem ertesi gün durur.</div>
               <ul>
                 <li><a href="https://business.facebook.com/settings" target="_blank" rel="noopener">business.facebook.com/settings</a> &rarr; <b>Kullanıcılar &rarr; Sistem Kullanıcıları</b>.</li>
-                <li><b>"Ekle"</b> → isim verin (örn. <code>superpersonel-api</code>), rol <b>Admin</b>.</li>
+                <li><b>"Ekle"</b> → isim verin (örn. <code>otorder-api</code>), rol <b>Admin</b>.</li>
                 <li>Kullanıcıya tıklayın → <b>"Varlık Ekle"</b>: WhatsApp uygulamanız ve WABA hesabınız → her ikisine de <b>Tam Kontrol</b>.</li>
                 <li><b>"Token Oluştur"</b> → uygulamanızı seçin → şu izinleri ekleyin:
                   <ul>

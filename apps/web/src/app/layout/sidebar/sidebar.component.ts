@@ -18,8 +18,8 @@ interface NavItem {
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <img src="/logo.jpeg" alt="Superpersonel" style="height:26px; width:26px; border-radius:6px; object-fit:cover;"/>
-          <span class="logo-text">Superpersonel</span>
+          <span class="logo-text">OtOrder</span>
+          <span class="logo-ai">AI</span>
         </div>
         @if (authService.tenant(); as tenant) {
           <div class="tenant-badge">
@@ -100,9 +100,25 @@ interface NavItem {
       }
 
       .logo-text {
+        font-family: var(--font-display, inherit);
         font-size: 1.25rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+
+      .logo-ai {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 21px;
+        padding: 0 7px;
+        border-radius: 6px;
+        background: var(--color-accent-primary);
+        color: #ffffff;
+        font-family: var(--font-display, inherit);
+        font-size: 0.6875rem;
+        font-weight: 800;
+        letter-spacing: 0.07em;
       }
 
       .tenant-badge {

@@ -24,27 +24,28 @@
 
   // Typography
   --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Sora', 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  // Accent colors (shared between themes) — RAL 5005 Signal Blue
-  --color-accent-primary: #1B5583;
-  --color-accent-primary-hover: #2574A9;
-  --color-accent-secondary: #14b8a6;
+  // Accent colors (shared between themes) — OtOrder AI brand red
+  --color-accent-primary: #bb1e10;
+  --color-accent-primary-hover: #d93a2b;
+  --color-accent-secondary: #25D366;
   --color-accent-warning: #f59e0b;
   --color-accent-danger: #ef4444;
-  --color-accent-success: #22c55e;
+  --color-accent-success: #25D366;
 
   // Flat primary (no gradient — modern uniform look)
-  --gradient-primary: #1B5583;
+  --gradient-primary: #bb1e10;
 }
 
 // Dark Theme (default)
 :root,
 :root[data-theme="dark"] {
-  --color-bg-primary: #0a0a0f;
-  --color-bg-secondary: #12121a;
-  --color-bg-tertiary: #1a1a24;
-  --color-bg-elevated: #22222e;
+  --color-bg-primary: #0B0D12;
+  --color-bg-secondary: #12151C;
+  --color-bg-tertiary: #1A1E28;
+  --color-bg-elevated: #232834;
 
   --color-border: rgba(255, 255, 255, 0.08);
   --color-border-hover: rgba(255, 255, 255, 0.15);
@@ -59,7 +60,7 @@
 
   --gradient-glow: radial-gradient(
     600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(27, 85, 131, 0.08),
+    rgba(187, 30, 16, 0.07),
     transparent 40%
   );
 }
@@ -78,8 +79,8 @@
   --color-text-secondary: #475569;
   --color-text-muted: #94a3b8;
 
-  --color-accent-primary: #1a5276;
-  --color-accent-primary-hover: #154360;
+  --color-accent-primary: #a81b0e;
+  --color-accent-primary-hover: #8c1409;
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -87,7 +88,7 @@
 
   --gradient-glow: radial-gradient(
     600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-    rgba(27, 85, 131, 0.05),
+    rgba(187, 30, 16, 0.04),
     transparent 40%
   );
 

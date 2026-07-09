@@ -37,8 +37,8 @@ interface ComparisonRow {
           <span>Panele Dön</span>
         </a>
         <div class="nav-brand">
-          <img src="/logo.jpeg" alt="Superpersonel" style="height:28px; border-radius:6px;"/>
-          <span>Superpersonel</span>
+          <span style="font-family: var(--font-display, inherit); font-weight:800; letter-spacing:-0.03em;">OtOrder</span>
+          <span style="display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:6px; background:#bb1e10; color:#fff; font-family: var(--font-display, inherit); font-size:11px; font-weight:800; letter-spacing:0.07em;">AI</span>
         </div>
         <div class="nav-right">
           <button class="icon-btn" (click)="themeService.toggleTheme()" [attr.aria-label]="'Tema'">
@@ -569,8 +569,8 @@ interface ComparisonRow {
       <footer class="billing-footer">
         <div class="footer-inner">
           <div class="footer-brand">
-            <img src="/logo.jpeg" alt="Superpersonel" style="height:22px; border-radius:4px;"/>
-            <span>Superpersonel</span>
+            <span style="font-family: var(--font-display, inherit); font-weight:800; letter-spacing:-0.03em;">OtOrder</span>
+            <span style="display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:5px; background:#bb1e10; color:#fff; font-family: var(--font-display, inherit); font-size:10px; font-weight:800; letter-spacing:0.07em;">AI</span>
           </div>
           <div class="footer-links">
             <a href="#">Gizlilik</a>

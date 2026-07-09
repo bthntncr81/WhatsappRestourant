@@ -192,7 +192,7 @@ import { IconComponent } from '../../shared/icon.component';
         align-items: center;
         gap: 8px;
         padding: 8px 16px;
-        background: #1B5583;
+        background: var(--color-accent-primary);
         border-radius: 8px;
         color: white;
         font-size: 0.875rem;
@@ -204,7 +204,7 @@ import { IconComponent } from '../../shared/icon.component';
 
       .upgrade-btn:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(27, 85, 131, 0.4);
+        box-shadow: 0 4px 12px rgba(187, 30, 16, 0.35);
       }
 
       .upgrade-btn.trial {
@@ -212,8 +212,8 @@ import { IconComponent } from '../../shared/icon.component';
       }
 
       @keyframes pulse {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(27, 85, 131, 0.4); }
-        50% { box-shadow: 0 0 0 8px rgba(27, 85, 131, 0); }
+        0%, 100% { box-shadow: 0 0 0 0 rgba(187, 30, 16, 0.4); }
+        50% { box-shadow: 0 0 0 8px rgba(187, 30, 16, 0); }
       }
 
       .upgrade-icon {

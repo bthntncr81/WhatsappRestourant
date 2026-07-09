@@ -11,8 +11,16 @@ import {
   MemberRole,
 } from '@whatres/shared';
 import { AppError } from '../middleware/error-handler';
+import {
+  otorderLogin,
+  otorderHasAIPlan,
+  provisionFromOtorder,
+  connectOtorderWithToken,
+} from './otorder-sso.service';
+import { createLogger } from '../logger';
 
 const SALT_ROUNDS = 12;
+const ssoLogger = createLogger();
 
 export class AuthService {
   private config = getConfig();
@@ -108,7 +116,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, tenantId?: string): Promise<AuthResponseDto> {
-    // Find user
+    // 1) Yerel kullanıcı + şifre (whatres'e doğrudan kayıt olanlar)
     const user = await prisma.user.findUnique({
       where: { email: dto.email },
       include: {
@@ -120,28 +128,73 @@ export class AuthService {
       },
     });
 
+    if (user && (await bcrypt.compare(dto.password, user.passwordHash))) {
+      let membership = user.memberships[0];
+      if (tenantId) {
+        membership = user.memberships.find((m) => m.tenantId === tenantId) || membership;
+      }
+      if (!membership) {
+        throw new AppError(403, 'NO_MEMBERSHIP', 'User has no tenant membership');
+      }
+      return this.buildAuthResponse(user, membership);
+    }
+
+    // 2) Yerel eşleşme yok → OtOrder SSO: Pro AI paketli hesaplar POS
+    //    e-posta+şifresiyle girer; ilk girişte provizyon + oto-bağlantı yapılır.
+    const viaOtorder = await this.loginViaOtorder(dto);
+    if (viaOtorder) return viaOtorder;
+
+    throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+  }
+
+  // OtOrder kimliğiyle giriş — kimlik OtOrder'a sorulur, whatres şifre saklamaz.
+  private async loginViaOtorder(dto: LoginDto): Promise<AuthResponseDto | null> {
+    const identity = await otorderLogin(dto.email, dto.password);
+    if (!identity) return null;
+
+    const gate = await otorderHasAIPlan(identity.token);
+    if (!gate.ok) {
+      throw new AppError(
+        403,
+        'OTORDER_PLAN_REQUIRED',
+        'OtOrder hesabın doğrulandı ama paketinde yapay zekâ WhatsApp asistanı yok. otorder.com üzerinden Pro AI paketine geçtiğinde bu panel otomatik açılır.',
+      );
+    }
+
+    let user = await prisma.user.findUnique({
+      where: { email: dto.email },
+      include: { memberships: { include: { tenant: true } } },
+    });
+
     if (!user) {
-      throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+      // İlk giriş: tenant + user + mağaza aç, POS bağlantısını kur
+      const p = await provisionFromOtorder(identity);
+      try {
+        await connectOtorderWithToken(p.tenantId, identity.subdomain, identity.token);
+      } catch (e) {
+        ssoLogger.warn({ error: e, tenantId: p.tenantId }, 'OtOrder oto-bağlantı başarısız — Entegrasyonlar sayfasından tekrar denenebilir');
+      }
+      user = await prisma.user.findUnique({
+        where: { email: dto.email },
+        include: { memberships: { include: { tenant: true } } },
+      });
+    } else {
+      // Daha önce provizyonlanmış hesap: bağlantı yoksa arka planda tazele
+      const m = user.memberships[0];
+      if (m && !(m.tenant as any).posApiKey) {
+        connectOtorderWithToken(m.tenantId, identity.subdomain, identity.token).catch(() => {});
+      }
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!isValidPassword) {
-      throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
-    }
+    const membership = user?.memberships[0];
+    if (!user || !membership) return null;
+    return this.buildAuthResponse(user, membership);
+  }
 
-    // Get membership
-    let membership = user.memberships[0];
-    
-    if (tenantId) {
-      membership = user.memberships.find((m) => m.tenantId === tenantId) || membership;
-    }
-
-    if (!membership) {
-      throw new AppError(403, 'NO_MEMBERSHIP', 'User has no tenant membership');
-    }
-
-    // Generate JWT
+  private buildAuthResponse(
+    user: { id: string; email: string; name: string },
+    membership: { tenantId: string; role: string; tenant: { id: string; name: string; slug: string } },
+  ): AuthResponseDto {
     const token = this.generateToken({
       sub: user.id,
       email: user.email,

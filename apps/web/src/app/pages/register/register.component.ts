@@ -16,8 +16,8 @@ import { IconComponent } from '../../shared/icon.component';
       <div class="auth-card">
         <div class="auth-header">
           <div class="logo">
-            <img src="/logo.jpeg" alt="Superpersonel" style="height:32px; width:32px; border-radius:8px; object-fit:cover;"/>
-            <span class="logo-text">Superpersonel</span>
+            <span class="logo-text">OtOrder</span>
+            <span class="logo-ai">AI</span>
           </div>
           <h1 class="auth-title">Çalışma alanınızı oluşturun</h1>
           <p class="auth-subtitle text-muted">Ücretsiz hesap oluşturun</p>
@@ -213,7 +213,7 @@ import { IconComponent } from '../../shared/icon.component';
         background: var(--color-bg-primary);
         background-image: radial-gradient(
           ellipse 80% 50% at 50% -20%,
-          rgba(27, 85, 131, 0.15),
+          rgba(187, 30, 16, 0.14),
           transparent
         );
       }
@@ -257,9 +257,25 @@ import { IconComponent } from '../../shared/icon.component';
       }
 
       .logo-text {
+        font-family: var(--font-display, inherit);
         font-size: 1.5rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+
+      .logo-ai {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 7px;
+        background: var(--color-accent-primary);
+        color: #ffffff;
+        font-family: var(--font-display, inherit);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.07em;
       }
 
       .auth-title {
@@ -353,7 +369,7 @@ import { IconComponent } from '../../shared/icon.component';
         &:focus {
           outline: none;
           border-color: var(--color-accent-primary);
-          box-shadow: 0 0 0 3px rgba(27, 85, 131, 0.15);
+          box-shadow: 0 0 0 3px rgba(187, 30, 16, 0.14);
         }
 
         &:disabled {

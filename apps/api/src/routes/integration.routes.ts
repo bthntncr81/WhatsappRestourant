@@ -3,6 +3,7 @@ import { ApiResponse } from '@whatres/shared';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import { AppError } from '../middleware/error-handler';
 import { posIntegrationService } from '../services/pos-integration.service';
+import { connectOtorderWithToken } from '../services/otorder-sso.service';
 import prisma from '../db/prisma';
 import { createLogger } from '../logger';
 
@@ -718,44 +719,16 @@ router.post(
         throw new AppError(401, 'OTORDER_LOGIN_FAILED', loginData?.error || 'OtOrder girisi basarisiz - bilgileri kontrol edin');
       }
 
-      // 2) OtOrder tarafinda WhatsApp partner + API key uret
-      const webhookUrl = `${process.env.APP_BASE_URL || ''}${process.env.API_PREFIX || '/api'}/webhooks/pos/${req.tenantId}`;
-      const connectRes = await fetch(`${base}/api/integrations/whatsapp/connect`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${loginData.token}`,
-        },
-        body: JSON.stringify({ webhookUrl }),
-        ...timeout,
-      });
-      const connectData = (await connectRes.json().catch(() => ({}))) as any;
-      if (!connectRes.ok || !connectData?.config?.posApiKey) {
-        throw new AppError(
-          connectRes.status === 403 ? 403 : 502,
-          'OTORDER_CONNECT_FAILED',
-          connectData?.error || 'OtOrder baglanti kurulamadi (paketinizde WhatsApp ozelligi aktif mi?)',
-        );
-      }
-
-      // 3) Kimlikleri tenant'a yaz — posApiUrl BASE olmali; pos-integration.service
-      //    zaten "/api/external/..." ekler, aksi halde cift path (/api/external/api/external) olur.
-      const posBaseUrl = String(connectData.config.posApiUrl || '').replace(/\/api\/external\/?$/, '');
-      await prisma.tenant.update({
-        where: { id: req.tenantId! },
-        data: {
-          posApiUrl: posBaseUrl,
-          posApiKey: connectData.config.posApiKey,
-        },
-      });
-      logger.info({ tenantId: req.tenantId, sub }, 'OtOrder baglantisi kuruldu');
-
-      // 4) Menuyu hemen cek (hata baglantiyi bozmaz)
-      let sync: any = null;
+      // 2-4) Partner + API key + tenant'a yazim + menu senkronu — SSO ile ortak
+      // cekirdek (otorder-sso.service). Menu senkronu arka planda baslar.
       try {
-        sync = await posIntegrationService.pullMenu(req.tenantId!);
-      } catch (e) {
-        logger.warn({ error: e }, 'OtOrder ilk menu senkronu basarisiz - sonra tekrar denenebilir');
+        await connectOtorderWithToken(req.tenantId!, sub, loginData.token);
+      } catch (e: any) {
+        throw new AppError(
+          502,
+          'OTORDER_CONNECT_FAILED',
+          e?.message || 'OtOrder baglanti kurulamadi (paketinizde WhatsApp ozelligi aktif mi?)',
+        );
       }
 
       res.json({
@@ -763,8 +736,7 @@ router.post(
         data: {
           connected: true,
           subdomain: sub,
-          posApiUrl: connectData.config.posApiUrl,
-          sync,
+          sync: 'background',
         },
       });
     } catch (error) {

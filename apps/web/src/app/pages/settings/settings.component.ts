@@ -241,7 +241,7 @@ import { DialogService } from '../../shared/dialog.service';
                       <ol class="step-list">
                         <li><a href="https://business.facebook.com/settings" target="_blank" rel="noopener">business.facebook.com/settings</a> adresine gidin.</li>
                         <li>Sol menüden <strong>Kullanıcılar &rarr; Sistem Kullanıcıları</strong> (Users &rarr; System Users) sayfasına gidin.</li>
-                        <li><strong>"Ekle"</strong> (Add) butonuna basın. İsim girin (örneğin: <code>whatres-api</code>), rol olarak <strong>Admin</strong> seçin.</li>
+                        <li><strong>"Ekle"</strong> (Add) butonuna basın. İsim girin (örneğin: <code>otorder-api</code>), rol olarak <strong>Admin</strong> seçin.</li>
                         <li>Oluşturulan sistem kullanıcısına tıklayın &rarr; <strong>"Varlık Ekle"</strong> (Add Assets) butonuna basın.</li>
                         <li>
                           Asagidaki varliklari ekleyin:
