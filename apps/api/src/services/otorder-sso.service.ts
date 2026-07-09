@@ -69,8 +69,8 @@ export async function otorderLogin(email: string, password: string): Promise<Oto
   };
 }
 
-/** Tenant'ın OtOrder planında whatsappAI özelliği var mı? */
-export async function otorderHasAIPlan(token: string): Promise<{ ok: boolean; planKey?: string }> {
+/** Tenant'ın OtOrder plan özellikleri (whatsappAI: Pro AI paneli; whatsappLink: modül bağlama izni). */
+export async function otorderPlanFeatures(token: string): Promise<{ whatsappAI: boolean; whatsappLink: boolean; planKey?: string }> {
   try {
     const [subRes, plansRes] = await Promise.all([
       fetch(`${OTORDER_API}/api/platform/billing/subscription`, {
@@ -83,10 +83,16 @@ export async function otorderHasAIPlan(token: string): Promise<{ ok: boolean; pl
     const plans = (await plansRes.json().catch(() => ({}))) as any;
     const planKey = sub?.subscription?.plan?.key as string | undefined;
     const plan = (plans?.plans || []).find((p: any) => p.key === planKey);
-    return { ok: !!plan?.features?.whatsappAI, planKey };
+    return { whatsappAI: !!plan?.features?.whatsappAI, whatsappLink: !!plan?.features?.whatsappLink, planKey };
   } catch {
-    return { ok: false };
+    return { whatsappAI: false, whatsappLink: false };
   }
+}
+
+/** Tenant'ın OtOrder planında whatsappAI özelliği var mı? (SSO panel erişim kapısı) */
+export async function otorderHasAIPlan(token: string): Promise<{ ok: boolean; planKey?: string }> {
+  const f = await otorderPlanFeatures(token);
+  return { ok: f.whatsappAI, planKey: f.planKey };
 }
 
 /**

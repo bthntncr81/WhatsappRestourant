@@ -14,6 +14,7 @@ import { AppError } from '../middleware/error-handler';
 import {
   otorderLogin,
   otorderHasAIPlan,
+  otorderPlanFeatures,
   provisionFromOtorder,
   connectOtorderWithToken,
 } from './otorder-sso.service';
@@ -136,6 +137,9 @@ export class AuthService {
       if (!membership) {
         throw new AppError(403, 'NO_MEMBERSHIP', 'User has no tenant membership');
       }
+      // Tenant OtOrder'a bağlı değilse aynı kimlik bilgileriyle otomatik bağlamayı
+      // dene — "üyelik OtOrder'dan alındıysa panel bağlı açılmalı".
+      await this.ensureOtorderLink(dto, membership);
       return this.buildAuthResponse(user, membership);
     }
 
@@ -179,16 +183,39 @@ export class AuthService {
         include: { memberships: { include: { tenant: true } } },
       });
     } else {
-      // Daha önce provizyonlanmış hesap: bağlantı yoksa arka planda tazele
+      // Daha önce provizyonlanmış hesap: bağlantı yoksa panel açılmadan tamamla
       const m = user.memberships[0];
       if (m && !(m.tenant as any).posApiKey) {
-        connectOtorderWithToken(m.tenantId, identity.subdomain, identity.token).catch(() => {});
+        try {
+          await connectOtorderWithToken(m.tenantId, identity.subdomain, identity.token);
+        } catch (e) {
+          ssoLogger.warn({ error: e, tenantId: m.tenantId }, 'OtOrder yeniden bağlanma başarısız');
+        }
       }
     }
 
     const membership = user?.memberships[0];
     if (!user || !membership) return null;
     return this.buildAuthResponse(user, membership);
+  }
+
+  // Yerel girişte OtOrder oto-bağlantısı: tenant bağlı değilse aynı e-posta+şifre
+  // OtOrder'da da geçerliyse ve planı modül bağlamaya izin veriyorsa
+  // (whatsappLink: Pro ve üzeri) bağlantıyı kurar. Başarısızlık girişi BOZMAZ.
+  private async ensureOtorderLink(
+    dto: LoginDto,
+    membership: { tenantId: string; tenant: { posApiKey?: string | null } },
+  ): Promise<void> {
+    try {
+      if ((membership.tenant as any).posApiKey) return;
+      const identity = await otorderLogin(dto.email, dto.password);
+      if (!identity) return;
+      const feats = await otorderPlanFeatures(identity.token);
+      if (!feats.whatsappLink && !feats.whatsappAI) return;
+      await connectOtorderWithToken(membership.tenantId, identity.subdomain, identity.token);
+    } catch (e) {
+      ssoLogger.warn({ error: e, tenantId: membership.tenantId }, 'OtOrder oto-bağlantı (yerel giriş) başarısız');
+    }
   }
 
   private buildAuthResponse(
