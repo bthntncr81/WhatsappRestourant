@@ -390,6 +390,14 @@ export class NluOrchestratorService {
           if (order) {
             result.draftOrderId = order.id;
             result.confirmationMessage = this.generateConfirmationMessage(order);
+          } else {
+            // Items matched but the order did not change (recommendation-style
+            // question, keep-only actions, or a candidate/ID mismatch). The
+            // flow layer sends nothing when neither a confirmation nor a
+            // clarification is set, so the customer would get silence —
+            // always fall back to a local suggestion (free-text, therefore
+            // eligible for the hybrid Claude rewrite below).
+            result.clarificationQuestion = this.buildSuggestionFallback(candidates);
           }
         }
       }
@@ -437,6 +445,25 @@ export class NluOrchestratorService {
       logger.error({ error, tenantId, conversationId }, 'Orchestration failed');
       return { success: false, error: String(error) };
     }
+  }
+
+  /**
+   * Local fallback when extraction matched items but no draft change was
+   * possible. Lists the closest menu candidates so the customer always gets
+   * a useful reply instead of silence (ASCII Turkish like the other
+   * templates; the hybrid Claude rewrite polishes it when routed).
+   */
+  private buildSuggestionFallback(
+    candidates: Array<{ name: string; basePrice: number; effectivePrice?: number }>
+  ): string {
+    const top = candidates.slice(0, 3);
+    if (top.length === 0) {
+      return 'Menumuzden ne istediginizi tam anlayamadim. Hangi urunu denemek istersiniz?';
+    }
+    const list = top
+      .map((c) => `${c.name} (${(c.effectivePrice ?? c.basePrice).toFixed(2)} TL)`)
+      .join(', ');
+    return `Size su lezzetleri onerebilirim: ${list}. Hangisini isterseniz yazmaniz yeterli.`;
   }
 
   // ==================== HYBRID AI (Claude) REPLY LAYER ====================
