@@ -151,9 +151,11 @@ KURALLAR:
 `;
 
 /**
- * Build dynamic part of system prompt with menu candidates
+ * Build dynamic part of system prompt with menu candidates.
+ * Exported so the hybrid Claude reply path reuses the exact same
+ * menu/context content (see orchestrator.service.ts).
  */
-function buildCandidatesPrompt(
+export function buildCandidatesPrompt(
   candidates: MenuCandidateDto[],
   optionGroups: Map<
     string,
@@ -206,9 +208,10 @@ function buildCandidatesPrompt(
 }
 
 /**
- * Build existing order context for follow-up messages
+ * Build existing order context for follow-up messages.
+ * Exported for the hybrid Claude reply path (orchestrator.service.ts).
  */
-function buildExistingOrderContext(existingOrderContext?: string): string {
+export function buildExistingOrderContext(existingOrderContext?: string): string {
   if (!existingOrderContext) {
     return '';
   }

@@ -1108,3 +1108,24 @@ model BroadcastSettings {
 
   @@map("broadcast_settings")
 }
+
+// ==================== AI TRAINING FLYWHEEL ====================
+
+// Teacher samples captured from hybrid (Claude-generated) replies.
+// Exported as JSONL via scripts/export-training.mjs for QLoRA fine-tuning
+// of the local Qwen model. See docs/ai-flywheel.md.
+model AiTrainingSample {
+  id             String   @id @default(cuid())
+  tenantId       String
+  createdAt      DateTime @default(now())
+  source         String   // 'claude-haiku' | 'claude-sonnet'
+  model          String   // exact model id used (e.g. claude-haiku-4-5)
+  language       String?
+  intentJson     Json?    // intent-analysis output for the user message
+  contextJson    Json     // { system, history } used to generate the reply
+  userMessage    String
+  assistantReply String
+
+  @@index([tenantId, createdAt])
+  @@map("ai_training_samples")
+}

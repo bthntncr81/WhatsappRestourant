@@ -1,13 +1,26 @@
 import prisma from '../../db/prisma';
 import { menuCandidateService } from './menu-candidate.service';
-import { llmExtractorService } from './llm-extractor.service';
+import {
+  llmExtractorService,
+  buildCandidatesPrompt,
+  buildExistingOrderContext as buildExistingOrderPromptSection,
+} from './llm-extractor.service';
 import { preferencesService } from './preferences.service';
+import {
+  intentAnalysisService,
+  detectNegativeConstraint,
+  IntentAnalysis,
+} from './intent-analysis.service';
+import { modelRouterService, RouteDecision } from '../ai/model-router.service';
+import { claudeClientService } from '../ai/claude-client.service';
+import { trainingCaptureService } from '../ai/training-capture.service';
 import { createLogger } from '../../logger';
 import {
   OrderIntentDto,
   ExtractedOrderData,
   LlmExtractionResponse,
   LlmExtractedItem,
+  MenuCandidateDto,
 } from '@whatres/shared';
 import crypto from 'crypto';
 
@@ -87,6 +100,28 @@ export class NluOrchestratorService {
       if (!llmExtractorService.isAvailable()) {
         logger.warn({ tenantId }, 'LLM not available, skipping order extraction');
         return { success: false, needsAgentHandoff: true, error: 'LLM service not configured' };
+      }
+
+      // ---- Hybrid AI stage 1: intent analysis + reply-model routing.
+      // Runs on every message ONLY when the router is enabled
+      // (ANTHROPIC_API_KEY set and AI_ROUTER_ENABLED !== 'false').
+      // Without a key this block is skipped entirely — the code path is
+      // byte-identical to the pre-hybrid behavior.
+      let intentAnalysis: IntentAnalysis | null = null;
+      let route: RouteDecision = { model: 'local', negativeConstraint: false };
+      if (modelRouterService.isEnabled()) {
+        intentAnalysis = await intentAnalysisService.analyze(userText);
+        route = modelRouterService.route(intentAnalysis, detectNegativeConstraint(userText));
+        logger.info(
+          {
+            tenantId,
+            conversationId,
+            replyModel: route.model,
+            negativeConstraint: route.negativeConstraint,
+            actionableIntentCount: intentAnalysis?.actionableIntentCount ?? null,
+          },
+          'AI router decision'
+        );
       }
 
       // 1. Find menu candidates for current message
@@ -225,6 +260,29 @@ export class NluOrchestratorService {
         candidates.map((c) => c.menuItemId)
       );
 
+      // 6b. NEGATIVE-CONSTRAINT GATE (hybrid mode only): when the analysis
+      // detected a restrictive special request ("sadece", "olmasin",
+      // "haric"...), never auto-create/modify an order. The customer gets a
+      // "noted — our staff will confirm" reply and the conversation is
+      // flagged for human review via the existing PENDING_AGENT inbox flag.
+      // With no ANTHROPIC_API_KEY route.model is always 'local' and this
+      // gate never fires, so today's behavior is unchanged.
+      if (route.model !== 'local' && route.negativeConstraint) {
+        return this.handleNegativeConstraintGate({
+          tenantId,
+          conversationId,
+          userText,
+          extraction,
+          orderIntent,
+          candidates,
+          optionGroups,
+          existingOrderContext,
+          customerPreferencesContext,
+          history,
+          intentAnalysis,
+        });
+      }
+
       // 7. Build result based on confidence
       const result: OrchestrationResult = {
         success: true,
@@ -350,11 +408,229 @@ export class NluOrchestratorService {
         'Order extraction completed'
       );
 
+      // ---- Hybrid AI stage 2: reply generation. Only free-text
+      // clarification replies are re-generated with Claude (haiku/sonnet).
+      // Structured option lists (pendingOptionSelection) and price-bearing
+      // order summaries (confirmationMessage) always stay on the
+      // local/template path. On any Claude failure the local text is kept.
+      if (
+        route.model !== 'local' &&
+        result.clarificationQuestion &&
+        !result.pendingOptionSelection
+      ) {
+        await this.applyHybridClarificationReply({
+          tenantId,
+          userText,
+          result,
+          route,
+          candidates,
+          optionGroups,
+          existingOrderContext,
+          customerPreferencesContext,
+          history,
+          intentAnalysis,
+        });
+      }
+
       return result;
     } catch (error) {
       logger.error({ error, tenantId, conversationId }, 'Orchestration failed');
       return { success: false, error: String(error) };
     }
+  }
+
+  // ==================== HYBRID AI (Claude) REPLY LAYER ====================
+
+  /**
+   * System prompt for Claude reply generation. Reuses the EXACT same menu
+   * candidates / existing order / preferences prompt sections as the local
+   * extraction path (exported from llm-extractor.service.ts) so both models
+   * see identical context.
+   */
+  private buildClaudeReplySystemPrompt(opts: {
+    candidates: MenuCandidateDto[];
+    optionGroups: OptionGroupsMap;
+    existingOrderContext?: string;
+    customerPreferencesContext?: string;
+    situation: string;
+  }): string {
+    return (
+      `Sen bir restoranin WhatsApp siparis asistanisin. Musteriye kisa, samimi ve net WhatsApp mesajlari yazarsin.
+
+KURALLAR:
+- Musterinin dilinde yaz (varsayilan Turkce).
+- Sadece asagidaki menu bilgisine dayan; menu disinda urun veya fiyat uydurma.
+- Kisa yaz (1-3 cumle), en fazla 1 emoji.
+- Siparisi kendin onaylama veya olusturma; sana verilen DURUM talimatini uygula.
+- Yanitin SADECE musteriye gidecek mesaj metni olsun; baslik, aciklama veya JSON ekleme.` +
+      buildCandidatesPrompt(opts.candidates, opts.optionGroups) +
+      buildExistingOrderPromptSection(opts.existingOrderContext) +
+      (opts.customerPreferencesContext || '') +
+      `\n\nDURUM: ${opts.situation}`
+    );
+  }
+
+  /**
+   * Convert DB conversation history into an Anthropic-compatible message
+   * array (must start with a user turn) ending with the current message.
+   */
+  private buildClaudeMessages(
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    userText: string
+  ): Array<{ role: 'user' | 'assistant'; content: string }> {
+    const trimmed = history
+      .slice(-8)
+      .filter((m) => m.content && m.content.trim().length > 0)
+      .map((m) => ({ role: m.role, content: m.content }));
+    // Anthropic requires the first message to be a user turn
+    while (trimmed.length > 0 && trimmed[0].role !== 'user') trimmed.shift();
+    // The incoming message is usually already persisted (= last history
+    // entry); only append it when it is not.
+    const last = trimmed[trimmed.length - 1];
+    if (!last || last.role !== 'user' || last.content !== userText) {
+      trimmed.push({ role: 'user', content: userText });
+    }
+    return trimmed;
+  }
+
+  /**
+   * Hybrid stage 2 for free-text clarification replies: re-phrase the
+   * locally produced clarification with Claude (haiku/sonnet). Keeps the
+   * local text on any failure and captures a training sample on success.
+   */
+  private async applyHybridClarificationReply(opts: {
+    tenantId: string;
+    userText: string;
+    result: OrchestrationResult;
+    route: RouteDecision;
+    candidates: MenuCandidateDto[];
+    optionGroups: OptionGroupsMap;
+    existingOrderContext?: string;
+    customerPreferencesContext?: string;
+    history: Array<{ role: 'user' | 'assistant'; content: string }>;
+    intentAnalysis: IntentAnalysis | null;
+  }): Promise<void> {
+    try {
+      const choice = opts.route.model === 'sonnet' ? ('sonnet' as const) : ('haiku' as const);
+      const system = this.buildClaudeReplySystemPrompt({
+        candidates: opts.candidates,
+        optionGroups: opts.optionGroups,
+        existingOrderContext: opts.existingOrderContext,
+        customerPreferencesContext: opts.customerPreferencesContext,
+        situation: `Sistem su netlestirme ihtiyacini belirledi: "${opts.result.clarificationQuestion}". Musteriye bu netlestirmeyi kendi dilinde, dogal ve kisa bir mesajla sor.`,
+      });
+      const messages = this.buildClaudeMessages(opts.history, opts.userText);
+      const reply = await claudeClientService.generateReply({ choice, system, messages });
+      if (!reply) return; // Claude failed → keep the local clarification text
+
+      opts.result.clarificationQuestion = reply.text;
+
+      // Flywheel: every hybrid reply is a teacher sample (fire-and-forget)
+      trainingCaptureService.capture({
+        tenantId: opts.tenantId,
+        source: choice === 'sonnet' ? 'claude-sonnet' : 'claude-haiku',
+        model: reply.model,
+        intentAnalysis: opts.intentAnalysis,
+        system,
+        history: messages.slice(0, -1),
+        userMessage: opts.userText,
+        assistantReply: reply.text,
+      });
+    } catch (error) {
+      logger.warn({ error }, 'Hybrid clarification reply failed, keeping local text');
+    }
+  }
+
+  /**
+   * NEGATIVE-CONSTRAINT GATE: the message carries a restrictive special
+   * request, so no order is auto-created/updated. The conversation is
+   * flagged for human review (existing PENDING_AGENT inbox flag) and the
+   * customer gets a "noted — our staff will confirm" reply (Claude sonnet
+   * when possible, fixed template otherwise).
+   */
+  private async handleNegativeConstraintGate(opts: {
+    tenantId: string;
+    conversationId: string;
+    userText: string;
+    extraction: LlmExtractionResponse;
+    orderIntent: any;
+    candidates: MenuCandidateDto[];
+    optionGroups: OptionGroupsMap;
+    existingOrderContext?: string;
+    customerPreferencesContext?: string;
+    history: Array<{ role: 'user' | 'assistant'; content: string }>;
+    intentAnalysis: IntentAnalysis | null;
+  }): Promise<OrchestrationResult> {
+    // Flag for human review via the existing inbox status. PENDING_AGENT
+    // also silences the bot for subsequent messages until an agent acts
+    // (see the takeover guard in conversation-flow.service.ts).
+    try {
+      await prisma.conversation.update({
+        where: { id: opts.conversationId },
+        data: { status: 'PENDING_AGENT' },
+      });
+    } catch (error) {
+      logger.warn(
+        { error, conversationId: opts.conversationId },
+        'Failed to flag conversation as PENDING_AGENT'
+      );
+    }
+
+    const fallbackText =
+      'Ozel isteginizi not aldim. 👍 Siparisinizi gorevlimiz kontrol edip sizinle onaylayacak.';
+
+    const result: OrchestrationResult = {
+      success: true,
+      confidence: opts.extraction.confidence,
+      orderIntent: this.mapOrderIntentToDto(opts.orderIntent),
+      itemsExtracted: opts.extraction.items.length > 0,
+      clarificationQuestion: fallbackText,
+    };
+
+    try {
+      const constraintHint = opts.intentAnalysis?.negativeConstraintText
+        ? ` ("${opts.intentAnalysis.negativeConstraintText}")`
+        : '';
+      const system = this.buildClaudeReplySystemPrompt({
+        candidates: opts.candidates,
+        optionGroups: opts.optionGroups,
+        existingOrderContext: opts.existingOrderContext,
+        customerPreferencesContext: opts.customerPreferencesContext,
+        situation:
+          `Musterinin mesajinda ozel/kisitlayici bir istek tespit edildi${constraintHint}. ` +
+          'Siparis OTOMATIK OLUSTURULMADI. Musteriye istegini not aldigini ve gorevlimizin ' +
+          'siparisi kontrol edip kendisiyle onaylayacagini kisa ve guven verici bir mesajla bildir. ' +
+          'Soru sorma, siparis onaylama.',
+      });
+      const messages = this.buildClaudeMessages(opts.history, opts.userText);
+      const reply = await claudeClientService.generateReply({ choice: 'sonnet', system, messages });
+      if (reply) {
+        result.clarificationQuestion = reply.text;
+        trainingCaptureService.capture({
+          tenantId: opts.tenantId,
+          source: 'claude-sonnet',
+          model: reply.model,
+          intentAnalysis: opts.intentAnalysis,
+          system,
+          history: messages.slice(0, -1),
+          userMessage: opts.userText,
+          assistantReply: reply.text,
+        });
+      }
+    } catch (error) {
+      logger.warn({ error }, 'Negative-constraint gate Claude reply failed, using fallback text');
+    }
+
+    logger.info(
+      {
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        negativeConstraintText: opts.intentAnalysis?.negativeConstraintText ?? null,
+      },
+      'Negative-constraint gate applied — order creation skipped, flagged for human review'
+    );
+
+    return result;
   }
 
   /**
