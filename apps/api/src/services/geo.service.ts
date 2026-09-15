@@ -51,7 +51,9 @@ export class GeoService {
       include: {
         deliveryRules: {
           where: { isActive: true },
-          orderBy: { radiusKm: 'desc' }, // Largest radius first
+          // Smallest radius first: the tightest covering tier must win, otherwise
+          // a customer 1 km away is charged the 7 km tier's fee and min basket.
+          orderBy: { radiusKm: 'asc' },
         },
       },
     });
@@ -64,6 +66,8 @@ export class GeoService {
         deliveryRule: null,
         alternativeStores: [],
         message: 'Henüz hizmet veren şubemiz bulunmamaktadır.',
+        reason: 'NO_OPEN_STORE',
+        maxRadiusKm: null,
       };
     }
 
@@ -83,18 +87,23 @@ export class GeoService {
     storesWithDistance.sort((a, b) => a.distance - b.distance);
 
     const nearest = storesWithDistance[0];
+    const maxRadius = (s: (typeof storesWithDistance)[number]) =>
+      s.deliveryRules.length > 0 ? Math.max(...s.deliveryRules.map((r) => r.radiusKm)) : null;
 
-    // Check if customer is within any delivery radius
-    const applicableRule = nearest.deliveryRules.find(
-      (rule) => nearest.distance <= rule.radiusKm
-    );
+    // The nearest store whose radius covers the customer serves the order.
+    // Testing only the single nearest store rejected customers that a
+    // slightly farther branch could deliver to.
+    for (const candidate of storesWithDistance) {
+      const applicableRule = candidate.deliveryRules.find(
+        (rule) => candidate.distance <= rule.radiusKm
+      );
+      if (!applicableRule) continue;
 
-    if (applicableRule) {
       logger.info(
         {
           tenantId,
-          storeId: nearest.store.id,
-          distance: nearest.distance.toFixed(2),
+          storeId: candidate.store.id,
+          distance: candidate.distance.toFixed(2),
           radiusKm: applicableRule.radiusKm,
         },
         'Customer is within service area'
@@ -102,13 +111,17 @@ export class GeoService {
 
       return {
         isWithinServiceArea: true,
-        nearestStore: nearest.store,
-        distance: Math.round(nearest.distance * 100) / 100,
+        nearestStore: candidate.store,
+        distance: Math.round(candidate.distance * 100) / 100,
         deliveryRule: applicableRule,
         alternativeStores: [],
-        message: `En yakın şubemiz: ${nearest.store.name} (${nearest.distance.toFixed(1)} km)`,
+        message: `En yakın şubemiz: ${candidate.store.name} (${candidate.distance.toFixed(1)} km)`,
+        reason: 'IN_AREA',
+        maxRadiusKm: maxRadius(candidate),
       };
     }
+
+    const nearestWithRules = storesWithDistance.find((s) => s.deliveryRules.length > 0) ?? null;
 
     // Customer is outside service area
     // Find alternative stores that could serve them
@@ -151,6 +164,55 @@ export class GeoService {
         distance: Math.round(a.distance * 100) / 100,
       })),
       message,
+      reason: nearestWithRules ? 'OUT_OF_RADIUS' : 'NO_DELIVERY_RULE',
+      maxRadiusKm: nearestWithRules ? maxRadius(nearestWithRules) : null,
+    };
+  }
+
+  /**
+   * Delivery terms for a WRITTEN address (the customer did not share a pin,
+   * so no zone can be computed; staff verifies the area).
+   *
+   * WHY these picks: the fee shown is the OUTERMOST zone's fee (largest
+   * radius) — an upper bound that never under-quotes an address we could not
+   * locate. The minimum basket is the SMALLEST one — it never blocks an order
+   * some zone would accept, and matches the early min-basket warning the
+   * customer already saw. The store is the pin's nearest store when there was
+   * a pin, else the first active store (same default as order confirmation).
+   */
+  async getTypedAddressTerms(
+    tenantId: string,
+    preferredStoreId?: string | null
+  ): Promise<{
+    store: { id: string; name: string; phone: string | null } | null;
+    deliveryFee: number | null;
+    minBasket: number | null;
+    maxRadiusKm: number | null;
+  }> {
+    const include = {
+      deliveryRules: { where: { isActive: true }, orderBy: { radiusKm: 'desc' as const } },
+    };
+    let stores = await prisma.store.findMany({
+      where: { tenantId, isActive: true, isOpen: true },
+      include,
+      orderBy: { createdAt: 'asc' },
+    });
+    if (stores.length === 0) {
+      stores = await prisma.store.findMany({
+        where: { tenantId, isActive: true },
+        include,
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+    const store = stores.find((s) => s.id === preferredStoreId) ?? stores[0] ?? null;
+    if (!store) return { store: null, deliveryFee: null, minBasket: null, maxRadiusKm: null };
+
+    const rules = store.deliveryRules ?? [];
+    return {
+      store: { id: store.id, name: store.name, phone: store.phone ?? null },
+      deliveryFee: rules.length > 0 ? Number(rules[0].deliveryFee) : null,
+      minBasket: rules.length > 0 ? Math.min(...rules.map((r) => Number(r.minBasket))) : null,
+      maxRadiusKm: rules.length > 0 ? rules[0].radiusKm : null,
     };
   }
 

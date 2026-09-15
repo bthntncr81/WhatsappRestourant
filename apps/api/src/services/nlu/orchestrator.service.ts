@@ -9,8 +9,18 @@ import { preferencesService } from './preferences.service';
 import {
   intentAnalysisService,
   detectNegativeConstraint,
+  deriveSpecialRequest,
+  exclusionNamesProduct,
   IntentAnalysis,
+  SpecialRequest,
 } from './intent-analysis.service';
+import { stripTypedAddressNote } from '../message-templates';
+import {
+  classifyAddressText,
+  foldTr,
+  hasAddSignal,
+  hasItemRemoveSignal,
+} from './flow-text-signals';
 import { modelRouterService, RouteDecision } from '../ai/model-router.service';
 import { claudeClientService } from '../ai/claude-client.service';
 import { trainingCaptureService } from '../ai/training-capture.service';
@@ -47,6 +57,33 @@ const CONFIDENCE_THRESHOLD = 0.7;
 // Hard cap for merged item/order notes (defensive: keeps a looping model from
 // producing a kitchen ticket nobody can read)
 const MAX_NOTES_LENGTH = 240;
+
+// Only candidates that matched the CURRENT text this strongly may be
+// force-added. Candidates injected from the previous intent or the cart
+// (score 0.2) are context, not intent.
+const DIRECT_MATCH_SCORE = 0.5;
+
+// A fresh candidate at/above this score is real product evidence in the message
+// (the category boost alone gives 0.3).
+const FRESH_EVIDENCE_SCORE = 0.3;
+
+// Staff-visible marker on item/order notes. No commas: mergeNotes splits on ','.
+export const SPECIAL_REQUEST_PREFIX = 'Ozel istek: ';
+
+// A special request we could not place yet is kept this long for the follow-up answer.
+const PENDING_SPECIAL_REQUEST_TTL_MS = 30 * 60 * 1000;
+
+interface PendingSpecialRequest extends SpecialRequest {
+  sourceMessageId: string;
+  createdAt: string;
+  /** 'menu' → ask which product; 'draft' → ask which cart line */
+  scope: 'menu' | 'draft';
+  /** The products we asked about; the request only lands on one of these */
+  menuItemIds?: string[];
+  names?: string[];
+  /** Our question, repeated while the request is still open */
+  question?: string;
+}
 
 // Type for option groups map
 type OptionGroupsMap = Map<
@@ -90,6 +127,8 @@ export interface OrchestrationResult {
    * of the "Siparisinizi tam anlayamadim" spam.
    */
   weakClarification?: boolean;
+  /** The special request ("Sadece mozerella, sade") that was written onto the order, if any */
+  specialRequestNote?: string;
   error?: string;
 }
 
@@ -127,6 +166,9 @@ export function isInformationalQuestion(text: string): boolean {
     'ne kadar surer', 'ne zaman gelir', 'kac dakika',
     'yapiyor musunuz', 'var mi', 'olur mu', 'mumkun mu',
     'pahali', 'ucuz', 'tuzlu',
+    // complaints / confusion are not orders either ("Size cok yakin nasil yani",
+    // "Yanlis oldu" each force-added a bundle in production)
+    'nasil', 'neden', 'niye', 'yanlis', 'anlamadim',
   ];
   return questionPhrases.some((p) => t.includes(p));
 }
@@ -173,10 +215,21 @@ export class NluOrchestratorService {
         );
       }
 
+      // The local regex also runs without the router: noting a special request
+      // is harmless (a note + at most one question), so tenants without
+      // ANTHROPIC_API_KEY get it too.
+      const hasConstraintSignal = route.negativeConstraint || detectNegativeConstraint(userText);
+
       // 1. Find menu candidates for current message
       let candidates = await menuCandidateService.findCandidates(
         tenantId,
         userText
+      );
+      // Product evidence must come from THIS message only — 1b/1c below append
+      // carried-over context candidates.
+      const freshCandidates = candidates.slice();
+      const directMatchIds = new Set(
+        freshCandidates.filter((c) => c.score >= DIRECT_MATCH_SCORE).map((c) => c.menuItemId)
       );
 
       // 1b. Include candidates from previous OrderIntent (for follow-up messages)
@@ -202,7 +255,7 @@ export class NluOrchestratorService {
         if (uniquePrevIds.length > 0) {
           const prevMenuItems = await prisma.menuItem.findMany({
             where: { id: { in: uniquePrevIds }, tenantId },
-            select: { id: true, name: true, category: true, basePrice: true, discountType: true, discountValue: true, discountStartAt: true, discountEndAt: true },
+            select: { id: true, name: true, description: true, category: true, basePrice: true, discountType: true, discountValue: true, discountStartAt: true, discountEndAt: true },
           });
           for (const item of prevMenuItems) {
             if (!candidates.some((c) => c.menuItemId === item.id)) {
@@ -215,6 +268,7 @@ export class NluOrchestratorService {
                 effectivePrice: computeEffectivePrice(bp, item),
                 synonymsMatched: [],
                 score: 0.2,
+                description: item.description,
               });
             }
           }
@@ -300,43 +354,56 @@ export class NluOrchestratorService {
         return { success: false, needsAgentHandoff: true, error: 'LLM extraction failed' };
       }
 
-      // 6. Save order intent (include candidate IDs for follow-up context)
-      const orderIntent = await this.saveOrderIntent(
-        tenantId,
-        conversationId,
-        messageId,
-        extraction,
-        candidates.map((c) => c.menuItemId)
-      );
+      // 6. Special request ("sadece mozerella", "sogan olmasin"): derive a note
+      // from THIS message, or pick up the one the customer gave on the previous
+      // turn when we had to ask which product it belongs to.
+      // WHY: the old negative-constraint gate parked these conversations in
+      // PENDING_AGENT, which silences the bot; nobody answered and real orders
+      // were lost (High Five, 12.09). A restrictive request is now written onto
+      // the order (kitchen ticket + summary) and the order flow always continues.
+      const specialRequest = hasConstraintSignal
+        ? deriveSpecialRequest(
+            userText,
+            intentAnalysis?.negativeConstraintText,
+            // Synonyms count as product words: "kolayi istemiyorum" matched
+            // "Coca Cola" through "kola" and is a removal, not a note.
+            freshCandidates.flatMap((c) => [c.name, ...(c.synonymsMatched || [])]),
+            freshCandidates.map((c) => c.category).filter((c): c is string => !!c)
+          )
+        : null;
+      const pendingRequest = specialRequest ? null : this.readPendingSpecialRequest(prevIntent);
+      const effectiveRequest: SpecialRequest | null = specialRequest ?? pendingRequest;
+      const removedItemTexts =
+        specialRequest?.kind === 'exclude'
+          ? await this.describeRemovedItems(tenantId, extraction, candidates, existingDraft)
+          : new Map<string, string[]>();
+      const srApply = effectiveRequest
+        ? this.applySpecialRequest({
+            extraction,
+            request: effectiveRequest,
+            fromThisMessage: !!specialRequest,
+            existingDraft,
+            freshCandidates,
+            userText,
+            removedItemTexts,
+            // A request carried over from our product question only lands on one
+            // of the products we asked about ("2 kola" must not get "Sadece mozerella").
+            allowedItemIds:
+              !specialRequest && pendingRequest?.menuItemIds?.length
+                ? new Set(pendingRequest.menuItemIds)
+                : null,
+          })
+        : { applied: false, noteItemIdx: new Set<number>() };
 
-      // 6b. NEGATIVE-CONSTRAINT GATE (hybrid mode only): when the analysis
-      // detected a restrictive special request ("sadece", "olmasin",
-      // "haric"...), never auto-create/modify an order. The customer gets a
-      // "noted — our staff will confirm" reply and the conversation is
-      // flagged for human review via the existing PENDING_AGENT inbox flag.
-      // With no ANTHROPIC_API_KEY route.model is always 'local' and this
-      // gate never fires, so today's behavior is unchanged.
-      if (route.model !== 'local' && route.negativeConstraint) {
-        return this.handleNegativeConstraintGate({
-          tenantId,
-          conversationId,
-          userText,
-          extraction,
-          orderIntent,
-          candidates,
-          optionGroups,
-          existingOrderContext,
-          customerPreferencesContext,
-          history,
-          intentAnalysis,
-        });
-      }
+      // The intent row stores what the extractor returned (before the synthetic
+      // bundle force-add below), same as before; it is written after the
+      // branches so a still-open special request can be attached to it.
+      const extractionForIntent: LlmExtractionResponse = JSON.parse(JSON.stringify(extraction));
 
       // 7. Build result based on confidence
       const result: OrchestrationResult = {
         success: true,
         confidence: extraction.confidence,
-        orderIntent: this.mapOrderIntentToDto(orderIntent),
         itemsExtracted: extraction.items.length > 0,
       };
 
@@ -348,12 +415,26 @@ export class NluOrchestratorService {
       // If items were found, check required options FIRST before falling back to LLM clarification
       let hasExtractedItems = extraction.items.filter(i => i.action === 'add').length > 0;
 
-      // If LLM didn't extract items but candidates include bundle items with required options,
-      // force-add the best matching bundle candidate.
-      // NEVER do this for a pure question ("meat five kac para") — the customer
-      // asked, they did not order.
-      if (!hasExtractedItems && candidates.length > 0 && !isInformationalQuestion(userText)) {
+      // If LLM didn't extract items but THIS message clearly named a bundle
+      // with required options, force-add it. NEVER for:
+      //  - a pure question ("meat five kac para") — the customer asked, not ordered,
+      //  - a candidate that only came from an earlier turn or from the cart
+      //    (score 0.2 context, not intent): "Hayalim kent e gidecek" and
+      //    "Yanlis oldu" each added a 2'li Pizza Menu this way (High Five 28.08/30.08),
+      //  - an address / delivery direction,
+      //  - a special-request message (never add what the customer did not ask for).
+      // Only a request written in THIS message blocks it: a request still open
+      // from an earlier turn must not stop "2'li pizza menu" from being added.
+      const addressLike = classifyAddressText(userText).kind !== 'none' && !hasAddSignal(userText);
+      if (
+        !hasExtractedItems &&
+        directMatchIds.size > 0 &&
+        !isInformationalQuestion(userText) &&
+        !addressLike &&
+        !specialRequest
+      ) {
         for (const c of candidates) {
+          if (!directMatchIds.has(c.menuItemId)) continue;
           const groups = optionGroups.get(c.menuItemId);
           if (groups?.some(g => g.required)) {
             extraction.items.push({
@@ -388,7 +469,7 @@ export class NluOrchestratorService {
       if (missingOptionsEarly.length > 0) {
         // Items found but required options missing — skip LLM clarification, use our option selection
         const order = await this.createDraftOrder(
-          tenantId, conversationId, extraction, candidates, optionGroups, existingDraft
+          tenantId, conversationId, extraction, candidates, optionGroups, existingDraft, srApply.noteItemIdx
         );
         if (order) {
           result.draftOrderId = order.id;
@@ -431,7 +512,7 @@ export class NluOrchestratorService {
         if (missingOptions.length > 0) {
           // Create draft order anyway (so items are saved), but ask for missing options
           const order = await this.createDraftOrder(
-            tenantId, conversationId, extraction, candidates, optionGroups, existingDraft
+            tenantId, conversationId, extraction, candidates, optionGroups, existingDraft, srApply.noteItemIdx
           );
           if (order) {
             result.draftOrderId = order.id;
@@ -454,7 +535,7 @@ export class NluOrchestratorService {
         } else {
           // High confidence, all required options filled - create/update draft order
           const order = await this.createDraftOrder(
-            tenantId, conversationId, extraction, candidates, optionGroups, existingDraft
+            tenantId, conversationId, extraction, candidates, optionGroups, existingDraft, srApply.noteItemIdx
           );
           if (order) {
             result.draftOrderId = order.id;
@@ -482,6 +563,101 @@ export class NluOrchestratorService {
         result.weakClarification = true;
       }
 
+      // 8. Special-request outcome: either the note landed on a draft (tell the
+      // customer), or we keep it and keep the product question open. Never a
+      // "staff will get back to you" dead end.
+      // A request that is not placed yet lives until its 30-minute TTL, a new
+      // request, or the answer that places it — never used up by unrelated
+      // turns. In production the address and the pin came between our
+      // "Yarim / Tam?" question and "yarim", and the old one-extra-turn rule
+      // sent the sandwich to the kitchen without the note (High Five, 12.09).
+      let pendingToPersist: PendingSpecialRequest | null = null;
+      let specialQuestionNames: string[] | null = null;
+      if (effectiveRequest && srApply.applied && result.draftOrderId) {
+        result.specialRequestNote = effectiveRequest.note;
+        if (result.confirmationMessage) {
+          const ack = 'Ozel isteginizi siparis notuna ekledim, mutfagimiz buna gore hazirlayacak.';
+          // WhatsApp interactive body limit is 1024 chars; when the ack does not
+          // fit, the summary's "Not: Ozel istek: ..." line still shows it.
+          if (ack.length + 2 + result.confirmationMessage.length <= 1024) {
+            result.confirmationMessage = `${ack}\n\n${result.confirmationMessage}`;
+          }
+        }
+      } else if (specialRequest && !result.draftOrderId) {
+        const freshEvidence = freshCandidates.some((c) => c.score >= FRESH_EVIDENCE_SCORE);
+        const draftCount = existingDraft?.items?.length ?? 0;
+        // No product evidence at all ("sadece adres yazabilirim"): drop the
+        // request, the normal pipeline answers the message unchanged.
+        const scope: PendingSpecialRequest['scope'] | null = freshEvidence ? 'menu' : draftCount >= 2 ? 'draft' : null;
+        if (scope) {
+          const q = this.buildSpecialRequestQuestion(specialRequest.note, scope, freshCandidates, existingDraft);
+          pendingToPersist = {
+            ...specialRequest,
+            sourceMessageId: messageId,
+            createdAt: new Date().toISOString(),
+            scope,
+            menuItemIds: q?.ids,
+            names: q?.names,
+            question: q?.text,
+          };
+          if (!result.pendingOptionSelection) {
+            if (result.clarificationQuestion && !result.weakClarification) {
+              result.clarificationQuestion = `Ozel isteginizi (${specialRequest.note}) not alacagim. ${result.clarificationQuestion}`;
+            } else if (q) {
+              result.clarificationQuestion = q.text;
+              // A concrete product question — the flow must send it, not route
+              // to the generic answer layer that knows nothing about the request.
+              result.weakClarification = false;
+              specialQuestionNames = q.names;
+            }
+          }
+        }
+      } else if (pendingRequest && !srApply.applied) {
+        // Still open: keep it with the ORIGINAL createdAt so the TTL stays honest.
+        pendingToPersist = { ...pendingRequest };
+        specialQuestionNames = pendingRequest.names ?? null;
+        if (result.confirmationMessage) {
+          // Something else went into the cart ("2 kola"): show it and keep our question open.
+          if (pendingRequest.question) {
+            const withQuestion = `${result.confirmationMessage}\n\n${pendingRequest.question}`;
+            if (withQuestion.length <= 1024) result.confirmationMessage = withQuestion;
+          }
+        } else if (!result.pendingOptionSelection && !result.draftOrderId) {
+          if (result.clarificationQuestion && !result.weakClarification) {
+            result.clarificationQuestion = `Ozel isteginizi (${pendingRequest.note}) not alacagim. ${result.clarificationQuestion}`;
+          } else if (classifyAddressText(userText).kind === 'none' && !isInformationalQuestion(userText)) {
+            // Products named again → ask about those; nothing product-like → repeat our question.
+            // Address / directions / a real question are left to the flow, which
+            // acknowledges them and appends the open question itself.
+            const freshEvidence = freshCandidates.some((c) => c.score >= FRESH_EVIDENCE_SCORE);
+            const q =
+              freshEvidence && pendingRequest.scope === 'menu'
+                ? this.buildSpecialRequestQuestion(pendingRequest.note, 'menu', freshCandidates, existingDraft)
+                : null;
+            const text = q?.text ?? pendingRequest.question;
+            if (text) {
+              result.clarificationQuestion = text;
+              result.weakClarification = false;
+              if (q) {
+                pendingToPersist = { ...pendingToPersist, menuItemIds: q.ids, names: q.names, question: q.text };
+                specialQuestionNames = q.names;
+              }
+            }
+          }
+        }
+      }
+
+      // 9. Save order intent (include candidate IDs for follow-up context)
+      const orderIntent = await this.saveOrderIntent(
+        tenantId,
+        conversationId,
+        messageId,
+        extractionForIntent,
+        candidates.map((c) => c.menuItemId),
+        pendingToPersist ? { _pendingSpecialRequest: pendingToPersist } : undefined
+      );
+      result.orderIntent = this.mapOrderIntentToDto(orderIntent);
+
       logger.info(
         {
           tenantId,
@@ -491,6 +667,9 @@ export class NluOrchestratorService {
           confidence: extraction.confidence,
           draftOrderId: result.draftOrderId,
           hasExistingDraft: !!existingDraft,
+          specialRequest: effectiveRequest
+            ? { note: effectiveRequest.note, applied: srApply.applied, pending: !!pendingToPersist }
+            : undefined,
           durationMs: Date.now() - startTime,
         },
         'Order extraction completed'
@@ -517,6 +696,9 @@ export class NluOrchestratorService {
           customerPreferencesContext,
           history,
           intentAnalysis,
+          specialRequest: pendingToPersist
+            ? { note: pendingToPersist.note, names: specialQuestionNames }
+            : undefined,
         });
       }
 
@@ -544,6 +726,224 @@ export class NluOrchestratorService {
       .map((c) => `${c.name} (${(c.effectivePrice ?? c.basePrice).toFixed(2)} TL)`)
       .join(', ');
     return `Size su lezzetleri onerebilirim: ${list}. Hangisini isterseniz yazmaniz yeterli.`;
+  }
+
+  // ==================== SPECIAL REQUEST (restrictive order note) ====================
+
+  /** A special request saved on the previous intent, still within its TTL. */
+  private readPendingSpecialRequest(prevIntent: { extractedJson: unknown } | null): PendingSpecialRequest | null {
+    const p = (prevIntent?.extractedJson as any)?._pendingSpecialRequest;
+    if (!p || typeof p.note !== 'string' || !p.note || typeof p.createdAt !== 'string') return null;
+    const age = Date.now() - Date.parse(p.createdAt);
+    if (!Number.isFinite(age) || age > PENDING_SPECIAL_REQUEST_TTL_MS) return null;
+    return p as PendingSpecialRequest;
+  }
+
+  /**
+   * The product question of a special request that is still open, for turns
+   * that never reach the NLU (a pin) or that the flow answers itself (an
+   * address before any product). Lets the flow repeat the concrete question
+   * instead of a generic "what would you like to order?".
+   */
+  async getOpenSpecialRequestQuestion(tenantId: string, conversationId: string): Promise<string | null> {
+    try {
+      const pending = this.readPendingSpecialRequest(await this.getLastOrderIntent(tenantId, conversationId));
+      return pending?.question || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Name, category and matched synonyms of each item the extractor wants to remove. */
+  private async describeRemovedItems(
+    tenantId: string,
+    extraction: LlmExtractionResponse,
+    candidates: MenuCandidateDto[],
+    existingDraft: { items: Array<{ menuItemId: string; menuItemName: string }> } | null
+  ): Promise<Map<string, string[]>> {
+    const ids = [...new Set(extraction.items.filter((i) => i.action === 'remove').map((i) => i.menuItemId))];
+    const texts = new Map<string, string[]>();
+    if (ids.length === 0) return texts;
+    const add = (id: string, ...values: Array<string | null | undefined>) => {
+      const list = texts.get(id) ?? [];
+      for (const v of values) if (v) list.push(v);
+      texts.set(id, list);
+    };
+    for (const c of candidates) {
+      if (ids.includes(c.menuItemId)) add(c.menuItemId, c.name, c.category, ...(c.synonymsMatched || []));
+    }
+    for (const d of existingDraft?.items ?? []) {
+      if (ids.includes(d.menuItemId)) add(d.menuItemId, d.menuItemName);
+    }
+    try {
+      // Cart-only candidates carry no category; the menu row does.
+      const rows = await prisma.menuItem.findMany({
+        where: { id: { in: ids }, tenantId },
+        select: { id: true, name: true, category: true },
+      });
+      for (const r of rows) add(r.id, r.name, r.category);
+    } catch {
+      // Non-critical: name/synonyms from the candidates still apply
+    }
+    return texts;
+  }
+
+  /**
+   * Put the special request onto the extraction (item note or order note)
+   * BEFORE the draft is written. Never adds products and never changes
+   * quantities or prices. Returns which extracted items now carry the note.
+   */
+  private applySpecialRequest(opts: {
+    extraction: LlmExtractionResponse;
+    request: SpecialRequest;
+    fromThisMessage: boolean;
+    existingDraft: { items: Array<{ menuItemId: string; qty: number; notes: string | null; optionsJson: unknown }> } | null;
+    freshCandidates: MenuCandidateDto[];
+    userText: string;
+    /** Name / category / synonyms of every removed item */
+    removedItemTexts?: Map<string, string[]>;
+    /** Carried-over request: only these products may receive it (null = no limit) */
+    allowedItemIds?: Set<string> | null;
+  }): { applied: boolean; noteItemIdx: Set<number> } {
+    const { extraction, request } = opts;
+    const items = extraction.items;
+    const noteItemIdx = new Set<number>();
+    const prefixed = `${SPECIAL_REQUEST_PREFIX}${request.note}`;
+    const draftItems = opts.existingDraft?.items ?? [];
+    const clean = (n: string | null | undefined) => (n && n !== '__CLEAR__' ? n : null);
+    const foldNote = (n: string) => foldTr(n).replace(/^ozel istek:\s*/, '').replace(/\s+/g, ' ').trim();
+    const applied = () => ({ applied: true, noteItemIdx });
+    const allowed = (menuItemId: string) => !opts.allowedItemIds || opts.allowedItemIds.has(menuItemId);
+
+    // 1. REMOVE-GUARD: the extractor maps "istemiyorum" to remove, so
+    // "pizzada sogan istemiyorum" would delete the pizza. An ingredient
+    // exclusion without an explicit removal verb keeps the item and notes it.
+    // An exclusion that names the removed product itself ("kolayi istemiyorum",
+    // "tatliyi istemiyorum") is a real removal and stays one.
+    if (opts.fromThisMessage && request.kind === 'exclude' && !hasItemRemoveSignal(opts.userText)) {
+      items.forEach((item, idx) => {
+        if (item.action !== 'remove') return;
+        if (exclusionNamesProduct(request.note, opts.removedItemTexts?.get(item.menuItemId) ?? [])) return;
+        item.action = 'keep';
+        item.notes = prefixed;
+        noteItemIdx.add(idx);
+      });
+      if (noteItemIdx.size > 0) return applied();
+    }
+
+    // 2. The model already wrote notes for this message → trust them, flag for
+    // staff. An echo of a note the cart line already has does not count.
+    if (opts.fromThisMessage) {
+      items.forEach((item, idx) => {
+        const notes = clean(item.notes);
+        if (item.action === 'remove' || !notes) return;
+        if (item.action === 'keep') {
+          const d = draftItems.find((di) => di.menuItemId === item.menuItemId);
+          if (d?.notes && foldNote(d.notes).includes(foldNote(notes))) return;
+        }
+        if (!foldTr(notes).startsWith('ozel istek')) item.notes = `${SPECIAL_REQUEST_PREFIX}${notes}`;
+        noteItemIdx.add(idx);
+      });
+      if (noteItemIdx.size > 0) return applied();
+    }
+
+    const addIdx = items
+      .map((it, i) => (it.action === 'add' && allowed(it.menuItemId) ? i : -1))
+      .filter((i) => i >= 0);
+
+    // 3. Exactly one product added → the note belongs to it.
+    if (addIdx.length === 1) {
+      const it = items[addIdx[0]];
+      it.notes = this.mergeNotes(clean(it.notes), prefixed);
+      noteItemIdx.add(addIdx[0]);
+      return applied();
+    }
+
+    // 5. Several products → do not guess the line; the kitchen reads the order note.
+    if (addIdx.length >= 2) {
+      extraction.orderNotes = this.mergeNotes(clean(extraction.orderNotes), prefixed);
+      return applied();
+    }
+
+    // 4. Nothing added: a cart line named in this message, or the only cart line.
+    const directKeeps = items
+      .map((it, i) => (it.action === 'keep' && allowed(it.menuItemId) &&
+        opts.freshCandidates.some((c) => c.menuItemId === it.menuItemId && c.score >= DIRECT_MATCH_SCORE) ? i : -1))
+      .filter((i) => i >= 0);
+    let targetIdx = directKeeps.length === 1 ? directKeeps[0] : -1;
+    const freshNonDraft = opts.freshCandidates.some(
+      (c) => c.score >= FRESH_EVIDENCE_SCORE && !draftItems.some((d) => d.menuItemId === c.menuItemId)
+    );
+    if (
+      targetIdx < 0 &&
+      draftItems.length === 1 &&
+      allowed(draftItems[0].menuItemId) &&
+      !freshNonDraft &&
+      !items.some((i) => i.action === 'remove')
+    ) {
+      const d = draftItems[0];
+      targetIdx = items.findIndex((i) => i.action === 'keep' && i.menuItemId === d.menuItemId);
+      if (targetIdx < 0) {
+        items.push({
+          menuItemId: d.menuItemId,
+          qty: d.qty,
+          action: 'keep',
+          // Carry the line's options so the required-option check does not re-ask them
+          optionSelections: Array.isArray(d.optionsJson)
+            ? (d.optionsJson as Array<{ groupName: string; optionName: string }>).map((o) => ({
+                groupName: o.groupName,
+                optionName: o.optionName,
+              }))
+            : [],
+          extras: [],
+          notes: '',
+          itemConfidence: 0.9,
+        });
+        targetIdx = items.length - 1;
+      }
+    }
+    if (targetIdx >= 0) {
+      items[targetIdx].notes = this.mergeNotes(clean(items[targetIdx].notes), prefixed);
+      noteItemIdx.add(targetIdx);
+      // Resolved locally: the note edit must reach the draft instead of the
+      // low-confidence / clarification branches.
+      extraction.confidence = Math.max(extraction.confidence, CONFIDENCE_THRESHOLD);
+      extraction.clarificationQuestion = null;
+      return applied();
+    }
+
+    return { applied: false, noteItemIdx };
+  }
+
+  /** One concrete question that places the special request on a product. */
+  private buildSpecialRequestQuestion(
+    note: string,
+    scope: 'menu' | 'draft',
+    freshCandidates: MenuCandidateDto[],
+    existingDraft: { items: Array<{ menuItemName: string; menuItemId: string }> } | null
+  ): { text: string; names: string[]; ids: string[] } | null {
+    if (scope === 'draft') {
+      const lines = existingDraft?.items ?? [];
+      const names = [...new Set(lines.map((i) => i.menuItemName))];
+      if (names.length === 0) return null;
+      return {
+        text: `Ozel isteginizi (${note}) hangi urune ekleyelim: ${names.join(', ')}?`,
+        names,
+        ids: [...new Set(lines.map((i) => i.menuItemId))],
+      };
+    }
+    const sorted = freshCandidates.slice().sort((a, b) => b.score - a.score);
+    if (sorted.length === 0) return null;
+    const floor = Math.max(0.15, sorted[0].score * 0.5);
+    const picks = sorted.filter((c) => c.score >= floor).slice(0, 3);
+    const list = picks
+      .map((c) => `${c.name} (${(c.effectivePrice ?? c.basePrice).toFixed(2)} TL)`)
+      .join(', ');
+    return {
+      text: `Ozel isteginizi (${note}) siparis notuna ekleyecegim. Hangisini istersiniz: ${list}?`,
+      names: picks.map((c) => c.name),
+      ids: picks.map((c) => c.menuItemId),
+    };
   }
 
   // ==================== HYBRID AI (Claude) REPLY LAYER ====================
@@ -618,19 +1018,42 @@ KURALLAR:
     customerPreferencesContext?: string;
     history: Array<{ role: 'user' | 'assistant'; content: string }>;
     intentAnalysis: IntentAnalysis | null;
+    /** An open special request: the rewrite must mention it and ask only about `names` */
+    specialRequest?: { note: string; names: string[] | null };
   }): Promise<void> {
     try {
       const choice = opts.route.model === 'sonnet' ? ('sonnet' as const) : ('haiku' as const);
+      let situation = `Sistem su netlestirme ihtiyacini belirledi: "${opts.result.clarificationQuestion}". Musteriye bu netlestirmeyi kendi dilinde, dogal ve kisa bir mesajla sor.`;
+      const names = opts.specialRequest?.names ?? [];
+      if (opts.specialRequest) {
+        situation +=
+          ` Musterinin ozel istegi "${opts.specialRequest.note}" siparise not olarak eklenecek; bunu kisaca belirt.` +
+          (names.length > 0 ? ` SADECE su urunleri sor: ${names.join(', ')}.` : '') +
+          ' Baska urun veya fiyat uydurma.';
+      }
+      situation += ' "Gorevlimiz kontrol edecek", "temsilci", "size donecegiz" gibi ifadeler ASLA kullanma.';
       const system = this.buildClaudeReplySystemPrompt({
         candidates: opts.candidates,
         optionGroups: opts.optionGroups,
         existingOrderContext: opts.existingOrderContext,
         customerPreferencesContext: opts.customerPreferencesContext,
-        situation: `Sistem su netlestirme ihtiyacini belirledi: "${opts.result.clarificationQuestion}". Musteriye bu netlestirmeyi kendi dilinde, dogal ve kisa bir mesajla sor.`,
+        situation,
       });
       const messages = this.buildClaudeMessages(opts.history, opts.userText);
       const reply = await claudeClientService.generateReply({ choice, system, messages });
       if (!reply) return; // Claude failed → keep the local clarification text
+
+      // Guard rails: a "staff will get back to you" promise is exactly what
+      // left customers waiting in silence, and a special-request question that
+      // lost the product names is no longer answerable — keep the local text.
+      const foldedReply = foldTr(reply.text);
+      if (['gorevlimiz', 'temsilci', 'size donecegiz', 'donus yapacagiz', 'size donus'].some((p) => foldedReply.includes(p))) {
+        logger.warn({ tenantId: opts.tenantId }, 'Hybrid reply promised a staff hand-off, keeping local text');
+        return;
+      }
+      if (names.length > 0 && !names.some((n) => foldedReply.includes(foldTr(n)))) {
+        return;
+      }
 
       opts.result.clarificationQuestion = reply.text;
 
@@ -648,98 +1071,6 @@ KURALLAR:
     } catch (error) {
       logger.warn({ error }, 'Hybrid clarification reply failed, keeping local text');
     }
-  }
-
-  /**
-   * NEGATIVE-CONSTRAINT GATE: the message carries a restrictive special
-   * request, so no order is auto-created/updated. The conversation is
-   * flagged for human review (existing PENDING_AGENT inbox flag) and the
-   * customer gets a "noted — our staff will confirm" reply (Claude sonnet
-   * when possible, fixed template otherwise).
-   */
-  private async handleNegativeConstraintGate(opts: {
-    tenantId: string;
-    conversationId: string;
-    userText: string;
-    extraction: LlmExtractionResponse;
-    orderIntent: any;
-    candidates: MenuCandidateDto[];
-    optionGroups: OptionGroupsMap;
-    existingOrderContext?: string;
-    customerPreferencesContext?: string;
-    history: Array<{ role: 'user' | 'assistant'; content: string }>;
-    intentAnalysis: IntentAnalysis | null;
-  }): Promise<OrchestrationResult> {
-    // Flag for human review via the existing inbox status. PENDING_AGENT
-    // also silences the bot for subsequent messages until an agent acts
-    // (see the takeover guard in conversation-flow.service.ts).
-    try {
-      await prisma.conversation.update({
-        where: { id: opts.conversationId },
-        data: { status: 'PENDING_AGENT' },
-      });
-    } catch (error) {
-      logger.warn(
-        { error, conversationId: opts.conversationId },
-        'Failed to flag conversation as PENDING_AGENT'
-      );
-    }
-
-    const fallbackText =
-      'Ozel isteginizi not aldim. Siparisinizi gorevlimiz kontrol edip sizinle onaylayacak.';
-
-    const result: OrchestrationResult = {
-      success: true,
-      confidence: opts.extraction.confidence,
-      orderIntent: this.mapOrderIntentToDto(opts.orderIntent),
-      itemsExtracted: opts.extraction.items.length > 0,
-      clarificationQuestion: fallbackText,
-    };
-
-    try {
-      const constraintHint = opts.intentAnalysis?.negativeConstraintText
-        ? ` ("${opts.intentAnalysis.negativeConstraintText}")`
-        : '';
-      const system = this.buildClaudeReplySystemPrompt({
-        candidates: opts.candidates,
-        optionGroups: opts.optionGroups,
-        existingOrderContext: opts.existingOrderContext,
-        customerPreferencesContext: opts.customerPreferencesContext,
-        situation:
-          `Musterinin mesajinda ozel/kisitlayici bir istek tespit edildi${constraintHint}. ` +
-          'Siparis OTOMATIK OLUSTURULMADI. Musteriye istegini not aldigini ve gorevlimizin ' +
-          'siparisi kontrol edip kendisiyle onaylayacagini kisa ve guven verici bir mesajla bildir. ' +
-          'Soru sorma, siparis onaylama.',
-      });
-      const messages = this.buildClaudeMessages(opts.history, opts.userText);
-      const reply = await claudeClientService.generateReply({ choice: 'sonnet', system, messages });
-      if (reply) {
-        result.clarificationQuestion = reply.text;
-        trainingCaptureService.capture({
-          tenantId: opts.tenantId,
-          source: 'claude-sonnet',
-          model: reply.model,
-          intentAnalysis: opts.intentAnalysis,
-          system,
-          history: messages.slice(0, -1),
-          userMessage: opts.userText,
-          assistantReply: reply.text,
-        });
-      }
-    } catch (error) {
-      logger.warn({ error }, 'Negative-constraint gate Claude reply failed, using fallback text');
-    }
-
-    logger.info(
-      {
-        tenantId: opts.tenantId,
-        conversationId: opts.conversationId,
-        negativeConstraintText: opts.intentAnalysis?.negativeConstraintText ?? null,
-      },
-      'Negative-constraint gate applied — order creation skipped, flagged for human review'
-    );
-
-    return result;
   }
 
   /**
@@ -805,12 +1136,14 @@ KURALLAR:
     conversationId: string,
     messageId: string,
     extraction: LlmExtractionResponse,
-    candidateIds?: string[]
+    candidateIds?: string[],
+    meta?: Record<string, unknown>
   ) {
     // Save candidate IDs alongside extraction data for follow-up context
     const extractionWithCandidates = {
       ...extraction,
       _candidateIds: candidateIds || [],
+      ...(meta || {}),
     };
 
     return prisma.orderIntent.create({
@@ -962,7 +1295,9 @@ KURALLAR:
         .toLocaleLowerCase('tr')
         .replace(/̇/g, '')
         .replace(/ı/g, 'i')
-        .replace(/\s+/g, ' ');
+        .replace(/\s+/g, ' ')
+        // "Ozel istek: Sadece mozerella" and an echoed "Sadece mozerella" are the same note
+        .replace(/^ozel istek:\s*/, '');
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(trimmed);
@@ -987,11 +1322,15 @@ KURALLAR:
     extraction: LlmExtractionResponse,
     candidates: Array<{ menuItemId: string; name: string; basePrice: number; effectivePrice?: number }>,
     optionGroups: OptionGroupsMap,
-    existingDraft?: any
+    existingDraft?: any,
+    /** Indices of extracted items that carry a special-request note */
+    noteItemIdx?: Set<number>
   ) {
     // If all items are 'keep' or no items, nothing to do
     const actionItems = extraction.items.filter((i) => i.action !== 'keep');
     if (extraction.items.length === 0) return null;
+    const noteKey = (notes: string | null | undefined) =>
+      crypto.createHash('md5').update(foldTr(notes || '').replace(/^ozel istek:\s*/, '').trim()).digest('hex').slice(0, 6);
 
     // Build a map of existing items (from the draft order) keyed by itemKey
     const existingItemsMap = new Map<string, {
@@ -1005,8 +1344,11 @@ KURALLAR:
     }>();
 
     if (existingDraft?.items) {
-      for (const item of existingDraft.items) {
-        const key = this.itemKey(item.menuItemId, item.optionsJson);
+      for (const [i, item] of (existingDraft.items as any[]).entries()) {
+        let key = this.itemKey(item.menuItemId, item.optionsJson);
+        // A special-request line lives next to a plain line of the same
+        // product; without a distinct key one would overwrite the other.
+        if (existingItemsMap.has(key)) key = `${key}:n:${noteKey(item.notes)}:${i}`;
         existingItemsMap.set(key, {
           menuItemId: item.menuItemId,
           menuItemName: item.menuItemName,
@@ -1020,7 +1362,7 @@ KURALLAR:
     }
 
     // Process each extracted item based on action
-    for (const item of extraction.items) {
+    for (const [idx, item] of extraction.items.entries()) {
       const candidate = candidates.find((c) => c.menuItemId === item.menuItemId);
       if (!candidate) continue;
 
@@ -1031,10 +1373,16 @@ KURALLAR:
       const unitPrice = (candidate.effectivePrice ?? candidate.basePrice) + totalDelta;
       const optionsJson = resolvedOptions.length > 0 ? resolvedOptions : null;
       const extrasJson = item.extras.length > 0 ? item.extras : null;
-      const key = this.itemKey(item.menuItemId, optionsJson);
+      let key = this.itemKey(item.menuItemId, optionsJson);
 
       if (action === 'add') {
-        const existing = existingItemsMap.get(key);
+        let existing = existingItemsMap.get(key);
+        // "1 Italiano Yarim" then "1 Italiano Yarim sadece mozzarella" must stay
+        // two lines — merging would put the note on both sandwiches.
+        if (existing && noteItemIdx?.has(idx) && noteKey(existing.notes) !== noteKey(item.notes)) {
+          key = `${key}:n:${noteKey(item.notes)}`;
+          existing = existingItemsMap.get(key);
+        }
         if (existing) {
           // Same item+options → increase qty
           existing.qty += item.qty;
@@ -1199,7 +1547,9 @@ KURALLAR:
 
     const totalPrice = Number(order.totalPrice);
 
-    return llmExtractorService.generateSimpleSummary(items, totalPrice, order.notes);
+    // The written-address flag ("Konum paylasilmadi - ...") is for staff; the
+    // customer summary must not show it (the flow's buildOrderSummary strips it too).
+    return llmExtractorService.generateSimpleSummary(items, totalPrice, stripTypedAddressNote(order.notes));
   }
 
   /**

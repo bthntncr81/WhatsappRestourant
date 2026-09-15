@@ -54,6 +54,196 @@ export function detectNegativeConstraint(text: string): boolean {
   return NEGATIVE_CONSTRAINT_REGEX.test(foldTr(text || ''));
 }
 
+/**
+ * A restrictive request the customer attached to an order ("sadece
+ * mozerella", "sogan olmasin"). It is written onto the order as a note — it
+ * never blocks or silences the order flow.
+ */
+export interface SpecialRequest {
+  kind: 'only' | 'exclude' | 'other';
+  /** Customer wording (original Turkish spelling), <= 80 chars */
+  note: string;
+}
+
+/**
+ * Fold char-by-char so every index in the folded string points at the same
+ * character of the original — the returned note can then keep the customer's
+ * own spelling ("soğan olmasın", not "sogan olmasin").
+ */
+function foldTrAligned(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    let lower = ch.toLocaleLowerCase('tr');
+    if (lower.length !== 1) lower = ch.toLowerCase().charAt(0) || ch;
+    out += lower
+      .replace('ı', 'i')
+      .replace('ş', 's')
+      .replace('ç', 'c')
+      .replace('ğ', 'g')
+      .replace('ü', 'u')
+      .replace('ö', 'o');
+    // Astral characters (emoji) are 2 UTF-16 units: keep lengths aligned.
+    if (ch.length === 2) out += ' ';
+  }
+  return out;
+}
+
+const ONLY_STOP_WORDS = new Set([
+  'olacak', 'olsun', 'olsa', 'lutfen', 'koyun', 'ekleyin', 'istiyorum', 've',
+  'olmali', 'olarak', 'olur', 'olmasi',
+]);
+const QUANTITY_WORDS = new Set(['bir', 'iki', 'uc', 'dort', 'bes', 'tane', 'adet', 'yarim']);
+const LOGISTICS_WORDS = ['paket', 'gel', 'al', 'nakit', 'kart', 'kapida', 'konum', 'adres', 'siparis', 'bu', 'bunu', 'onu', 'su'];
+const EXCLUDE_VERBS = new Set([
+  'olmasin', 'olmadan', 'koyma', 'koymayin', 'koymasin', 'istemiyorum',
+  'haric', 'disinda', 'ekleme', 'eklemeyin',
+]);
+// Words that never name an ingredient. "artik istemiyorum" / "yok istemiyorum"
+// are a general refusal: as a note they told the kitchen "Ozel istek: artik
+// istemiyorum" and flipped every removal into a keep.
+const GENERIC_WORDS = new Set([
+  'siparis', 'siparisi', 'siparisim', 'siparisimi', 'bunu', 'onu', 'sunu', 'hic', 'hicbir', 'sey', 'bir', 'ben', 'biz',
+  'artik', 'yok', 'simdi', 'hicbirini', 'hepsini', 'tumunu', 'vazgectim', 'baska', 'bunlari', 'bunlar', 'hepsi',
+  'onlari', 'sunlari', 'kadar', 'tamam', 'evet', 'hayir',
+]);
+// "sadece bu kadar", "evet sadece bunlar" = "that's all", not "only X".
+const FILLER_ONLY = new Set(['bu', 'bunlar', 'bunlari', 'bunu', 'kadar', 'baska', 'hepsi', 'o', 'onlar', 'su', 'sunlar', 'bukadar']);
+// Product-type words: excluding one of these removes a product, it is not an ingredient note.
+const PRODUCT_TYPE_STEMS = [
+  'icece', 'tatli', 'yemek', 'urun', 'menu', 'siparis', 'pizza', 'sandvic', 'makarna', 'burger', 'salata',
+  'corba', 'kola', 'ayran', 'soda', 'gazoz', 'meyve suyu', 'tatlilar',
+];
+
+function foldWords(text: string): string[] {
+  return foldTrAligned(text || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+function commonPrefixLen(a: string, b: string): number {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i;
+}
+
+/**
+ * Does an exclusion note ("kolayi istemiyorum") name the removed PRODUCT
+ * itself rather than an ingredient of it ("sogan istemiyorum")?
+ * `productTexts` are the removed item's name, category and matched synonyms.
+ * True → the extractor's removal is real and must not become a note.
+ */
+export function exclusionNamesProduct(note: string, productTexts: string[]): boolean {
+  const noteWords = foldWords(note).filter(
+    (w) => w.length >= 3 && !EXCLUDE_VERBS.has(w) && !GENERIC_WORDS.has(w) && w !== 'sade',
+  );
+  if (noteWords.length === 0) return true;
+  const productWords = productTexts.flatMap(foldWords).filter((w) => w.length >= 3);
+  return noteWords.some(
+    (w) =>
+      PRODUCT_TYPE_STEMS.some((s) => w.startsWith(s)) ||
+      productWords.some((p) => w.startsWith(p) || p.startsWith(w) || commonPrefixLen(w, p) >= 5),
+  );
+}
+
+/**
+ * Turn a negative-constraint message into an order note.
+ *
+ * Returns null whenever the wording is really about quantity ("sadece 1
+ * kola"), a product ("kola istemiyorum" = remove), logistics ("sadece
+ * nakit") or nothing specific — a null must never block or change the order.
+ *
+ * `candidateNames` are menu item names AND matched synonyms from THIS message:
+ * "sadece kola" means "only that product", not an ingredient, and "kolayi
+ * istemiyorum" (matched via the synonym "kola" of "Coca Cola") is a removal.
+ * `categoryNames` are matched with a looser stem ("tatliyi" ~ "Tatlilar").
+ */
+export function deriveSpecialRequest(
+  rawText: string,
+  negativeConstraintText: string | null | undefined,
+  candidateNames: string[],
+  categoryNames: string[] = [],
+): SpecialRequest | null {
+  const raw = rawText || '';
+  const folded = foldTrAligned(raw);
+  const tokens: Array<{ w: string; start: number; end: number }> = [];
+  const re = /[\p{L}\p{N}]+/gu;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(folded)) !== null) {
+    tokens.push({ w: m[0], start: m.index, end: m.index + m[0].length });
+  }
+  if (tokens.length === 0) return null;
+
+  // A clause break (punctuation) between token i-1 and token i
+  const breakBefore = (i: number): boolean =>
+    i <= 0 || /[,.;:!?\n]/.test(folded.slice(tokens[i - 1].end, tokens[i].start));
+
+  const nameWords = candidateNames
+    .flatMap((n) => foldTrAligned(n).split(/[^\p{L}\p{N}]+/u))
+    .filter((w) => w.length >= 3);
+  const categoryWords = categoryNames
+    .flatMap((n) => foldTrAligned(n).split(/[^\p{L}\p{N}]+/u))
+    .filter((w) => w.length >= 5);
+  const isNameWord = (w: string) =>
+    w.length >= 3 &&
+    (nameWords.some((nw) => w.startsWith(nw) || nw.startsWith(w)) ||
+      categoryWords.some((cw) => commonPrefixLen(w, cw) >= 5));
+  const cap = (s: string) => (s.length > 80 ? s.substring(0, 80).trim() : s);
+  const withSade = (note: string) =>
+    tokens.some((t) => t.w === 'sade') && !/\bsade\b/i.test(foldTrAligned(note)) ? `${note}, sade` : note;
+
+  // ---- 'only': "sadece X", "yalnizca X"
+  const onlyIdx = tokens.findIndex((t) => t.w === 'sadece' || t.w === 'yalniz' || t.w === 'yalnizca');
+  if (onlyIdx >= 0) {
+    const taken: number[] = [];
+    for (let j = onlyIdx + 1; j < tokens.length && taken.length < 3; j++) {
+      if (breakBefore(j) || ONLY_STOP_WORDS.has(tokens[j].w)) break;
+      taken.push(j);
+    }
+    if (taken.length > 0) {
+      const first = tokens[taken[0]].w;
+      const rejected =
+        /^\d+$/.test(first) ||
+        QUANTITY_WORDS.has(first) ||
+        LOGISTICS_WORDS.some((l) => first === l || (l.length >= 4 && first.startsWith(l))) ||
+        taken.every((j) => isNameWord(tokens[j].w)) ||
+        taken.every((j) => FILLER_ONLY.has(tokens[j].w));
+      if (!rejected) {
+        const span = raw.slice(tokens[taken[0]].start, tokens[taken[taken.length - 1]].end);
+        return { kind: 'only', note: cap(withSade(`Sadece ${span}`)) };
+      }
+    }
+  }
+
+  // ---- 'exclude': "sogan olmasin", "aci sos koymayin"
+  for (let k = 0; k < tokens.length; k++) {
+    if (!EXCLUDE_VERBS.has(tokens[k].w)) continue;
+    // "ekleme yapabilir miyim" is not "do not add": only a clause-final ekleme counts
+    if (tokens[k].w === 'ekleme' && k + 1 < tokens.length && !breakBefore(k + 1)) continue;
+    const taken: number[] = [];
+    for (let j = k - 1; j >= 0 && taken.length < 2; j--) {
+      if (breakBefore(j + 1)) break;
+      const w = tokens[j].w;
+      if (GENERIC_WORDS.has(w) || isNameWord(w) || /^\d+$/.test(w)) break;
+      taken.unshift(j);
+    }
+    if (taken.length === 0) continue;
+    const span = raw.slice(tokens[taken[0]].start, tokens[k].end);
+    return { kind: 'exclude', note: cap(withSade(span)) };
+  }
+
+  // ---- 'other': the analysis model's own constraint text, when it is not
+  // just a product name or a quantity.
+  const t = (negativeConstraintText || '').trim();
+  if (t.length >= 3 && t.length <= 80) {
+    const tw = foldTrAligned(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const meaningful = tw.filter(
+      (w) => !isNameWord(w) && !QUANTITY_WORDS.has(w) && !/^\d+$/.test(w) && !GENERIC_WORDS.has(w)
+        && w !== 'sadece' && !EXCLUDE_VERBS.has(w) && !FILLER_ONLY.has(w),
+    );
+    if (meaningful.length > 0) return { kind: 'other', note: cap(t) };
+  }
+
+  return null;
+}
+
 const ANALYSIS_SYSTEM_PROMPT = `Sen bir restoran WhatsApp asistaninin mesaj analiz motorusun.
 Gorevin SADECE analiz: musteri mesajini incele ve asagidaki JSON semasina birebir uyan TEK bir JSON nesnesi dondur. JSON disinda HICBIR sey yazma (aciklama, markdown, kod blogu YOK).
 

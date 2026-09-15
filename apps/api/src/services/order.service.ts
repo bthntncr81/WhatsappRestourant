@@ -13,7 +13,7 @@ import { chatbotService } from './chatbot.service';
 import { whatsappService } from './whatsapp.service';
 import { whatsappProviderService } from './whatsapp-provider.service';
 import { whatsappConfigService } from './whatsapp-config.service';
-import { TEMPLATES } from './message-templates';
+import { TEMPLATES, TYPED_ADDRESS_NOTE } from './message-templates';
 import { orderPaymentService } from './order-payment.service';
 import { posIntegrationService } from './pos-integration.service';
 import { inboxService } from './inbox.service';
@@ -671,15 +671,24 @@ export class OrderService {
     const customerName = conversation.customerName || conversation.customerPhone;
     const customerPhone = conversation.customerPhone;
 
+    // A written-address order (customer shared no pin) is flagged in its notes.
+    // Its coordinates were cleared, so no stale map link from an older pin.
+    const typedAddress = typeof order.notes === 'string' && order.notes.includes(TYPED_ADDRESS_NOTE);
+
     let mapsLink = '';
-    if (conversation.customerLat && conversation.customerLng) {
+    if (!typedAddress && conversation.customerLat && conversation.customerLng) {
       mapsLink = `\nKonum: https://maps.google.com/?q=${conversation.customerLat},${conversation.customerLng}`;
     }
 
     const deliveryAddr = order.deliveryAddress ? `\nAdres: ${order.deliveryAddress}` : '';
+    // Staff must see special requests ("Ozel istek: ...") and delivery notes.
+    const notesLine = order.notes ? `\nNot: ${order.notes}` : '';
+    const verifyLine = typedAddress
+      ? '\n*DIKKAT: Konum paylasilmadi, yazili adres - teslimat bolgesini teyit edin.*'
+      : '';
 
     // Text labels replace the emoji that used to carry the meaning here.
-    const message = `*YENİ SİPARİŞ #${order.orderNumber}*\n\nMüşteri: ${customerName}\nTelefon: ${customerPhone}\n\n*Ürünler:*\n${items}\n\n*Toplam: ${Number(order.totalPrice)} TL*${deliveryAddr}${mapsLink}`;
+    const message = `*YENİ SİPARİŞ #${order.orderNumber}*\n\nMüşteri: ${customerName}\nTelefon: ${customerPhone}\n\n*Ürünler:*\n${items}\n\n*Toplam: ${Number(order.totalPrice)} TL*${deliveryAddr}${mapsLink}${notesLine}${verifyLine}`;
 
     // Get WhatsApp credentials for sending
     const waConfig = await whatsappConfigService.getDecryptedConfig(tenantId);

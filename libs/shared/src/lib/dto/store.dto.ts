@@ -78,6 +78,10 @@ export interface GeoCheckResult {
   deliveryRule: DeliveryRuleDto | null;
   alternativeStores: { store: StoreDto; distance: number }[];
   message: string;
+  /** Optional: geoCheckJson rows stored before this field existed do not carry it */
+  reason?: 'IN_AREA' | 'OUT_OF_RADIUS' | 'NO_DELIVERY_RULE' | 'NO_OPEN_STORE';
+  /** Largest active delivery radius of the nearest store that has rules */
+  maxRadiusKm?: number | null;
 }
 
 // ==================== FUTURE: DELIVERY ZONE (POLYGON) ====================

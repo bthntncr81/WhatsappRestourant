@@ -2,6 +2,34 @@
  * Centralized Turkish message templates for WhatsApp bot responses
  */
 
+/**
+ * Staff flag written FIRST into Order.notes when the customer gave a written
+ * address instead of a pin. No commas (the NLU note merger splits on ',').
+ */
+export const TYPED_ADDRESS_NOTE = 'Konum paylasilmadi - yazili adres - bolge kontrolu yapilmadi';
+
+/**
+ * Marker phrase inside the explicit "please type your address" prompts. The
+ * flow looks for it in outbound history to know it already asked (survives the
+ * inactivity sub-state reset). Prisma `contains` is case-sensitive: keep the
+ * exact lowercase spelling inside the templates.
+ */
+export const ADDRESS_ASK_MARKER = 'kuryemizin sizi bulabilmesi icin';
+
+/**
+ * Order.notes without the written-address staff flag. The flag is an
+ * instruction for staff; every customer-facing summary must drop it.
+ */
+export function stripTypedAddressNote(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const rest = notes
+    .split(' | ')
+    .filter((p) => !p.startsWith(TYPED_ADDRESS_NOTE))
+    .join(' | ')
+    .trim();
+  return rest || null;
+}
+
 interface OrderSummaryItem {
   name: string;
   qty: number;
@@ -107,18 +135,170 @@ export const TEMPLATES = {
     'Siparisiniz devam ediyor. Kaldiginiz yerden devam edebilirsiniz.',
 
   // ==================== LOCATION ====================
+  // The pin is preferred but never mandatory: a customer who does not want to
+  // share a location can always continue with a written address.
   locationRequest:
-    'Teslimat icin konumunuzu gonderin.\nAsagidaki butona tiklayarak konum paylasabilirsiniz.',
+    'Teslimat icin konumunuzu asagidaki butonla paylasin.\n' +
+    'Konum paylasmak istemezseniz acik adresinizi de yazabilirsiniz (mahalle, sokak veya site adi, bina/kapi no, kat/daire).',
 
-  locationOutOfService(message: string): string {
-    return `${message}\n\nLutfen farkli bir konum gonderin veya *"iptal"* yazin.`;
+  /**
+   * Out-of-area pin. Built from structured fields (never from geo.service's
+   * panel message) and always offers a way to finish the order.
+   */
+  locationOutOfService(o: { distanceKm: number | null; radiusKm: number | null; pickupDiscountPercent?: number | null }): string {
+    const head =
+      o.distanceKm != null && o.radiusKm != null
+        ? `Konumunuz subemize yaklasik *${o.distanceKm.toFixed(1)} km* uzaklikta, paket servis alanimiz *${o.radiusKm} km*.`
+        : 'Gonderdiginiz konum paket servis alanimizin disinda gorunuyor. Konum pini bazen yanlis yere dusebilir.';
+    return (
+      `${head}\n\nSiparisinizi kaybetmeyelim, sepetiniz aynen duruyor:\n` +
+      `- *Gel Al*: hazir olunca subemizden alirsiniz${o.pickupDiscountPercent ? ` (%${o.pickupDiscountPercent} indirimli)` : ''}\n` +
+      '- *Baska Konum*: konum yanlis dustuyse yenisini gonderin\n' +
+      '- *Adresimi Yazayim*: acik adresinizi yazin, ekibimiz teslimat bolgesini kontrol etsin\n\n' +
+      'Vazgecmek isterseniz *iptal* yazabilirsiniz.'
+    );
   },
 
-  locationConfirmed(storeName: string, deliveryFee: number, distance: number): string {
+  // Titles must stay <= 20 chars: the provider does not truncate and Meta
+  // rejects the whole message (the customer would get nothing).
+  locationOutOfServiceButtons: [
+    { id: 'oos_pickup', title: "Gel Al'a Gec" },
+    { id: 'oos_new_location', title: 'Baska Konum Gonder' },
+    { id: 'oos_type_address', title: 'Adresimi Yazayim' },
+  ],
+
+  /** Reply to "size cok yakin nasil yani" after an out-of-area pin. */
+  outOfAreaComplaint(o: { distanceKm: number | null; radiusKm: number | null; storeName: string | null; storePhone: string | null }): string {
+    let msg = 'Haklisiniz olabilir, kusura bakmayin.';
+    if (o.distanceKm != null) {
+      msg +=
+        ` Paylastiginiz konum ${o.storeName ? `*${o.storeName}* subemize` : 'subemize'} ${o.distanceKm.toFixed(1)} km gorunuyor` +
+        (o.radiusKm ? `; paket servis alanimiz su an ${o.radiusKm} km.` : '.');
+    }
+    msg += '\nKonum pini bazen yanlis yere dusebiliyor. Acik adresinizi yazarsaniz ekibimiz kontrol etsin, ya da siparisinizi Gel Al olarak hazirlayalim.';
+    if (o.storePhone) {
+      msg += `\nDilerseniz bizi ${o.storePhone} numarasindan da arayabilirsiniz.`;
+    }
+    return msg;
+  },
+
+  locationConfirmed(storeName: string, deliveryFee: number, distance: number | null): string {
     return (
       `*${storeName}* subemizden teslimat yapilacak.\n` +
-      `Mesafe: ${distance.toFixed(1)} km\n` +
+      (distance != null && distance > 0 ? `Mesafe: ${distance.toFixed(1)} km\n` : '') +
       `Teslimat ucreti: ${deliveryFee.toFixed(2)} TL`
+    );
+  },
+
+  // ---- Written address (no pin) ----
+  typedAddressPrompt:
+    'Tabii, konum paylasmadan da siparis verebilirsiniz. Acik adresinizi yazar misiniz? ' +
+    'Mahalle, sokak veya site adi, bina/kapi no ve kat/daire bilgisi kuryemizin sizi bulabilmesi icin yeterli.',
+
+  typedAddressDetailAsk(partial: string): string {
+    return (
+      `Adresinizi aldim: *${partial}*\n` +
+      'Acik adresinizi tamamlamak icin mahalle, sokak veya site adi, bina/kapi no ve kat/daire bilgisini de yazar misiniz? ' +
+      'Bu bilgi kuryemizin sizi bulabilmesi icin gerekli. Isterseniz konumunuzu paylasmaniz da yeterli.'
+    );
+  },
+
+  typedAddressAccepted(address: string, storeName: string | null, deliveryFee: number | null): string {
+    return (
+      `Teslimat adresiniz: *${address}*\n` +
+      'Konum paylasilmadigi icin adresiniz ekibimiz tarafindan kontrol edilecek.' +
+      (storeName ? `\n*${storeName}* subemizden teslimat yapilacak.` : '') +
+      (deliveryFee != null && deliveryFee > 0
+        ? `\nTeslimat ucreti: ${deliveryFee.toFixed(2)} TL (adres kontrolunden sonra kesinlesir)`
+        : '') +
+      '\nBlok, daire veya tarif eklemek isterseniz simdi yazabilirsiniz.'
+    );
+  },
+
+  typedAddressContinueButtons: {
+    body: 'Konum paylasmadan devam etmek icin:',
+    buttons: [{ id: 'use_typed_address', title: 'Bu adresle devam' }],
+  },
+
+  locationRequestWithParked(address: string): string {
+    return (
+      `Daha once yazdiginiz adres: *${address}*\n` +
+      'Konumunuzu paylasirsaniz bolge kontrolunu hemen yapariz. Konum paylasmadan bu adresle de devam edebilirsiniz.'
+    );
+  },
+
+  deliveryNoteSaved:
+    'Teslimat notunuzu aldim. Teslimat icin konumunuzu paylasabilir ya da acik adresinizi yazabilirsiniz.',
+
+  /** A pin that arrived before the order was confirmed; it IS reused at the address step. */
+  locationReceivedEarly:
+    'Konumunuzu aldim, siparisinizi onayladiktan sonra teslimat adiminda kullanacagim.',
+
+  pinReused: 'Daha once paylastiginiz konumu teslimat icin kullaniyorum.',
+
+  // ---- A product named after the order was confirmed, without clear add wording ----
+  midFlowAddAsk(itemName: string): string {
+    return `*${itemName}* siparisinize eklensin mi?`;
+  },
+
+  midFlowAddButtons: [
+    { id: 'mid_add_yes', title: 'Evet, ekle' },
+    { id: 'mid_add_no', title: 'Hayir, eklemeyin' },
+  ],
+
+  midFlowAddDeclined: 'Tamam, siparisinize bir sey eklemedim.',
+
+  // ---- Payment questions (answered in any phase) ----
+  paymentInfo(o: {
+    subtotal: number | null;
+    isPickup: boolean;
+    deliveryFee: number | null;
+    feeIsEstimate: boolean;
+    onlineEnabled: boolean;
+    bankTransferAsked: boolean;
+    preConfirm: boolean;
+  }): string {
+    let msg =
+      o.subtotal != null && o.subtotal > 0
+        ? `Sepet tutariniz: ${o.subtotal.toFixed(2)} TL`
+        : 'Sepetiniz su an bos.';
+    if (!o.isPickup && o.deliveryFee != null && o.deliveryFee > 0) {
+      msg += `\nPaket servis teslimat ucreti: ${o.deliveryFee.toFixed(2)} TL${o.feeIsEstimate ? ' (adres kontrolunden sonra kesinlesir)' : ''}`;
+    }
+    msg +=
+      `\n\nOdemeyi ${o.isPickup ? 'kasada' : 'kapida'} nakit veya kredi karti ile` +
+      (o.onlineEnabled ? ' ya da size gonderecegimiz online odeme linkiyle' : '') +
+      ' yapabilirsiniz.';
+    if (o.bankTransferAsked) msg += '\nIBAN / havale / EFT ile odeme almiyoruz.';
+    if (o.preConfirm) msg += '\nSiparisinizi onayladiginizda odeme yontemini birlikte secelim.';
+    return msg;
+  },
+
+  paymentInfoConfirmed(orderNumber: number, total: number, paymentMethod: string | null, bankTransferAsked: boolean): string {
+    const label =
+      paymentMethod === 'CASH' ? 'Nakit' : paymentMethod === 'CREDIT_CARD' ? 'Kredi karti' : null;
+    return (
+      `Siparis #${orderNumber} tutari: ${total.toFixed(2)} TL` +
+      (label ? `\nSectiginiz odeme: ${label}.` : '') +
+      (bankTransferAsked ? '\nIBAN / havale / EFT ile odeme almiyoruz.' : '')
+    );
+  },
+
+  // ---- Undo of a cart change made after the order was confirmed ----
+  midFlowUndoHint: 'Yanlis eklendiyse *geri al* yazmaniz yeterli.',
+
+  midFlowUndoDone(cart: string, moreToUndo: boolean): string {
+    return (
+      `Tamam, son degisiklik geri alindi.\n\nGuncel siparisiniz:\n\n${cart}` +
+      (moreToUndo ? '\n\nOndan onceki degisiklik de yanlissa tekrar *geri al* yazin.' : '') +
+      '\n\nYerine baska bir sey eklemek isterseniz yazabilirsiniz.'
+    );
+  },
+
+  midFlowUndoNothing(cart: string): string {
+    return (
+      `Siparisinizde su an bunlar var:\n\n${cart}\n\n` +
+      'Neyi degistirmek istersiniz? Cikarmak istediginiz urunun adini yazabilirsiniz (ornek: _kolayi cikar_).'
     );
   },
 
@@ -131,7 +311,7 @@ export const TEMPLATES = {
   },
 
   reminderSendLocation:
-    'Lutfen konum pininizi gonderin.\nKonum gondermek icin WhatsApp\'taki ek (atac) menusunden Konum secenegini kullanabilirsiniz.',
+    'Teslimat icin konum pininizi paylasabilir ya da acik adresinizi yazabilirsiniz (mahalle, sokak veya site adi, bina/kapi no, kat/daire).',
 
   // ==================== ADDRESS COLLECTION ====================
   addressRequest:
@@ -320,7 +500,8 @@ export const TEMPLATES = {
   savedAddressListHeader: 'Kayitli adresleriniz:',
   savedAddressListButton: 'Adres Sec',
   newAddressRowTitle: 'Yeni Adres',
-  newAddressRowDescription: 'Yeni konum gondererek adres girin',
+  newAddressRowDescription: 'Konum paylasin veya adres yazin',
+  parkedAddressRowTitle: 'Yazdiginiz adres',
 
   askSaveAddressButtons: {
     body: 'Bu adresi kaydetmek ister misiniz?',
@@ -345,8 +526,14 @@ export const TEMPLATES = {
 
   addressNotSaved: 'Tamam, adres kaydedilmedi.',
 
+  // Only for a saved address that no longer exists; an out-of-area saved
+  // address gets the out-of-area options instead.
   savedAddressInvalid:
-    'Sectiginiz adres artik hizmet alaninda degil.\nLutfen yeni konum gonderin.',
+    'Sectiginiz kayitli adres bulunamadi.\nYeni konum paylasabilir ya da acik adresinizi yazabilirsiniz.',
+
+  savedAddressOutOfArea(name: string): string {
+    return `Kayitli adresiniz *${name}* su an teslimat alanimizin disinda gorunuyor.`;
+  },
 
   // ==================== STORE STATUS ====================
   storeClosed: 'Suanda kapaliyiz. Acildigimizda tekrar siparis verebilirsiniz.',

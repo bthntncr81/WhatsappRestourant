@@ -2,6 +2,28 @@ import prisma from '../db/prisma';
 import { inboxService } from './inbox.service';
 import { whatsappService } from './whatsapp.service';
 import { nluOrchestratorService, OptionSelectionRequest } from './nlu/orchestrator.service';
+import { deriveSpecialRequest } from './nlu/intent-analysis.service';
+import { menuCandidateService } from './nlu/menu-candidate.service';
+import {
+  foldTr,
+  words as foldedWords,
+  classifyAddressText,
+  hasAddSignal,
+  hasQuestionSignal as textHasQuestionSignal,
+  isAddressConfirmReply,
+  isAddressRejectReply,
+  isAddressWaitReply,
+  isAreaComplaint,
+  isConfusionAboutCart,
+  isExplicitMidFlowEdit,
+  isLocationRefusal,
+  hasAddressEvidence,
+  isMidFlowItemMention,
+  isOrderDonePhrase,
+  isPaymentQuestion,
+  isUndoLastChangeIntent,
+  mentionsMenuItemName,
+} from './nlu/flow-text-signals';
 import {
   conversationAnswerService,
   CartLine,
@@ -19,7 +41,13 @@ import { upsellService } from './upsell.service';
 import { surveyService } from './survey.service';
 import { reorderService } from './reorder.service';
 import { billingService } from './billing.service';
-import { TEMPLATES } from './message-templates';
+import {
+  TEMPLATES,
+  TYPED_ADDRESS_NOTE,
+  ADDRESS_ASK_MARKER,
+  stripTypedAddressNote as stripTypedAddressFlag,
+} from './message-templates';
+import { Prisma } from '@prisma/client';
 import { WHATSAPP_KVKK_MESSAGE, WHATSAPP_KVKK_ACCEPTED, WHATSAPP_MARKETING_ASK, WHATSAPP_MARKETING_ACCEPTED, WHATSAPP_MARKETING_DECLINED } from './legal-texts';
 import { createLogger } from '../logger';
 import {
@@ -54,15 +82,7 @@ function normalizeTr(text: string): string {
  * is what reaches the LLM.
  */
 function deaccentTr(text: string): string {
-  return normalizeTr(text)
-    .replace(/ç/g, 'c')
-    .replace(/ğ/g, 'g')
-    .replace(/ş/g, 's')
-    .replace(/ö/g, 'o')
-    .replace(/ü/g, 'u')
-    .replace(/â/g, 'a')
-    .replace(/î/g, 'i')
-    .replace(/û/g, 'u');
+  return foldTr(text).trim();
 }
 
 // Keywords for user intent detection
@@ -104,12 +124,54 @@ const PAYMENT_CHANGE_KEYWORDS = [
 // Payment link expiry (30 minutes)
 const PAYMENT_LINK_EXPIRY_MS = 30 * 60 * 1000;
 
+// A conversation held by the old negative-constraint gate is replayed only when
+// the hold is this fresh (same window as a "recent" confirmed order). Older holds
+// restart cleanly instead of reviving a days-old cart.
+const LEGACY_HOLD_REPLAY_MS = 2 * 60 * 60 * 1000;
+
+// A pin sent before the current draft existed is still used for it within this window.
+const PRE_ORDER_PIN_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+// Undo stack for cart changes made after the order was confirmed.
+const MID_FLOW_UNDO_MAX = 3;
+const MID_FLOW_UNDO_TTL_MS = 30 * 60 * 1000; // inactivity cancels a draft after ~15 min anyway
+
 interface FlowContext {
   tenantId: string;
   conversationId: string;
   conversation: any; // Raw Prisma conversation record
   message: MessageDto;
   payload: WhatsAppWebhookPayload;
+}
+
+/** One cart line before a mid-flow change. Item ids are NOT kept: the NLU re-creates the rows on every pass. */
+interface CartSnapshotLine {
+  menuItemId: string;
+  menuItemName: string;
+  qty: number;
+  unitPrice: number;
+  optionsJson: any;
+  extrasJson: any;
+  notes: string | null;
+}
+
+/** Stored in conversation.flowMetadata.midFlowChanges (newest last). */
+interface MidFlowChangeRecord {
+  v: 1;
+  orderId: string;
+  phase: ConversationPhase;
+  messageId: string;
+  at: string;
+  before: CartSnapshotLine[];
+  beforeTotal: number;
+  beforeNotes: string | null;
+  afterSignature: string;
+}
+
+/** A PENDING_AGENT status that the old negative-constraint gate set by itself. */
+interface LegacyGateHold {
+  gateReplyAt: Date;
+  heldMessage: { id: string; text: string | null } | null;
 }
 
 export class ConversationFlowService {
@@ -130,19 +192,40 @@ export class ConversationFlowService {
     }
 
     const ctx: FlowContext = { tenantId, conversationId, conversation, message, payload };
-    const currentPhase = (conversation.phase as ConversationPhase) || 'IDLE';
+    let currentPhase = (conversation.phase as ConversationPhase) || 'IDLE';
 
     // Agent takeover guard: if an agent has locked this conversation,
     // the bot stays completely silent. Only the agent responds via inbox.
+    // An EXPIRED lock does not count: the inbox refreshes the lock every
+    // 2 minutes while an agent has the thread open and stale rows are only
+    // cleaned lazily, so a leftover row must not silence the bot forever.
     const lock = await prisma.conversationLock.findUnique({
       where: { conversationId },
     });
-    if (lock || conversation.status === 'PENDING_AGENT') {
+    const lockActive = !!lock && (!lock.expiresAt || new Date(lock.expiresAt).getTime() > Date.now());
+    if (lockActive) {
       logger.info(
-        { tenantId, conversationId, hasLock: !!lock, status: conversation.status },
+        { tenantId, conversationId, hasLock: true, status: conversation.status },
         'Bot silenced — conversation is handled by an agent',
       );
       return;
+    }
+
+    // PENDING_AGENT normally means a human took over (handoff button, an
+    // assignment, a staff reply) and the bot must stay silent. The old
+    // negative-constraint gate ALSO set it by itself for "sadece mozerella"
+    // style orders, and nobody ever answered those customers (High Five, 12.09).
+    // Only such bot-made holds with no human action since are resumed.
+    let legacyHold: LegacyGateHold | null = null;
+    if (conversation.status === 'PENDING_AGENT') {
+      legacyHold = await this.findLegacyConstraintGateHold(ctx);
+      if (!legacyHold) {
+        logger.info(
+          { tenantId, conversationId, hasLock: false, status: conversation.status },
+          'Bot silenced — conversation is handled by an agent',
+        );
+        return;
+      }
     }
 
     // Subscription guard: if the restaurant's subscription is suspended
@@ -173,6 +256,12 @@ export class ConversationFlowService {
     );
 
     try {
+      if (legacyHold) {
+        const resumed = await this.resumeFromConstraintGateHold(ctx, legacyHold);
+        if (resumed.handled) return;
+        currentPhase = resumed.phase;
+      }
+
       // Store-closed guard: block new orders when all stores are closed
       const guardPhases: ConversationPhase[] = [
         'IDLE', 'ORDER_COLLECTING', 'ORDER_REVIEW', 'ADDITION_PROMPT',
@@ -410,7 +499,9 @@ export class ConversationFlowService {
       if (message.kind === 'IMAGE') {
         await this.sendText(ctx, 'Gorseli okuyamiyorum. Ne almak istediginizi yazar misiniz?');
       } else if (message.kind === 'LOCATION') {
-        await this.sendText(ctx, 'Konumunuzu aldim, teslimat adimida kullanacagiz. Once ne yemek istersiniz?');
+        // The pin really is reused at the address step (getFreshGeoCheck).
+        const open = await nluOrchestratorService.getOpenSpecialRequestQuestion(tenantId, conversationId);
+        await this.sendText(ctx, `${TEMPLATES.locationReceivedEarly}\n\n${open ?? 'Once ne yemek istersiniz?'}`);
       } else {
         // CATCH-ALL FIX: an unreadable message type is not a greeting.
         await this.sendText(ctx, 'Bu mesaj turunu okuyamadim. Ne yapmak istediginizi yazar misiniz?');
@@ -558,6 +649,12 @@ export class ConversationFlowService {
         return this.handlePaymentChangeRequest(ctx, activeParentOrder);
       }
 
+      // "Ne kadar tuttu" / "IBAN var mi" about the confirmed order: answer it.
+      // It must never reach the NLU, which could treat it as an addition.
+      if (await this.tryAnswerPaymentQuestion(ctx, message.text || '', 'IDLE', activeParentOrder)) {
+        return 'IDLE';
+      }
+
       // Seamless addition: run NLU directly, add items to existing order
       const addResult = await nluOrchestratorService.processMessage(
         tenantId, conversationId, message.id, text,
@@ -616,14 +713,7 @@ export class ConversationFlowService {
 
     // Option selection needed — ask via interactive list before confirming order
     if (result.pendingOptionSelection && result.clarificationQuestion) {
-      await prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          flowSubState: 'OPTION_SELECTION',
-          activeOrderId: result.draftOrderId || ctx.conversation.activeOrderId,
-        },
-      });
-      await this.sendOptionSelectionList(ctx, result.pendingOptionSelection);
+      await this.startOptionSelection(ctx, result);
       return 'ORDER_COLLECTING';
     }
 
@@ -633,6 +723,13 @@ export class ConversationFlowService {
       );
       await this.sendOrderConfirmButtons(ctx, result.confirmationMessage);
       await this.checkMinBasketWarning(ctx, result.draftOrderId);
+      // Products AND a payment/address question in the first message
+      // ("... IBAN ve odeyecegim miktari yazar misiniz"): the cart is shown, now
+      // answer the rest too — it used to be silently ignored (High Five, 30.08).
+      ctx.conversation.activeOrderId = result.draftOrderId;
+      if (!(await this.sendPreConfirmNotice(ctx, text, message.text || ''))) {
+        await this.answerSideQuestion(ctx, message.text || '');
+      }
       return 'ORDER_REVIEW';
     }
 
@@ -825,7 +922,19 @@ export class ConversationFlowService {
         }
       }
 
+      // A payment question while the option list is open is answered and the
+      // list comes back. It used to get only "Seçiminizi anlayamadım" — the
+      // IBAN / amount question of High Five 30.08 was never answered.
+      if (
+        message.kind === 'TEXT' &&
+        !listReplyTitle &&
+        (await this.tryAnswerPaymentQuestion(ctx, message.text || '', 'ORDER_COLLECTING'))
+      ) {
+        await this.resendOptionSelectionList(ctx);
+        return 'ORDER_COLLECTING';
+      }
       await this.sendText(ctx, 'Seçiminizi anlayamadım. Lütfen listeden bir seçenek seçin veya iptal etmek için "iptal" yazın.');
+      await this.resendOptionSelectionList(ctx);
       return 'ORDER_COLLECTING';
     }
 
@@ -904,9 +1013,15 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // Adim 10: Faz-mesaj turu uyumsuzlugu
+    // A pin before the order is confirmed: kept and reused at the address step
+    // (getFreshGeoCheck). The customer is told so, and an open product question
+    // is repeated instead of going quiet (High Five, 12.09).
     if (message.kind === 'LOCATION') {
-      await this.sendText(ctx, 'Once siparisi onaylayin, sonra konum isteyecegiz.');
+      const draft = await this.getDraftOrder(ctx);
+      const open = draft?.items?.length
+        ? null
+        : await nluOrchestratorService.getOpenSpecialRequestQuestion(tenantId, conversationId);
+      await this.sendText(ctx, open ? `${TEMPLATES.locationReceivedEarly}\n\n${open}` : TEMPLATES.locationReceivedEarly);
       return 'ORDER_COLLECTING';
     }
 
@@ -949,7 +1064,15 @@ export class ConversationFlowService {
     }
 
     // Confirm order -> move to review (only if draft order exists with items)
-    if (this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+    // 'olsun' is a confirm keyword, but "sadece peynir olsun" is a special
+    // request, not a "show me the summary" confirmation: let it reach the NLU.
+    // Only a REAL special request skips the shortcut: the raw regex also
+    // matched "tamam sadece bu kadar" / "baska bir sey istemiyorum", which then
+    // reached the NLU and could empty the cart.
+    if (
+      (this.matchesKeyword(text, CONFIRM_KEYWORDS) && !deriveSpecialRequest(text, null, [])) ||
+      isOrderDonePhrase(text)
+    ) {
       const order = await this.getActiveOrder(ctx);
       if (order && order.items.length > 0) {
         const summary = this.buildOrderSummary(order);
@@ -970,6 +1093,14 @@ export class ConversationFlowService {
       await inboxService.updateConversationPhase(
         tenantId, conversationId, 'ORDER_COLLECTING', result.draftOrderId,
       );
+    }
+
+    // A bundle with required options: the interactive list, same as IDLE. This
+    // path used to send only "1. Pizza secin:" as text, and a payment question
+    // in the same message was ignored.
+    if (result.pendingOptionSelection && result.clarificationQuestion) {
+      await this.startOptionSelection(ctx, result);
+      return 'ORDER_COLLECTING';
     }
 
     if (result.confirmationMessage) {
@@ -1018,8 +1149,9 @@ export class ConversationFlowService {
       return this.handleUpsellResponse(ctx, text, buttonId);
     }
 
-    // Handle confirm button
-    if (buttonId === 'confirm_order' || this.isConfirmIntent(text)) {
+    // Handle confirm button ("bu kadar" / "baska bir sey istemiyorum" = that's all → confirm;
+    // the old path sent it to the cancel-keyword branch and could cancel a one-item order)
+    if (buttonId === 'confirm_order' || this.isConfirmIntent(text) || (message.kind === 'TEXT' && isOrderDonePhrase(text))) {
       return this.handleOrderConfirm(ctx);
     }
 
@@ -1031,6 +1163,22 @@ export class ConversationFlowService {
     }
 
     if (message.kind !== 'TEXT' || !text) {
+      // Never silence while the summary waits for Onayla (a pin used to get no reply).
+      if (message.kind === 'VOICE') {
+        const transcribed = await this.transcribeVoice(ctx);
+        if (transcribed) {
+          return this.handleOrderReview({ ...ctx, message: { ...message, kind: 'TEXT' as const, text: transcribed } });
+        }
+        await this.sendText(ctx, 'Sesli mesajinizi anlayamadim. Siparisinizi onaylamak icin asagidaki *Onayla* butonunu kullanabilirsiniz.');
+      } else if (message.kind === 'LOCATION') {
+        await this.sendText(ctx, TEMPLATES.locationReceivedEarly);
+      } else if (message.kind === 'IMAGE') {
+        await this.sendText(ctx, 'Gorseli okuyamiyorum. Siparisinizde degisiklik varsa yazabilirsiniz.');
+      }
+      const current = await this.getActiveOrder(ctx);
+      if (message.kind !== 'VOICE' && current && current.items.length > 0) {
+        await this.sendOrderConfirmButtons(ctx, this.buildOrderSummary(current));
+      }
       return 'ORDER_REVIEW';
     }
 
@@ -1168,6 +1316,12 @@ export class ConversationFlowService {
       await inboxService.updateConversationPhase(
         tenantId, conversationId, 'ORDER_REVIEW', result.draftOrderId,
       );
+    }
+
+    // A newly named bundle with required options: the list (and any payment question) first.
+    if (result.pendingOptionSelection && result.clarificationQuestion) {
+      await this.startOptionSelection(ctx, result);
+      return 'ORDER_COLLECTING';
     }
 
     if (result.confirmationMessage) {
@@ -1424,6 +1578,10 @@ export class ConversationFlowService {
    * Show delivery type selection buttons (Gel Al / Paket Servis)
    */
   private async proceedToDeliveryTypeSelection(ctx: FlowContext): Promise<ConversationPhase> {
+    // Sepet olusmadan verilen kurye talimati ("cocuk cikip alacak") onaylanan
+    // siparise burada yazilir; tekrar cagrilirsa bir sey yapmaz (liste temizlenir).
+    const onaylanan = await this.getActiveOrder(ctx);
+    if (onaylanan) await this.applyPreDraftDeliveryNotes(ctx, onaylanan);
     await whatsappService.sendInteractiveButtons(
       ctx.tenantId,
       ctx.conversationId,
@@ -1440,8 +1598,9 @@ export class ConversationFlowService {
    * DELIVERY_TYPE_SELECTION: Customer chooses Gel Al (pickup) or Paket Servis (delivery)
    */
   private async handleDeliveryTypeSelection(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, conversationId, message, payload } = ctx;
-    const text = normalizeTr(message.text || '');
+    const { message, payload } = ctx;
+    const raw = (message.text || '').trim();
+    const text = normalizeTr(raw);
     const buttonId = payload.interactive?.buttonReply?.id;
 
     const order = await this.getActiveOrder(ctx);
@@ -1450,50 +1609,57 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // Cancel
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // Answer to our "X siparisinize eklensin mi?" question
+    const addAnswer = await this.interceptMidFlowAddAnswer(ctx, 'DELIVERY_TYPE_SELECTION');
+    if (addAnswer) return addAnswer;
+
+    // "Yanlis oldu" right after a cart change at this step: undo it (never the NLU).
+    const undone = await this.interceptMidFlowUndo(ctx, 'DELIVERY_TYPE_SELECTION');
+    if (undone) return undone;
+
+    // Cancel: short phrases plus everyday "iptal edin" / "vazgectim" wording.
+    // Never a bare word-prefix match: that cancelled the whole order for any
+    // text containing "istemiyorum" or a word starting "sil".
+    if (await this.isStepCancelIntent(ctx, raw)) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
     }
 
+    const answered = await this.tryAnswerPaymentQuestion(ctx, raw, 'DELIVERY_TYPE_SELECTION');
+    if (answered) return answered;
+
     const isPickup = buttonId === 'delivery_type_pickup' || this.isPickupIntent(text);
-    const isDelivery = buttonId === 'delivery_type_delivery' || this.isDeliveryIntent(text);
-
     if (isPickup) {
-      // Gel Al selected.
-      // `deliveryAddress: null` clears an address the customer may have typed
-      // BEFORE confirming (the pre-confirm guard parks it on the draft). A
-      // pickup order must never carry a delivery address onto the kitchen
-      // ticket. In the normal pickup flow this column is already null, so the
-      // reset is a no-op.
-      const updateData: any = { deliveryType: 'PICKUP', deliveryAddress: null };
-
-      // Apply pickup discount if configured
-      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-      if (tenant?.pickupDiscountPercent && tenant.pickupDiscountPercent > 0) {
-        const totalPrice = Number(order.totalPrice);
-        const discountAmount = Math.round(totalPrice * tenant.pickupDiscountPercent) / 100;
-        const newTotal = totalPrice - discountAmount;
-        updateData.discountPercent = tenant.pickupDiscountPercent;
-        updateData.discountAmount = discountAmount;
-        updateData.totalPrice = newTotal;
-
-        await prisma.order.update({ where: { id: order.id }, data: updateData });
-        await this.sendText(
-          ctx,
-          `Gel al secildi! %${tenant.pickupDiscountPercent} indirim uygulandı (${discountAmount.toFixed(2)} TL indirim). Yeni toplam: ${newTotal.toFixed(2)} TL`,
-        );
-      } else {
-        await prisma.order.update({ where: { id: order.id }, data: updateData });
-        await this.sendText(ctx, 'Gel al secildi!');
-      }
-
-      // Skip address flow — go directly to payment
-      await this.sendPaymentButtons(ctx);
-      return 'PAYMENT_METHOD_SELECTION';
+      return this.switchToPickup(ctx, order);
     }
 
+    // The customer answered with an address instead of pressing "Paket Servis".
+    // Park it and continue to the address step: the pin stays the preferred
+    // option there, with a one-tap "continue with this address".
+    if (!buttonId && message.kind === 'TEXT' && raw) {
+      const cls = classifyAddressText(raw);
+      if ((cls.kind === 'full' || cls.kind === 'landmark') && !hasAddSignal(raw)) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { deliveryType: 'DELIVERY', deliveryAddress: this.joinParked(order.deliveryAddress, raw) },
+        });
+        return this.proceedToAddressFlow(ctx);
+      }
+      if (cls.kind === 'directions') {
+        await this.appendOrderNote(order, `Teslimat notu: ${raw}`);
+        // "kapiya getirin" / "kapiya birakin" is also the delivery choice itself.
+        if (this.isDeliveryIntent(text) || foldTr(raw).includes('kapiya')) {
+          await prisma.order.update({ where: { id: order.id }, data: { deliveryType: 'DELIVERY' } });
+          await this.sendText(ctx, 'Teslimat notunuzu aldim.');
+          return this.proceedToAddressFlow(ctx);
+        }
+        await this.sendText(ctx, 'Teslimat notunuzu aldim.');
+        return this.proceedToDeliveryTypeSelection(ctx);
+      }
+    }
+
+    const isDelivery = buttonId === 'delivery_type_delivery' || this.isDeliveryIntent(text);
     if (isDelivery) {
       // Paket Servis selected
       await prisma.order.update({
@@ -1504,10 +1670,11 @@ export class ConversationFlowService {
       return this.proceedToAddressFlow(ctx);
     }
 
-    // Mid-flow addition: customer wants to add more items
+    // Mid-flow cart edit ("bir de kola ekle") — explicit edits only
     if (text) {
-      const added = await this.tryMidFlowAddition(ctx, text);
-      if (added) {
+      const mid = await this.tryMidFlowAddition(ctx, 'DELIVERY_TYPE_SELECTION');
+      if (mid.nextPhase) return mid.nextPhase;
+      if (mid.handled) {
         return this.proceedToDeliveryTypeSelection(ctx);
       }
     }
@@ -1542,33 +1709,40 @@ export class ConversationFlowService {
   }
 
   private async proceedToAddressFlow(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, conversationId, conversation } = ctx;
+    const { tenantId, conversationId } = ctx;
+
+    // A pin the customer already sent for this order (before Onayla, or while
+    // the old gate held the chat) is used — never asked again. In production
+    // the customer sent it, heard "we will use it at the delivery step", and was
+    // then asked for it anyway (High Five, 12.09).
+    const pinGeo = await this.getFreshGeoCheck(ctx);
+    if (pinGeo?.isWithinServiceArea) {
+      await this.sendText(ctx, TEMPLATES.pinReused);
+      return this.processGeoResult(ctx, pinGeo);
+    }
+    if (pinGeo && !pinGeo.isWithinServiceArea) {
+      // Same three ways forward as an out-of-area pin at this step.
+      return this.sendOutOfAreaOptions(ctx, pinGeo);
+    }
+
+    // An address the customer typed earlier is offered back — never asked twice.
+    const order = await this.getActiveOrder(ctx);
+    const parked: string | null = order?.deliveryAddress || null;
 
     // Check for saved addresses before requesting location
-    const savedAddresses = await savedAddressService.getByCustomerPhone(
-      tenantId, conversation.customerPhone,
-    );
+    if (await this.sendSavedAddressList(ctx, parked)) {
+      return 'ADDRESS_SELECTION';
+    }
 
-    if (savedAddresses.length > 0) {
-      const rows = savedAddresses.map((addr) => ({
-        id: `saved_addr_${addr.id}`,
-        title: addr.name.substring(0, 24),
-        description: addr.address.substring(0, 72),
-      }));
-      rows.push({
-        id: 'new_address',
-        title: TEMPLATES.newAddressRowTitle,
-        description: TEMPLATES.newAddressRowDescription,
-      });
-
-      await whatsappService.sendListMessage(
+    if (parked) {
+      await whatsappService.sendLocationRequest(
         tenantId,
         conversationId,
-        TEMPLATES.savedAddressListHeader,
-        TEMPLATES.savedAddressListButton,
-        [{ title: 'Adresler', rows }],
+        TEMPLATES.locationRequestWithParked(parked),
       );
-      return 'ADDRESS_SELECTION';
+      const tmpl = TEMPLATES.typedAddressContinueButtons;
+      await whatsappService.sendInteractiveButtons(tenantId, conversationId, tmpl.body, tmpl.buttons);
+      return 'LOCATION_REQUEST';
     }
 
     await whatsappService.sendLocationRequest(
@@ -1580,67 +1754,162 @@ export class ConversationFlowService {
   }
 
   /**
-   * LOCATION_REQUEST: Waiting for customer to send location pin.
+   * LOCATION_REQUEST: waiting for a location pin — or a written address.
+   *
+   * The pin is preferred but not mandatory: a customer who does not want to
+   * share one continues with a written address that staff verifies. Free text
+   * here is classified locally; only an explicit cart edit reaches the NLU.
+   * WHY: "Hayalim kent e gidecek", "Yanlis oldu" and "Size cok yakin nasil
+   * yani" each added a 2'li Pizza Menu in production, and the only way out of
+   * an out-of-area pin was "farkli konum gonderin veya iptal yazin".
    */
   private async handleLocationRequest(ctx: FlowContext): Promise<ConversationPhase> {
     const { tenantId, conversationId, message, payload } = ctx;
 
     // Location message received
     if (message.kind === 'LOCATION' && payload.location?.latitude && payload.location?.longitude) {
-      // Geo check was already done in whatsapp.service.ts (stored in conversation)
-      const geoCheck = await inboxService.getConversationGeoCheck(tenantId, conversationId);
-
-      if (!geoCheck) {
-        // Fallback: run geo check here
-        const result = await geoService.checkServiceArea(tenantId, {
-          lat: payload.location.latitude,
-          lng: payload.location.longitude,
-        });
-        await inboxService.updateConversationGeoCheck(tenantId, conversationId, result);
-        return this.processGeoResult(ctx, result);
-      }
-
-      return this.processGeoResult(ctx, geoCheck);
+      return this.processLocationPin(ctx);
     }
 
-    // Cancel
-    const text = normalizeTr(message.text || '');
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    const raw = (message.text || '').trim();
+    const text = normalizeTr(raw);
+    const buttonId = payload.interactive?.buttonReply?.id;
+
+    // 1. Buttons first: a button reply arrives as TEXT whose text is the title.
+    const addAnswer = await this.interceptMidFlowAddAnswer(ctx, 'LOCATION_REQUEST');
+    if (addAnswer) return addAnswer;
+    if (buttonId === 'oos_pickup' || buttonId === 'delivery_type_pickup') {
+      const order = await this.getActiveOrder(ctx);
+      if (!order || order.items.length === 0) {
+        await this.sendText(ctx, TEMPLATES.orderEmpty);
+        return 'IDLE';
+      }
+      return this.switchToPickup(ctx, order, { fromOutOfArea: buttonId === 'oos_pickup' });
+    }
+    if (buttonId === 'oos_new_location') {
+      await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+      return 'LOCATION_REQUEST';
+    }
+    if (buttonId === 'oos_type_address' || buttonId === 'use_typed_address') {
+      const order = await this.getActiveOrder(ctx);
+      if (order?.deliveryAddress) {
+        return this.acceptTypedAddress(ctx, order.deliveryAddress, {
+          outOfAreaGeo: await this.getFreshOutOfAreaGeo(ctx),
+        });
+      }
+      await this.sendText(ctx, TEMPLATES.typedAddressPrompt);
+      return 'LOCATION_REQUEST';
+    }
+
+    // 2. Other message kinds
+    if (message.kind === 'IMAGE') {
+      await this.sendText(ctx, 'Gorseli okuyamiyorum. Konumunuzu paylasabilir ya da acik adresinizi yazabilirsiniz.');
+      return 'LOCATION_REQUEST';
+    }
+    if (message.kind === 'VOICE') {
+      const transcribed = await this.transcribeVoice(ctx);
+      if (transcribed) {
+        return this.handleLocationRequest({ ...ctx, message: { ...message, kind: 'TEXT' as const, text: transcribed } });
+      }
+      await this.sendText(ctx, 'Sesli mesajinizi anlayamadim. Konumunuzu paylasabilir ya da acik adresinizi yazabilirsiniz.');
+      return 'LOCATION_REQUEST';
+    }
+    if (message.kind !== 'TEXT' || !raw) {
+      await this.sendText(ctx, TEMPLATES.reminderSendLocation);
+      return 'LOCATION_REQUEST';
+    }
+
+    // 3. "Yanlis oldu" / "geri al": undo the last cart change — before cancel and any NLU.
+    const undone = await this.interceptMidFlowUndo(ctx, 'LOCATION_REQUEST');
+    if (undone) return undone;
+
+    // 4. Cancel ("iptal edin", "vazgectim"). Must run before the written-address
+    // catch-all below, or "siparisi iptal etmek istiyorum" becomes the address.
+    // "konum atmak istemiyorum" is not a cancel.
+    if (await this.isStepCancelIntent(ctx, raw)) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
     }
 
-    // Adim 10: IMAGE gonderdiyse konum hatirlatmasi
-    if (message.kind === 'IMAGE') {
-      await this.sendText(ctx, 'Gorsel degil, konum pininizi gonderin. WhatsApp\'ta ek ikonundan "Konum" secenegini kullanin.');
+    const order = await this.getActiveOrder(ctx);
+    if (!order || order.items.length === 0) {
+      await this.sendText(ctx, TEMPLATES.orderEmpty);
+      return 'IDLE';
+    }
+
+    // 5. Explicit switch to pickup. Not isPickupIntent: its 'gelip' also matches
+    // directions like "cocuk gelip alacak".
+    const folded = foldTr(raw);
+    if (['gel al', 'gelal', 'gelip alirim', 'gelip alacagim', 'kendim alirim', 'gel alayim'].some((p) => folded.includes(p))) {
+      return this.switchToPickup(ctx, order);
+    }
+
+    // 6. Payment question ("IBAN ve odeyecegim miktari yazar misiniz")
+    const answered = await this.tryAnswerPaymentQuestion(ctx, raw, 'LOCATION_REQUEST');
+    if (answered) return answered;
+
+    // 7. The customer does not want to (or cannot) share a pin
+    if (isLocationRefusal(raw)) {
+      await this.sendText(ctx, TEMPLATES.typedAddressPrompt);
       return 'LOCATION_REQUEST';
     }
 
-    // Mid-flow addition: customer wants to add more items while sending location
-    if (text) {
-      const added = await this.tryMidFlowAddition(ctx, text);
-      if (added) {
-        await this.sendText(ctx, TEMPLATES.reminderSendLocation);
-        return 'LOCATION_REQUEST';
-      }
+    // 8. Complaint about an out-of-area pin ("size cok yakin nasil yani")
+    const oosGeo = await this.getFreshOutOfAreaGeo(ctx);
+    const cls = classifyAddressText(raw);
+    if (oosGeo && cls.kind === 'none' && isAreaComplaint(raw)) {
+      return this.sendOutOfAreaComplaint(ctx, oosGeo);
     }
 
-    // Text message during LOCATION_REQUEST — give contextual help
-    // Check if previous geo check was out of service area
-    const prevGeoCheck = await inboxService.getConversationGeoCheck(tenantId, conversationId);
-    if (prevGeoCheck && !prevGeoCheck.isWithinServiceArea) {
-      // Customer was told they're out of service area, they might be typing a text address
-      await this.sendText(
-        ctx,
-        'Yazili adres kabul edemiyoruz, hizmet alanimizi kontrol etmemiz icin konum pininize ihtiyacimiz var.\n\n' +
-        'Farkli bir konumdan gondermek icin:\n' +
-        'simgesine tiklayip > *Konum* secenegini kullanin.\n\n' +
-        'Siparisi iptal etmek icin "iptal" yazin.',
-      );
-    } else {
+    // 9. Explicit cart edit ("bir de kola ekle")
+    const mid = await this.tryMidFlowAddition(ctx, 'LOCATION_REQUEST');
+    if (mid.nextPhase) return mid.nextPhase;
+    if (mid.handled) {
       await this.sendText(ctx, TEMPLATES.reminderSendLocation);
+      return 'LOCATION_REQUEST';
     }
+
+    // 10. A written address / delivery directions
+    if (cls.kind === 'full' || cls.kind === 'landmark') {
+      return this.acceptTypedAddress(ctx, raw, { outOfAreaGeo: oosGeo });
+    }
+    if (cls.kind === 'directions') {
+      await this.appendOrderNote(order, `Teslimat notu: ${raw}`);
+      await this.sendText(ctx, TEMPLATES.deliveryNoteSaved);
+      return 'LOCATION_REQUEST';
+    }
+    // Everything else that reads like an address. The location request itself
+    // invites a written address, so this IS the reply to our question: small-
+    // town addresses carry no street keyword ("Kepez 25 kat 2", "Dilaverler
+    // koyu 12") and used to get the same reminder forever.
+    const askedForAddress = await this.hasAskedForAddress(ctx, order);
+    if (cls.kind === 'vague' || (cls.kind === 'none' && this.isPlausibleAddressReply(raw))) {
+      const evidence =
+        cls.kind === 'none' && (/\d/.test(raw) || cls.hasDetail || foldedWords(raw).length >= 3);
+      if (askedForAddress || evidence) {
+        return this.acceptTypedAddress(ctx, raw, { outOfAreaGeo: oosGeo });
+      }
+      // Ask ONCE for the missing detail, but never block: "Bu adresle devam"
+      // works as is, and the next reply is accepted (the ask carries the marker).
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { deliveryAddress: this.joinParked(order.deliveryAddress, raw) },
+      });
+      await whatsappService.sendInteractiveButtons(
+        tenantId,
+        conversationId,
+        TEMPLATES.typedAddressDetailAsk(raw),
+        TEMPLATES.typedAddressContinueButtons.buttons,
+      );
+      return 'LOCATION_REQUEST';
+    }
+
+    // 11. Fallback: always offer both ways forward, never "written address not accepted".
+    if (oosGeo) {
+      return this.sendOutOfAreaOptions(ctx, oosGeo);
+    }
+    await this.sendText(ctx, TEMPLATES.reminderSendLocation);
     return 'LOCATION_REQUEST';
   }
 
@@ -1648,35 +1917,54 @@ export class ConversationFlowService {
    * PAYMENT_METHOD_SELECTION: Buttons sent, waiting for Nakit/Kart selection.
    */
   private async handlePaymentMethodSelection(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, conversationId, message, payload, conversation } = ctx;
-    const text = normalizeTr(message.text || '');
+    const { message, payload } = ctx;
+    const raw = (message.text || '').trim();
+    const text = normalizeTr(raw);
 
     // Interactive button reply
     const buttonId = payload.interactive?.buttonReply?.id;
 
-    if (buttonId === 'pay_cash' || this.matchesKeyword(text, CASH_KEYWORDS)) {
-      return this.handleCashPayment(ctx);
+    const addAnswer = await this.interceptMidFlowAddAnswer(ctx, 'PAYMENT_METHOD_SELECTION');
+    if (addAnswer) return addAnswer;
+
+    const undone = await this.interceptMidFlowUndo(ctx, 'PAYMENT_METHOD_SELECTION');
+    if (undone) return undone;
+
+    // "kapida kart gecer mi?" is a question. It used to submit a CASH order
+    // through the 'kapida' cash keyword.
+    if (!buttonId) {
+      const answered = await this.tryAnswerPaymentQuestion(ctx, raw, 'PAYMENT_METHOD_SELECTION');
+      if (answered) return answered;
     }
 
-    if (buttonId === 'pay_card_door') {
+    // "kart kapida" / "kart kasada" is card at the door, not cash.
+    if (
+      buttonId === 'pay_card_door' ||
+      (!buttonId && this.matchesKeyword(text, CARD_KEYWORDS) && this.matchesKeyword(text, ['kapida', 'kasada']))
+    ) {
       return this.handleCardDoorPayment(ctx);
+    }
+
+    if (buttonId === 'pay_cash' || this.matchesKeyword(text, CASH_KEYWORDS)) {
+      return this.handleCashPayment(ctx);
     }
 
     if (buttonId === 'pay_card_online' || buttonId === 'pay_card' || this.matchesKeyword(text, CARD_KEYWORDS)) {
       return this.handleCardPayment(ctx);
     }
 
-    // Cancel
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // Cancel: short phrases plus everyday "iptal edin" / "vazgectim"
+    if (await this.isStepCancelIntent(ctx, raw)) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
     }
 
-    // Mid-flow addition: customer wants to add more items before paying
+    // Mid-flow cart edit before paying — explicit edits only
     if (text) {
-      const added = await this.tryMidFlowAddition(ctx, text);
-      if (added) {
+      const mid = await this.tryMidFlowAddition(ctx, 'PAYMENT_METHOD_SELECTION');
+      if (mid.nextPhase) return mid.nextPhase;
+      if (mid.handled) {
         await this.sendPaymentButtons(ctx);
         return 'PAYMENT_METHOD_SELECTION';
       }
@@ -1695,6 +1983,9 @@ export class ConversationFlowService {
     const { tenantId, conversationId, message, conversation } = ctx;
     const text = normalizeTr(message.text || '');
 
+    const answered = await this.tryAnswerPaymentQuestion(ctx, message.text || '', 'PAYMENT_PENDING');
+    if (answered) return answered;
+
     // Switch to cash
     if (this.matchesKeyword(text, CASH_KEYWORDS)) {
       return this.handleCashPayment(ctx);
@@ -1705,8 +1996,8 @@ export class ConversationFlowService {
       return this.handleCardPayment(ctx);
     }
 
-    // Cancel
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // Cancel: short phrases plus everyday "iptal edin" / "vazgectim"
+    if (await this.isStepCancelIntent(ctx, message.text || '')) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
@@ -2122,12 +2413,15 @@ export class ConversationFlowService {
    *            if set → waiting for confirmation (evet/hayir).
    */
   private async handleAddressCollection(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, message, payload } = ctx;
-    const text = normalizeTr(message.text || '');
+    const { message, payload } = ctx;
+    const raw = (message.text || '').trim();
+    const text = normalizeTr(raw);
     const buttonId = payload.interactive?.buttonReply?.id;
 
-    // Cancel at any point
-    if (text && this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // Cancel at any point: a typed address such as "Silahtar Sok. No 4" used to
+    // cancel the order via the 'sil' keyword, and "iptal edin" was later saved
+    // as the address — isStepCancelIntent handles both.
+    if (text && (await this.isStepCancelIntent(ctx, raw))) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
@@ -2139,13 +2433,42 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
+    // Must run before the address capture below, or the question becomes the address.
+    const answered = await this.tryAnswerPaymentQuestion(ctx, raw, 'ADDRESS_COLLECTION');
+    if (answered) return answered;
+
+    // A pin at this step: the geo check wins over a written-address flag.
+    if (message.kind === 'LOCATION' && payload.location?.latitude && payload.location?.longitude) {
+      if (this.isTypedAddressOrder(order)) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { notes: this.stripTypedAddressNote(order.notes) },
+        });
+      }
+      return this.processLocationPin(ctx);
+    }
+
     if (!order.deliveryAddress) {
       // --- Sub-state: waiting for address text ---
       if (message.kind !== 'TEXT' || !text) {
         await this.sendText(ctx, 'Lutfen teslimat adresinizi metin olarak yazin.');
         return 'ADDRESS_COLLECTION';
       }
-      const address = (message.text || '').trim();
+      if (isUndoLastChangeIntent(raw) === 'undo') {
+        const undone = await this.handleMidFlowUndo(ctx, 'ADDRESS_COLLECTION', 'undo');
+        if (undone) return undone;
+      }
+      if (classifyAddressText(raw).kind === 'directions') {
+        await this.appendOrderNote(order, `Teslimat notu: ${raw}`);
+        await this.sendText(ctx, `Teslimat notunuzu aldim.\n\n${TEMPLATES.addressRequest}`);
+        return 'ADDRESS_COLLECTION';
+      }
+      // "tamam yaziyorum", "bir saniye", a question: the address is still coming.
+      if (!this.isPlausibleAddressReply(raw)) {
+        await this.sendText(ctx, TEMPLATES.addressRequest);
+        return 'ADDRESS_COLLECTION';
+      }
+      const address = raw.substring(0, 400);
       await prisma.order.update({
         where: { id: order.id },
         data: { deliveryAddress: address },
@@ -2160,7 +2483,25 @@ export class ConversationFlowService {
       return 'ADDRESS_COLLECTION';
     } else {
       // --- Sub-state: waiting for confirmation (button or text) ---
-      if (buttonId === 'address_confirm' || this.matchesKeyword(text, CONFIRM_KEYWORDS)) {
+      // Not the loose keyword match: "tamam ama daire 5" is a correction. But
+      // "tamam dogru", "adres dogru", "Tamamdir" are a yes — isConfirmIntent alone
+      // (only 'i' folded) missed them and the free-text branch below appended
+      // "tamam dogru" to the address.
+      if (
+        buttonId === 'address_confirm' ||
+        (!buttonId && (this.isConfirmIntent(deaccentTr(raw)) || isAddressConfirmReply(raw)))
+      ) {
+        if (this.isTypedAddressOrder(order)) {
+          // A written address has no coordinates/store, which a SavedAddress
+          // requires — skip the save prompt and go straight to payment.
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { flowSubState: null },
+          });
+          await this.sendText(ctx, 'Adresinizi aldik. Simdi odeme yontemini secelim.');
+          await this.sendPaymentButtons(ctx);
+          return 'PAYMENT_METHOD_SELECTION';
+        }
         // Address confirmed → ask if they want to save it
         await prisma.conversation.update({
           where: { id: ctx.conversationId },
@@ -2173,7 +2514,11 @@ export class ConversationFlowService {
         return 'ADDRESS_SAVE_PROMPT';
       }
 
-      if (buttonId === 'address_retry' || this.matchesKeyword(text, EDIT_KEYWORDS)) {
+      if (
+        buttonId === 'address_retry' ||
+        this.matchesKeyword(text, EDIT_KEYWORDS) ||
+        (!buttonId && isAddressRejectReply(raw))
+      ) {
         // User wants to re-enter address
         await prisma.order.update({
           where: { id: order.id },
@@ -2181,6 +2526,36 @@ export class ConversationFlowService {
         });
         await this.sendText(ctx, TEMPLATES.addressRetry);
         return 'ADDRESS_COLLECTION';
+      }
+
+      // Free text while the confirmation buttons are open: a delivery note, an
+      // undo, or more address detail ("B blok daire 4") — never ignored.
+      if (message.kind === 'TEXT' && raw && !buttonId && !textHasQuestionSignal(raw)) {
+        if (isUndoLastChangeIntent(raw) === 'undo') {
+          const undone = await this.handleMidFlowUndo(ctx, 'ADDRESS_COLLECTION', 'undo');
+          if (undone) return undone;
+        }
+        const tmpl = TEMPLATES.addressConfirmButtons;
+        if (classifyAddressText(raw).kind === 'directions') {
+          await this.appendOrderNote(order, `Teslimat notu: ${raw}`);
+          await this.sendText(ctx, 'Teslimat notunuzu aldim.');
+          await whatsappService.sendInteractiveButtons(ctx.tenantId, ctx.conversationId, tmpl.body, tmpl.buttons);
+          return 'ADDRESS_COLLECTION';
+        }
+        // Only real detail extends the address: a number, a street / site /
+        // block word, or a longer description. A stored non-address reply
+        // ("tamam yaziyorum") is replaced instead of extended.
+        const detailCls = classifyAddressText(raw);
+        const hasDetail =
+          /\d/.test(raw) || detailCls.kind !== 'none' || detailCls.hasDetail || foldedWords(raw).length >= 3;
+        if (hasDetail && !this.isChatter(raw) && !isAddressWaitReply(raw)) {
+          const base = this.isPlausibleAddressReply(order.deliveryAddress || '') ? order.deliveryAddress : null;
+          const updated = this.joinParked(base, raw);
+          await prisma.order.update({ where: { id: order.id }, data: { deliveryAddress: updated } });
+          await this.sendText(ctx, TEMPLATES.addressConfirmation(updated));
+          await whatsappService.sendInteractiveButtons(ctx.tenantId, ctx.conversationId, tmpl.body, tmpl.buttons);
+          return 'ADDRESS_COLLECTION';
+        }
       }
 
       // Unrecognized → re-send buttons
@@ -2198,18 +2573,37 @@ export class ConversationFlowService {
    * ADDRESS_SELECTION: Saved addresses list shown, waiting for selection.
    */
   private async handleAddressSelection(ctx: FlowContext): Promise<ConversationPhase> {
-    const { tenantId, conversationId, message, payload, conversation } = ctx;
-    const text = normalizeTr(message.text || '');
+    const { tenantId, conversationId, message, payload } = ctx;
+    const raw = (message.text || '').trim();
+    const text = normalizeTr(raw);
 
-    // Cancel
-    if (this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // Handle list reply (interactive)
+    const listReplyId = payload.interactive?.listReply?.id;
+
+    const addAnswer = await this.interceptMidFlowAddAnswer(ctx, 'ADDRESS_SELECTION');
+    if (addAnswer) return addAnswer;
+
+    const undone = await this.interceptMidFlowUndo(ctx, 'ADDRESS_SELECTION');
+    if (undone) return undone;
+
+    // Cancel: short phrases plus everyday "iptal edin" / "vazgectim"
+    if (await this.isStepCancelIntent(ctx, raw)) {
       await this.cancelActiveOrder(ctx);
       await this.sendText(ctx, TEMPLATES.orderCancelled);
       return 'IDLE';
     }
 
-    // Handle list reply (interactive)
-    const listReplyId = payload.interactive?.listReply?.id;
+    const answered = await this.tryAnswerPaymentQuestion(ctx, raw, 'ADDRESS_SELECTION');
+    if (answered) return answered;
+
+    if (listReplyId === 'use_parked_address') {
+      const order = await this.getActiveOrder(ctx);
+      if (order?.deliveryAddress) {
+        return this.acceptTypedAddress(ctx, order.deliveryAddress);
+      }
+      await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+      return 'LOCATION_REQUEST';
+    }
 
     if (listReplyId === 'new_address') {
       // User wants to enter a new address
@@ -2242,9 +2636,8 @@ export class ConversationFlowService {
       });
 
       if (!geoResult.isWithinServiceArea) {
-        await this.sendText(ctx, TEMPLATES.savedAddressInvalid);
-        await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
-        return 'LOCATION_REQUEST';
+        // Same ways forward as an out-of-area pin (Gel Al / another pin / written address)
+        return this.sendOutOfAreaOptions(ctx, geoResult, TEMPLATES.savedAddressOutOfArea(savedAddr.name));
       }
 
       // Check minimum basket
@@ -2265,53 +2658,53 @@ export class ConversationFlowService {
           data: {
             deliveryAddress: savedAddr.address,
             storeId: geoResult.nearestStore?.id || savedAddr.storeId,
+            notes: this.stripTypedAddressNote(order.notes),
           },
         });
       }
 
       const storeName = geoResult.nearestStore?.name || 'En yakin sube';
       const deliveryFee = geoResult.deliveryRule ? Number(geoResult.deliveryRule.deliveryFee) : 0;
-      const distance = geoResult.distance || 0;
-      await this.sendText(ctx, TEMPLATES.locationConfirmed(storeName, deliveryFee, distance));
+      await this.sendText(ctx, TEMPLATES.locationConfirmed(storeName, deliveryFee, geoResult.distance));
 
       // Skip address collection — go straight to payment
       await this.sendPaymentButtons(ctx);
       return 'PAYMENT_METHOD_SELECTION';
     }
 
-    // Text fallback — might be typing "yeni" etc.
-    if (text.includes('yeni')) {
-      await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
-      return 'LOCATION_REQUEST';
-    }
+    if (message.kind === 'TEXT' && raw && !listReplyId) {
+      if (isLocationRefusal(raw)) {
+        await this.sendText(ctx, TEMPLATES.typedAddressPrompt);
+        return 'LOCATION_REQUEST';
+      }
 
-    // Mid-flow addition: customer wants to add more items while picking address
-    if (message.kind === 'TEXT' && text) {
-      const added = await this.tryMidFlowAddition(ctx, text);
-      if (added) {
+      const cls = classifyAddressText(raw);
+
+      // Text fallback — might be typing "yeni" etc.
+      if (text.includes('yeni') && cls.kind === 'none') {
+        await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+        return 'LOCATION_REQUEST';
+      }
+
+      // Mid-flow cart edit while picking an address — explicit edits only
+      const mid = await this.tryMidFlowAddition(ctx, 'ADDRESS_SELECTION');
+      if (mid.nextPhase) return mid.nextPhase;
+      if (mid.handled) {
         return this.proceedToAddressFlow(ctx);
+      }
+
+      if (cls.kind === 'full' || cls.kind === 'landmark') {
+        return this.acceptTypedAddress(ctx, raw);
       }
     }
 
     // Unrecognized — resend list
-    const savedAddresses = await savedAddressService.getByCustomerPhone(tenantId, conversation.customerPhone);
-    const rows = savedAddresses.map((addr) => ({
-      id: `saved_addr_${addr.id}`,
-      title: addr.name.substring(0, 24),
-      description: addr.address.substring(0, 72),
-    }));
-    rows.push({
-      id: 'new_address',
-      title: TEMPLATES.newAddressRowTitle,
-      description: TEMPLATES.newAddressRowDescription,
-    });
-    await whatsappService.sendListMessage(
-      tenantId, conversationId,
-      TEMPLATES.savedAddressListHeader,
-      TEMPLATES.savedAddressListButton,
-      [{ title: 'Adresler', rows }],
-    );
-    return 'ADDRESS_SELECTION';
+    const current = await this.getActiveOrder(ctx);
+    if (await this.sendSavedAddressList(ctx, current?.deliveryAddress ?? null)) {
+      return 'ADDRESS_SELECTION';
+    }
+    await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+    return 'LOCATION_REQUEST';
   }
 
   // ==================== ADDRESS SAVE PROMPT ====================
@@ -2323,6 +2716,10 @@ export class ConversationFlowService {
     const { tenantId, conversationId, message, conversation, payload } = ctx;
     const text = normalizeTr(message.text || '');
     const buttonId = payload.interactive?.buttonReply?.id;
+
+    // A payment question here must not be stored as the address name.
+    const answered = await this.tryAnswerPaymentQuestion(ctx, message.text || '', 'ADDRESS_SAVE_PROMPT');
+    if (answered) return answered;
 
     const subState = conversation.flowSubState || 'WAITING_SAVE_CONFIRM';
 
@@ -2419,11 +2816,9 @@ export class ConversationFlowService {
     ctx: FlowContext,
     geoCheck: GeoCheckResult,
   ): Promise<ConversationPhase> {
-    const { tenantId, conversationId, conversation } = ctx;
-
     if (!geoCheck.isWithinServiceArea) {
-      await this.sendText(ctx, TEMPLATES.locationOutOfService(geoCheck.message));
-      return 'LOCATION_REQUEST';
+      // Never a dead end: Gel Al, another pin, or a written address.
+      return this.sendOutOfAreaOptions(ctx, geoCheck);
     }
 
     // Check minimum basket
@@ -2438,12 +2833,19 @@ export class ConversationFlowService {
       }
     }
 
+    // A verified pin replaces an earlier written-address flag.
+    if (order && this.isTypedAddressOrder(order)) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { notes: this.stripTypedAddressNote(order.notes) },
+      });
+    }
+
     // Location confirmed - show delivery info and payment buttons
     const storeName = geoCheck.nearestStore?.name || 'En yakin sube';
     const deliveryFee = geoCheck.deliveryRule ? Number(geoCheck.deliveryRule.deliveryFee) : 0;
-    const distance = geoCheck.distance || 0;
 
-    await this.sendText(ctx, TEMPLATES.locationConfirmed(storeName, deliveryFee, distance));
+    await this.sendText(ctx, TEMPLATES.locationConfirmed(storeName, deliveryFee, geoCheck.distance));
 
     // If the customer already gave an address earlier (before confirming), it
     // was parked on the order — bring it back here for confirmation instead of
@@ -2567,20 +2969,7 @@ export class ConversationFlowService {
    * order turn would pay an extra LLM round-trip.
    */
   private hasQuestionSignal(rawText: string): boolean {
-    if (!rawText) return false;
-    if (rawText.includes('?')) return true;
-
-    const folded = deaccentTr(rawText);
-    const words = folded.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-    if (words.includes('mi') || words.includes('mu')) return true;
-
-    const phrases = [
-      'nedir', 'kac para', 'kac tl', 'kac lira', 'ne kadar', 'icinde ne',
-      'neler var', 'fark ne', 'farki ne', 'hangisi', 'nasil', 'ne onerir',
-      'ne kadar surer', 'kac dakika', 'vejetaryen', 'vejeteryan', 'glutensiz',
-      'helal', 'acili',
-    ];
-    return phrases.some((p) => folded.includes(p));
+    return textHasQuestionSignal(rawText);
   }
 
   /**
@@ -2733,85 +3122,70 @@ export class ConversationFlowService {
   /**
    * The order of the flow is fixed:
    *   cart -> CONFIRM -> delivery type -> [address] -> payment method -> [link]
-   * Anything asked before its turn gets a single, honest sentence instead of a
-   * confusing or wrong answer.
-   *
-   * Returns the notice to send, or null when the message is not an early
-   * payment / address message.
-   */
-  private preConfirmNotice(rawText: string): 'payment' | 'address' | null {
-    // ASCII only — the text is folded with deaccentTr above.
-    const text = deaccentTr(rawText);
-    const paymentPhrases = [
-      'odeme linki', 'odeme link', 'link gonder', 'link atar', 'link at',
-      'nasil odeyecegim', 'nasil odeyecem', 'nasil odiycem', 'nasil odenecek',
-      'online odeme', 'kartla odeme', 'kredi karti ile',
-      'iban', 'havale', 'papara',
-    ];
-    if (paymentPhrases.some((p) => text.includes(p))) return 'payment';
-    return null;
-  }
-
-  /**
-   * Conservative address detector.
-   *
-   * Requires either TWO street/neighbourhood tokens, or one plus an explicit
-   * detail word ("no", "daire", "kat"). A bare digit is never enough, so an
-   * order line for a product whose name happens to contain "sokak" is not
-   * mistaken for an address, and "eve gelsin" never is either.
-   */
-  private detectEarlyAddress(rawText: string): string | null {
-    const t = deaccentTr(rawText);
-    const placeTokens = ['mah', 'cad', 'sok', 'bulvar', 'blv', 'apartman', 'site'];
-    // Exact-word matches only: "kat" must not match "katkisiz".
-    const detailTokens = ['no', 'nu', 'daire', 'kat', 'blok', 'apt'];
-
-    const words = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-    const placeCount = words.filter((w) => placeTokens.some((p) => w.startsWith(p))).length;
-    if (placeCount === 0) return null;
-
-    const hasDetailWord = words.some((w) => detailTokens.includes(w));
-    if (placeCount < 2 && !hasDetailWord) return null;
-
-    const address = rawText.trim();
-    return address.length >= 10 ? address.substring(0, 400) : null;
-  }
-
-  /**
-   * Applies the pre-confirmation guards for payment/address questions.
-   * Returns true when a notice was sent.
+   * A payment question or an address given before its turn is still answered
+   * or kept — never ignored and never turned into a product.
    *
    * IMPORTANT: this NEVER short-circuits the order flow. It is called only in
-   * pre-confirm phases and only decides whether an extra sentence is appended;
+   * pre-confirm phases and only decides whether an extra reply is sent;
    * products in the same message are still extracted by the NLU.
+   * Returns true when something was sent.
    */
-  private async sendPreConfirmNotice(ctx: FlowContext, text: string, rawText: string): Promise<boolean> {
-    if (this.preConfirmNotice(text) === 'payment') {
-      await this.sendText(ctx, 'Odeme islemi siparis onaylandiktan sonra tercihlerinize gore sekillenecek.');
-      return true;
-    }
+  private async sendPreConfirmNotice(
+    ctx: FlowContext,
+    _text: string,
+    rawText: string,
+    opts?: { skipOpenQuestion?: boolean },
+  ): Promise<boolean> {
+    const phase = (ctx.conversation.phase as ConversationPhase) || 'IDLE';
+    const paymentPhase: ConversationPhase =
+      phase === 'ORDER_COLLECTING' || phase === 'ORDER_REVIEW' ? phase : 'IDLE';
+    if (await this.tryAnswerPaymentQuestion(ctx, rawText, paymentPhase)) return true;
 
-    const address = this.detectEarlyAddress(rawText);
-    if (address) {
-      // Do not lose the address: park it on the draft order so the address step
-      // can offer it back for confirmation. No follow-up detail (floor,
-      // company) is asked before the order is confirmed.
-      try {
-        const order = await this.getDraftOrder(ctx);
-        if (order && !order.deliveryAddress) {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { deliveryAddress: address },
-          });
+    const cls = classifyAddressText(rawText);
+    if (cls.kind === 'none' || cls.kind === 'vague') return false;
+    // "1 Villa Pizza" can look like a site name: only a full street address
+    // wins over a menu-name match.
+    if (cls.kind !== 'full' && (await this.menuMatchInCurrentText(ctx, rawText))) return false;
+
+    try {
+      const order = await this.getDraftOrder(ctx);
+      if (!order) {
+        // A special request still waiting for its product ("Yarim mi Tam mi?"):
+        // repeat THAT question, not a generic "what would you like to order?" —
+        // the customer already said what they want (High Five, 12.09).
+        const open = opts?.skipOpenQuestion
+          ? null
+          : await nluOrchestratorService.getOpenSpecialRequestQuestion(ctx.tenantId, ctx.conversationId);
+        if (cls.kind === 'directions') {
+          // Sepet yokken verilen kurye talimati kaybolmasin (High Five 12.09: "Konuma
+          // geldiginizde cocuk cikip alacak"): saklanir, siparis onaylaninca nota yazilir.
+          await this.pushPreDraftDeliveryNote(ctx.conversationId, rawText.trim());
         }
-      } catch (error) {
-        logger.warn({ error, conversationId: ctx.conversationId }, 'Failed to park early address');
+        const lead =
+          cls.kind === 'directions'
+            ? 'Teslimat notunuzu aldim, siparisinize ekleyecegim.'
+            : 'Adresinizi teslimat adiminda alacagim.';
+        await this.sendText(ctx, `${lead} ${open ?? 'Once ne siparis etmek istediginizi yazar misiniz?'}`);
+        return true;
       }
-      await this.sendText(ctx, 'Adres bilgisi siparis onaylandiktan sonra alinacak.');
-      return true;
+      if (cls.kind === 'directions') {
+        await this.appendOrderNote(order, `Teslimat notu: ${rawText.trim()}`);
+        await this.sendText(ctx, 'Teslimat notunuzu aldim, teslimat adiminda kullanacagim.');
+        return true;
+      }
+      // Do not lose the address: park it on the draft so the address step can
+      // offer it back for confirmation.
+      if (!order.deliveryAddress) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { deliveryAddress: rawText.trim().substring(0, 400) },
+        });
+      }
+    } catch (error) {
+      logger.warn({ error, conversationId: ctx.conversationId }, 'Failed to park early address');
     }
-
-    return false;
+    await this.sendText(ctx, 'Adres bilginizi not aldim, teslimat adiminda kullanacagim.');
+    return true;
   }
 
   /** Detects price pushback so the answer layer switches to the empathetic,
@@ -3209,35 +3583,1207 @@ export class ConversationFlowService {
   }
 
   /**
-   * Mid-flow addition: When customer sends an item request during ADDRESS_SELECTION,
-   * LOCATION_REQUEST, or PAYMENT_METHOD_SELECTION, add items to draft and re-show flow.
-   * Returns true if addition was handled, false if text was not a food item.
+   * Mid-flow cart edit while the customer is on a post-confirm step
+   * (DELIVERY_TYPE_SELECTION, LOCATION_REQUEST, ADDRESS_SELECTION,
+   * PAYMENT_METHOD_SELECTION).
+   *
+   * Only an EXPLICIT edit that names a menu item reaches the NLU. Everything
+   * else (addresses, directions, complaints, payment questions) is handled by
+   * the step itself: sending those to the NLU added a "2'li Pizza Menu" for
+   * "Hayalim kent e gidecek" and again for "Yanlis oldu" (High Five, 30.08).
+   * A real change is recorded so "geri al" / "yanlis oldu" can undo it.
    */
-  private async tryMidFlowAddition(ctx: FlowContext, text: string): Promise<boolean> {
+  private async tryMidFlowAddition(
+    ctx: FlowContext,
+    phase: ConversationPhase,
+  ): Promise<{ handled: boolean; nextPhase?: ConversationPhase }> {
+    const { tenantId, conversationId, message, payload } = ctx;
+    const raw = (message.text || '').trim();
+    if (message.kind !== 'TEXT' || !raw || !message.id) return { handled: false };
+    if (payload.interactive?.buttonReply?.id || payload.interactive?.listReply?.id) return { handled: false };
+
+    const match = await this.findMenuMatch(ctx, raw);
+    if (!isExplicitMidFlowEdit(raw, match.matched)) {
+      // A product named without clear add wording: ask. Never add it silently,
+      // and never drop it and re-send the step prompt as if nothing was said.
+      if (match.name && isMidFlowItemMention(raw, match.matched)) {
+        await this.writeFlowMeta(conversationId, {
+          pendingMidFlowAdd: { text: raw.substring(0, 300), phase, at: new Date().toISOString() },
+        });
+        await whatsappService.sendInteractiveButtons(
+          tenantId,
+          conversationId,
+          TEMPLATES.midFlowAddAsk(match.name),
+          TEMPLATES.midFlowAddButtons,
+        );
+        return { handled: true, nextPhase: phase };
+      }
+      logger.info({ tenantId, conversationId, phase, menuMatch: match.matched }, 'Mid-flow text not treated as order edit');
+      return { handled: false };
+    }
+    return this.runMidFlowEdit(ctx, phase, raw);
+  }
+
+  /** Run an explicit cart edit through the NLU after the order was confirmed (recorded for undo). */
+  private async runMidFlowEdit(
+    ctx: FlowContext,
+    phase: ConversationPhase,
+    raw: string,
+  ): Promise<{ handled: boolean; nextPhase?: ConversationPhase }> {
     const { tenantId, conversationId, message } = ctx;
 
-    if (!text || !message.id) return false;
+    // Capture everything about the cart BEFORE the NLU runs — nothing read from
+    // `beforeOrder` afterwards may be trusted to still describe the old cart.
+    const beforeOrder = await this.getDraftOrder(ctx);
+    const before = beforeOrder ? this.snapshotCart(beforeOrder) : [];
+    const beforeSig = beforeOrder ? this.cartSignature(before, beforeOrder.notes) : '';
+    const beforeTotal = beforeOrder ? Number(beforeOrder.totalPrice) : 0;
+    const beforeNotes: string | null = beforeOrder?.notes ?? null;
 
     const result = await nluOrchestratorService.processMessage(
-      tenantId, conversationId, message.id, text,
+      tenantId, conversationId, message.id, normalizeTr(raw),
+    );
+    // LLM unavailable: the step re-prompts itself — never go silent here.
+    if (result.needsAgentHandoff) return { handled: false };
+
+    const afterOrder = result.draftOrderId
+      ? await prisma.order.findFirst({
+          where: { id: result.draftOrderId, tenantId, status: 'DRAFT' },
+          include: { items: true },
+        })
+      : await this.getDraftOrder(ctx);
+
+    // The customer is past review: an NLU pass must never silently empty the order.
+    if (beforeOrder && before.length > 0 && (!afterOrder || afterOrder.items.length === 0)) {
+      const restored = await this.recreateDraft(ctx, { ...beforeOrder, totalPrice: beforeTotal, notes: beforeNotes }, before, phase);
+      logger.warn({ tenantId, conversationId, phase }, 'Mid-flow NLU emptied the cart — draft restored');
+      await this.sendText(ctx, `Hangi urunu cikaralim? Lutfen urun adini yazin.\n\n${this.buildOrderSummary(restored)}`);
+      return { handled: true };
+    }
+
+    // A newly named bundle with required options: run the option list. The old
+    // code dropped it and left a bundle without options in the cart.
+    if (result.pendingOptionSelection && result.draftOrderId) {
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { flowSubState: 'OPTION_SELECTION', activeOrderId: result.draftOrderId },
+      });
+      ctx.conversation.activeOrderId = result.draftOrderId;
+      await this.sendOptionSelectionList(ctx, result.pendingOptionSelection);
+      return { handled: true, nextPhase: 'ORDER_COLLECTING' };
+    }
+
+    // A real change (not `itemsExtracted`, which is also true for keep-only extractions)
+    if (afterOrder && result.draftOrderId && result.confirmationMessage) {
+      // createDraftOrder recomputes the total from the lines, which silently
+      // dropped a pickup discount granted earlier.
+      if (afterOrder.discountPercent && afterOrder.discountPercent > 0) {
+        const subtotal = afterOrder.items.reduce((s: number, i: any) => s + Number(i.unitPrice) * i.qty, 0);
+        const discountAmount = Math.round(subtotal * afterOrder.discountPercent) / 100;
+        await prisma.order.update({
+          where: { id: afterOrder.id },
+          data: { totalPrice: subtotal - discountAmount, discountAmount },
+        });
+        (afterOrder as any).totalPrice = subtotal - discountAmount;
+      }
+
+      const afterSig = this.cartSignature(this.snapshotCart(afterOrder), afterOrder.notes);
+      if (beforeOrder && afterOrder.id === beforeOrder.id && afterSig !== beforeSig) {
+        await this.pushMidFlowChange(conversationId, {
+          v: 1,
+          orderId: afterOrder.id,
+          phase,
+          messageId: message.id,
+          at: new Date().toISOString(),
+          before,
+          beforeTotal,
+          beforeNotes,
+          afterSignature: afterSig,
+        });
+      } else if (beforeOrder && afterOrder.id !== beforeOrder.id) {
+        logger.warn(
+          { tenantId, conversationId, before: beforeOrder.id, after: afterOrder.id },
+          'Mid-flow edit touched a different draft — not recorded for undo',
+        );
+      }
+      if (ctx.conversation.activeOrderId !== afterOrder.id) {
+        await inboxService.updateConversationPhase(tenantId, conversationId, phase, afterOrder.id);
+        ctx.conversation.activeOrderId = afterOrder.id;
+      }
+      await this.sendText(
+        ctx,
+        `Guncellendi! Guncel siparisiniz:\n\n${this.buildOrderSummary(afterOrder)}\n\n${TEMPLATES.midFlowUndoHint}`,
+      );
+      return { handled: true };
+    }
+
+    if (result.clarificationQuestion && !result.weakClarification) {
+      await this.sendText(ctx, result.clarificationQuestion);
+      return { handled: true };
+    }
+
+    return { handled: false };
+  }
+
+  /**
+   * Answer to "X siparisinize eklensin mi?": the buttons, or a bare evet/hayir
+   * while that question is open. Returns null when the message is not an answer.
+   */
+  private async interceptMidFlowAddAnswer(ctx: FlowContext, phase: ConversationPhase): Promise<ConversationPhase | null> {
+    const { message, payload, conversationId } = ctx;
+    const buttonId = payload.interactive?.buttonReply?.id;
+    let answer: 'yes' | 'no' | null = buttonId === 'mid_add_yes' ? 'yes' : buttonId === 'mid_add_no' ? 'no' : null;
+    if (!answer) {
+      if (message.kind !== 'TEXT' || buttonId || payload.interactive?.listReply?.id) return null;
+      const ws = foldedWords(message.text || '');
+      if (ws.length === 0 || ws.length > 2) return null;
+      if (ws.every((w) => ['evet', 'ekle', 'ekleyin', 'olur', 'tamam', 'lutfen'].includes(w))) answer = 'yes';
+      else if (ws.every((w) => ['hayir', 'istemiyorum', 'eklemeyin', 'gerek', 'yok'].includes(w))) answer = 'no';
+      else return null;
+    }
+
+    const meta = await this.readFlowMeta(conversationId);
+    const pending = meta.pendingMidFlowAdd;
+    const fresh =
+      !!pending && typeof pending.text === 'string' && Date.now() - Date.parse(pending.at) < MID_FLOW_UNDO_TTL_MS;
+    if (!fresh) {
+      // A plain "evet" with no open question belongs to the step itself.
+      if (!buttonId) return null;
+      if (pending) await this.writeFlowMeta(conversationId, { pendingMidFlowAdd: undefined });
+      return this.repromptCurrentStep(ctx, phase);
+    }
+    // Yazili "tamam/olur/evet" yalniz sorunun SORULDUGU adimda cevaptir. Musteri
+    // soruyu gecip pin/adres/odeme adimina ilerlediyse sonraki "tamam" o adimin
+    // cevabidir; eskiden 30 dk icindeki her "tamam" urunu sessizce ekliyordu.
+    if (!buttonId && pending.phase && pending.phase !== phase) {
+      await this.writeFlowMeta(conversationId, { pendingMidFlowAdd: undefined });
+      return null;
+    }
+    await this.writeFlowMeta(conversationId, { pendingMidFlowAdd: undefined });
+
+    if (answer === 'no') {
+      await this.sendText(ctx, TEMPLATES.midFlowAddDeclined);
+      return this.repromptCurrentStep(ctx, phase);
+    }
+    const mid = await this.runMidFlowEdit(ctx, phase, pending.text);
+    if (mid.nextPhase) return mid.nextPhase;
+    if (!mid.handled) {
+      await this.sendText(ctx, 'Bu urunu siparisinize ekleyemedim. Eklemek istediginiz urunun adini yazar misiniz?');
+    }
+    return this.repromptCurrentStep(ctx, phase);
+  }
+
+  /**
+   * A bundle with required options: interactive list + OPTION_SELECTION, then
+   * answer a payment question from the SAME message. "2'li pizza menu istiyorum.
+   * IBAN ve odeyecegim miktari yazar misiniz" got only the list (High Five, 30.08).
+   */
+  private async startOptionSelection(
+    ctx: FlowContext,
+    result: { draftOrderId?: string; pendingOptionSelection?: OptionSelectionRequest },
+  ): Promise<void> {
+    if (!result.pendingOptionSelection) return;
+    const activeOrderId = result.draftOrderId || ctx.conversation.activeOrderId;
+    await prisma.conversation.update({
+      where: { id: ctx.conversationId },
+      data: { flowSubState: 'OPTION_SELECTION', activeOrderId },
+    });
+    ctx.conversation.activeOrderId = activeOrderId;
+    ctx.conversation.flowSubState = 'OPTION_SELECTION';
+    await this.sendOptionSelectionList(ctx, result.pendingOptionSelection);
+    await this.tryAnswerPaymentQuestion(ctx, ctx.message.text || '', 'ORDER_COLLECTING');
+  }
+
+  /** Re-send the option list for the bundle line that still misses a required option. */
+  private async resendOptionSelectionList(ctx: FlowContext): Promise<boolean> {
+    try {
+      const orderId = ctx.conversation.activeOrderId;
+      if (!orderId) return false;
+      const orderItem = await prisma.orderItem.findFirst({
+        where: { orderId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!orderItem) return false;
+      const menuItem = await prisma.menuItem.findUnique({
+        where: { id: orderItem.menuItemId },
+        include: { optionGroups: { include: { group: { include: { options: true } } } } },
+      });
+      if (!menuItem) return false;
+      const current = (orderItem.optionsJson as any[]) || [];
+      for (const og of menuItem.optionGroups) {
+        if (!og.group.required) continue;
+        const selected = current.filter((co: any) => co.groupName === og.group.name).length;
+        if (selected < (og.group.minSelect || 1)) {
+          await this.sendOptionSelectionList(ctx, {
+            itemName: menuItem.name,
+            groupName: og.group.name.replace(/ \(\d+x\)/, ''),
+            stepNumber: selected + 1,
+            options: og.group.options.map((o) => ({
+              id: `opt_${o.name.substring(0, 20).replace(/\s/g, '_')}`,
+              name: o.name,
+              priceDelta: Number(o.priceDelta),
+            })),
+          });
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      logger.warn({ error, conversationId: ctx.conversationId }, 'Failed to re-send option list');
+      return false;
+    }
+  }
+
+  // ==================== MID-FLOW UNDO ====================
+
+  private snapshotCart(order: any): CartSnapshotLine[] {
+    return (order.items || []).map((i: any) => ({
+      menuItemId: i.menuItemId,
+      menuItemName: i.menuItemName,
+      qty: i.qty,
+      unitPrice: Number(i.unitPrice),
+      optionsJson: i.optionsJson ?? null,
+      extrasJson: i.extrasJson ?? null,
+      notes: i.notes ?? null,
+    }));
+  }
+
+  /**
+   * Content signature of a cart. Row ids and timestamps are excluded on purpose
+   * (they change on every NLU pass), and so is the written-address staff flag.
+   */
+  private cartSignature(lines: CartSnapshotLine[], orderNotes: string | null | undefined): string {
+    const optKey = (o: any) =>
+      Array.isArray(o) ? o.map((x: any) => `${x.groupName}:${x.optionName}`).sort().join('|') : '';
+    return (
+      lines
+        .map((l) => `${l.menuItemId}|${optKey(l.optionsJson)}|${l.qty}|${l.unitPrice.toFixed(2)}|${l.notes || ''}|${JSON.stringify(l.extrasJson ?? null)}`)
+        .sort()
+        .join('\n') + `#${this.stripTypedAddressNote(orderNotes) || ''}`
+    );
+  }
+
+  /** Fresh read — ctx.conversation.flowMetadata is a turn-start snapshot. */
+  private async readFlowMeta(conversationId: string): Promise<Record<string, any>> {
+    try {
+      const c = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { flowMetadata: true },
+      });
+      const parsed = JSON.parse(c?.flowMetadata || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** Merge into flowMetadata; other flows' keys (inactivity, parent order...) are preserved. */
+  private async writeFlowMeta(conversationId: string, patch: Record<string, unknown>): Promise<void> {
+    const meta: Record<string, unknown> = { ...(await this.readFlowMeta(conversationId)), ...patch };
+    for (const k of Object.keys(meta)) {
+      const v = meta[k];
+      if (v === undefined || (Array.isArray(v) && v.length === 0)) delete meta[k];
+    }
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { flowMetadata: Object.keys(meta).length > 0 ? JSON.stringify(meta) : null },
+    });
+  }
+
+  /** Sepet olusmadan gelen teslimat talimatlari (en fazla 3, 2 saat saklanir). */
+  private async pushPreDraftDeliveryNote(conversationId: string, note: string): Promise<void> {
+    const ttlMs = 2 * 60 * 60 * 1000;
+    try {
+      const meta = await this.readFlowMeta(conversationId);
+      const list = (Array.isArray(meta.preDraftDeliveryNotes) ? meta.preDraftDeliveryNotes : []).filter(
+        (n: any) => n && typeof n.text === 'string' && Date.now() - Date.parse(n.at) < ttlMs,
+      );
+      const text = note.substring(0, 200);
+      if (!list.some((n: any) => n.text === text)) list.push({ text, at: new Date().toISOString() });
+      await this.writeFlowMeta(conversationId, { preDraftDeliveryNotes: list.slice(-3) });
+    } catch (error) {
+      logger.warn({ error, conversationId }, 'Failed to store pre-draft delivery note');
+    }
+  }
+
+  /** Saklanan talimatlari taslak siparise "Teslimat notu:" olarak yazar ve temizler. */
+  private async applyPreDraftDeliveryNotes(ctx: FlowContext, order: any): Promise<void> {
+    const ttlMs = 2 * 60 * 60 * 1000;
+    try {
+      const meta = await this.readFlowMeta(ctx.conversationId);
+      if (!Array.isArray(meta.preDraftDeliveryNotes)) return;
+      const list = meta.preDraftDeliveryNotes.filter(
+        (n: any) => n && typeof n.text === 'string' && Date.now() - Date.parse(n.at) < ttlMs,
+      );
+      await this.writeFlowMeta(ctx.conversationId, { preDraftDeliveryNotes: undefined });
+      for (const n of list) {
+        if (!String(order?.notes || '').includes(n.text)) {
+          await this.appendOrderNote(order, `Teslimat notu: ${n.text}`);
+        }
+      }
+    } catch (error) {
+      logger.warn({ error, conversationId: ctx.conversationId }, 'Failed to apply pre-draft delivery notes');
+    }
+  }
+
+  private async pushMidFlowChange(conversationId: string, rec: MidFlowChangeRecord): Promise<void> {
+    try {
+      const meta = await this.readFlowMeta(conversationId);
+      const list: MidFlowChangeRecord[] = (Array.isArray(meta.midFlowChanges) ? meta.midFlowChanges : []).filter(
+        (r: MidFlowChangeRecord) => r && r.orderId === rec.orderId && Date.now() - Date.parse(r.at) < MID_FLOW_UNDO_TTL_MS,
+      );
+      list.push(rec);
+      await this.writeFlowMeta(conversationId, { midFlowChanges: list.slice(-MID_FLOW_UNDO_MAX) });
+    } catch (error) {
+      logger.warn({ error, conversationId }, 'Failed to record mid-flow change');
+    }
+  }
+
+  private async interceptMidFlowUndo(ctx: FlowContext, phase: ConversationPhase): Promise<ConversationPhase | null> {
+    const { message, payload } = ctx;
+    if (message.kind !== 'TEXT' || payload.interactive?.buttonReply?.id || payload.interactive?.listReply?.id) {
+      return null;
+    }
+    const kind = isUndoLastChangeIntent(message.text || '');
+    if (!kind) return null;
+    return this.handleMidFlowUndo(ctx, phase, kind);
+  }
+
+  /**
+   * Undo the last recorded mid-flow cart change. Returns null when the message
+   * is not handled ('soft' with no change right before it → the caller's
+   * normal branches run). Never runs the NLU, never cancels the order.
+   */
+  private async handleMidFlowUndo(
+    ctx: FlowContext,
+    phase: ConversationPhase,
+    kind: 'undo' | 'soft',
+  ): Promise<ConversationPhase | null> {
+    const { tenantId, conversationId, message } = ctx;
+    const draft = await this.getActiveOrder(ctx);
+    if (!draft || draft.items.length === 0) {
+      if (kind === 'soft') return null;
+      await this.sendText(ctx, TEMPLATES.orderEmpty);
+      return 'IDLE';
+    }
+
+    const meta = await this.readFlowMeta(conversationId);
+    const all: MidFlowChangeRecord[] = Array.isArray(meta.midFlowChanges) ? meta.midFlowChanges : [];
+    const live = all.filter(
+      (r) => r && r.orderId === draft.id && Date.now() - Date.parse(r.at) < MID_FLOW_UNDO_TTL_MS,
+    );
+    const rec = live[live.length - 1];
+
+    if (kind === 'soft') {
+      // A bare "istemiyorum" only undoes a change made by the immediately previous message.
+      if (!rec) return null;
+      const prevIn = await prisma.message.findFirst({
+        where: { conversationId, tenantId, direction: 'IN', id: { not: message.id } },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (!prevIn || prevIn.id !== rec.messageId) return null;
+    }
+
+    const currentSig = this.cartSignature(this.snapshotCart(draft), draft.notes);
+    if (!rec || rec.before.length === 0 || currentSig !== rec.afterSignature) {
+      if (live.length !== all.length) await this.writeFlowMeta(conversationId, { midFlowChanges: live });
+      // Nothing we can safely revert (no recent change, or the cart changed
+      // since): show the cart and ask.
+      await this.sendText(ctx, TEMPLATES.midFlowUndoNothing(this.buildOrderSummary(draft)));
+      return this.repromptCurrentStep(ctx, phase);
+    }
+
+    // Keep a written-address flag added after the change.
+    const flagPart = (draft.notes || '').split(' | ').find((p) => p.startsWith(TYPED_ADDRESS_NOTE));
+    const baseNotes = this.stripTypedAddressNote(rec.beforeNotes);
+    const notes = flagPart ? (baseNotes ? `${flagPart} | ${baseNotes}` : flagPart) : baseNotes;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.orderItem.deleteMany({ where: { orderId: draft.id } });
+      await tx.order.update({
+        where: { id: draft.id },
+        data: {
+          // Restoring the stored total also restores a pickup discount.
+          totalPrice: rec.beforeTotal,
+          notes,
+          items: {
+            create: rec.before.map((l) => ({
+              menuItemId: l.menuItemId,
+              menuItemName: l.menuItemName,
+              qty: l.qty,
+              unitPrice: l.unitPrice,
+              optionsJson: l.optionsJson ?? undefined,
+              extrasJson: l.extrasJson ?? undefined,
+              notes: l.notes,
+            })),
+          },
+        },
+      });
+    });
+
+    const remaining = live.slice(0, -1);
+    await this.writeFlowMeta(conversationId, { midFlowChanges: remaining });
+    logger.info(
+      { tenantId, conversationId, orderId: draft.id, sourceMessageId: rec.messageId, phase },
+      'Mid-flow change undone',
     );
 
-    if (result.draftOrderId && result.itemsExtracted) {
-      // Items were added to the existing draft order
-      const order = await this.getActiveOrder(ctx);
-      if (order && order.items.length > 0) {
-        const summary = this.buildOrderSummary(order);
-        await this.sendText(ctx, `Eklendi! Guncel siparisiniz:\n\n${summary}`);
+    const restored = await this.getActiveOrder(ctx);
+    let reply = TEMPLATES.midFlowUndoDone(this.buildOrderSummary(restored || draft), remaining.length > 0);
+    if (kind === 'soft') reply += '\n\nSiparisin tamamini iptal etmek isterseniz *iptal* yazin.';
+    await this.sendText(ctx, reply);
+    return this.repromptCurrentStep(ctx, phase);
+  }
+
+  /** Recreate a draft the NLU deleted, pointing the conversation at it. */
+  private async recreateDraft(ctx: FlowContext, source: any, lines: CartSnapshotLine[], phase: ConversationPhase) {
+    const restored = await prisma.order.create({
+      data: {
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        customerPhone: ctx.conversation.customerPhone,
+        status: 'DRAFT',
+        totalPrice: Number(source.totalPrice),
+        notes: source.notes ?? null,
+        deliveryType: source.deliveryType ?? null,
+        deliveryAddress: source.deliveryAddress ?? null,
+        discountPercent: source.discountPercent ?? null,
+        discountAmount: source.discountAmount ?? null,
+        storeId: source.storeId ?? null,
+        items: {
+          // `tenantId` / `sortOrder` are not OrderItem columns (see handleOrderReview)
+          create: lines.map((l) => ({
+            menuItemId: l.menuItemId,
+            menuItemName: l.menuItemName,
+            qty: l.qty,
+            unitPrice: l.unitPrice,
+            optionsJson: l.optionsJson ?? undefined,
+            extrasJson: l.extrasJson ?? undefined,
+            notes: l.notes,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+    await inboxService.updateConversationPhase(ctx.tenantId, ctx.conversationId, phase, restored.id);
+    ctx.conversation.activeOrderId = restored.id;
+    return restored;
+  }
+
+  /** Re-send the prompt of the step the customer is on. */
+  private async repromptCurrentStep(ctx: FlowContext, phase: ConversationPhase): Promise<ConversationPhase> {
+    const { tenantId, conversationId } = ctx;
+    switch (phase) {
+      case 'DELIVERY_TYPE_SELECTION':
+        return this.proceedToDeliveryTypeSelection(ctx);
+      case 'LOCATION_REQUEST':
+        await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+        return 'LOCATION_REQUEST';
+      case 'ADDRESS_SELECTION': {
+        const order = await this.getActiveOrder(ctx);
+        if (await this.sendSavedAddressList(ctx, order?.deliveryAddress ?? null)) return 'ADDRESS_SELECTION';
+        await whatsappService.sendLocationRequest(tenantId, conversationId, TEMPLATES.locationRequest);
+        return 'LOCATION_REQUEST';
       }
-      return true;
+      case 'ADDRESS_COLLECTION': {
+        const order = await this.getActiveOrder(ctx);
+        if (order?.deliveryAddress) {
+          const tmpl = TEMPLATES.addressConfirmButtons;
+          await whatsappService.sendInteractiveButtons(tenantId, conversationId, tmpl.body, tmpl.buttons);
+        } else {
+          await this.sendText(ctx, TEMPLATES.addressRequest);
+        }
+        return 'ADDRESS_COLLECTION';
+      }
+      case 'ADDRESS_SAVE_PROMPT': {
+        const sub = ctx.conversation.flowSubState || 'WAITING_SAVE_CONFIRM';
+        if (sub === 'WAITING_ADDRESS_NAME_CUSTOM') {
+          await this.sendText(ctx, 'Lutfen adres icin bir isim yazin:');
+        } else {
+          const tmpl = sub === 'WAITING_ADDRESS_NAME' ? TEMPLATES.askAddressNameButtons : TEMPLATES.askSaveAddressButtons;
+          await whatsappService.sendInteractiveButtons(tenantId, conversationId, tmpl.body, tmpl.buttons);
+        }
+        return 'ADDRESS_SAVE_PROMPT';
+      }
+      case 'PAYMENT_METHOD_SELECTION':
+        await this.sendPaymentButtons(ctx);
+        return 'PAYMENT_METHOD_SELECTION';
+      case 'PAYMENT_PENDING': {
+        const orderId = ctx.conversation.activeOrderId;
+        const pending = orderId ? await orderPaymentService.getPendingPayment(tenantId, orderId) : null;
+        if (pending?.checkoutFormUrl) {
+          await this.sendText(ctx, TEMPLATES.reminderPayment(pending.checkoutFormUrl));
+          return 'PAYMENT_PENDING';
+        }
+        await this.sendPaymentButtons(ctx);
+        return 'PAYMENT_METHOD_SELECTION';
+      }
+      default:
+        return phase;
+    }
+  }
+
+  // ==================== WRITTEN ADDRESS / OUT OF AREA ====================
+
+  /**
+   * Did the text name a menu item? Fresh candidate search for THIS text only
+   * (no carried-over context candidates).
+   */
+  private async menuMatchInCurrentText(ctx: FlowContext, rawText: string): Promise<boolean> {
+    return (await this.findMenuMatch(ctx, rawText)).matched;
+  }
+
+  /** Strong menu match in THIS text (score >= 0.5 or a whole-word name/synonym) and the product's name. */
+  private async findMenuMatch(ctx: FlowContext, rawText: string): Promise<{ matched: boolean; name: string | null }> {
+    try {
+      const cands = await menuCandidateService.findCandidates(ctx.tenantId, rawText);
+      const best = cands.slice().sort((a, b) => b.score - a.score)[0];
+      if (best && best.score >= 0.5) return { matched: true, name: best.name };
+      const named = cands.find((c) => mentionsMenuItemName([c.name], c.synonymsMatched || [], rawText));
+      return named ? { matched: true, name: named.name } : { matched: false, name: null };
+    } catch {
+      return { matched: false, name: null };
+    }
+  }
+
+  /**
+   * Payment questions are answered in ANY phase — they must never be saved as
+   * an address, submitted as a cash order, or sent to the NLU.
+   * Returns the phase to stay in, or null when the text is not a payment question.
+   */
+  private async tryAnswerPaymentQuestion(
+    ctx: FlowContext,
+    rawText: string,
+    phase: ConversationPhase,
+    confirmedOrder?: { orderNumber: number | null; totalPrice: unknown; paymentMethod: string | null } | null,
+  ): Promise<ConversationPhase | null> {
+    const { message, payload } = ctx;
+    if (!rawText || message.kind !== 'TEXT') return null;
+    if (payload.interactive?.buttonReply?.id || payload.interactive?.listReply?.id) return null;
+    const q = isPaymentQuestion(rawText);
+    if (!q.asked) return null;
+    // At the payment step "nakit" / "kapida kart" still select a method; only a real question is answered.
+    if (
+      (phase === 'PAYMENT_METHOD_SELECTION' || phase === 'PAYMENT_PENDING') &&
+      !q.bankTransfer && !q.amount && !textHasQuestionSignal(rawText)
+    ) {
+      return null;
     }
 
-    if (result.clarificationQuestion) {
-      await this.sendText(ctx, result.clarificationQuestion);
-      return true;
+    try {
+      if (confirmedOrder) {
+        await this.sendText(
+          ctx,
+          TEMPLATES.paymentInfoConfirmed(
+            confirmedOrder.orderNumber || 0,
+            Number(confirmedOrder.totalPrice),
+            confirmedOrder.paymentMethod,
+            q.bankTransfer,
+          ),
+        );
+        return phase;
+      }
+
+      const order = await this.getDraftOrder(ctx);
+      const hasCart = !!order && order.items.length > 0;
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: ctx.tenantId },
+        select: { iyzicoApiKey: true, iyzicoSecretKey: true },
+      });
+      const isPickup = order?.deliveryType === 'PICKUP';
+      let deliveryFee: number | null = null;
+      let feeIsEstimate = false;
+      if (order && hasCart && !isPickup) {
+        const geo = order.deliveryType === 'DELIVERY' && !this.isTypedAddressOrder(order)
+          ? await this.getFreshGeoCheck(ctx)
+          : null;
+        if (geo?.isWithinServiceArea && geo.deliveryRule) {
+          deliveryFee = Number(geo.deliveryRule.deliveryFee);
+        } else {
+          deliveryFee = (await geoService.getTypedAddressTerms(ctx.tenantId, null)).deliveryFee;
+          feeIsEstimate = true;
+        }
+      }
+      const preConfirm = phase === 'IDLE' || phase === 'ORDER_COLLECTING' || phase === 'ORDER_REVIEW';
+      await this.sendText(
+        ctx,
+        TEMPLATES.paymentInfo({
+          subtotal: order && hasCart ? Number(order.totalPrice) : null,
+          isPickup,
+          deliveryFee,
+          feeIsEstimate,
+          // iyzico refuses to create a link without tenant keys
+          onlineEnabled: !!(tenant?.iyzicoApiKey && tenant?.iyzicoSecretKey),
+          bankTransferAsked: q.bankTransfer,
+          preConfirm,
+        }),
+      );
+      return preConfirm ? phase : this.repromptCurrentStep(ctx, phase);
+    } catch (error) {
+      logger.warn({ error, conversationId: ctx.conversationId }, 'Payment question answer failed');
+      return null;
+    }
+  }
+
+  /**
+   * Continue the order with a WRITTEN address (no pin, or an out-of-area pin
+   * the customer disputes). Staff verifies the area: the order carries a flag
+   * note and the staff alert shows a warning.
+   */
+  private async acceptTypedAddress(
+    ctx: FlowContext,
+    addressText: string,
+    opts?: { outOfAreaGeo?: GeoCheckResult | null },
+  ): Promise<ConversationPhase> {
+    const { tenantId, conversationId } = ctx;
+    const order = await this.getActiveOrder(ctx);
+    if (!order || order.items.length === 0) {
+      await this.sendText(ctx, TEMPLATES.orderEmpty);
+      return 'IDLE';
     }
 
-    return false;
+    const address = this.joinParked(order.deliveryAddress, addressText);
+
+    // An in-area pin for this order already exists (sent before Onayla): keep
+    // it and confirm the address with it. Flagging the order and clearing the
+    // coordinates threw away the exact spot the customer's "konuma gelince"
+    // note refers to, and asked staff to verify an area the pin had verified.
+    const pinGeo = await this.getFreshGeoCheck(ctx);
+    if (pinGeo?.isWithinServiceArea && ctx.conversation.customerLat != null) {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { deliveryType: 'DELIVERY', deliveryAddress: address },
+      });
+      return this.processGeoResult(ctx, pinGeo);
+    }
+    const oos = opts?.outOfAreaGeo ?? null;
+    const terms = await geoService.getTypedAddressTerms(tenantId, oos?.nearestStore?.id ?? null);
+
+    // Same rule as a pin: the smallest zone minimum still applies.
+    const total = Number(order.totalPrice);
+    if (terms.minBasket && total < terms.minBasket) {
+      await prisma.order.update({ where: { id: order.id }, data: { deliveryAddress: address } });
+      await this.sendText(ctx, TEMPLATES.locationMinBasketNotMet(terms.minBasket, total));
+      return 'ORDER_COLLECTING';
+    }
+
+    // The flag goes FIRST so the 240-char note cap of later NLU merges cannot drop it.
+    const flag =
+      TYPED_ADDRESS_NOTE +
+      (oos ? (oos.distance != null ? ` - paylasilan konum ${oos.distance.toFixed(1)} km (servis alani disi)` : ' - paylasilan konum servis alani disi') : '');
+    const otherNotes = this.stripTypedAddressNote(order.notes);
+    const notes = otherNotes ? `${flag} | ${otherNotes}` : flag;
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        deliveryType: 'DELIVERY',
+        deliveryAddress: address,
+        notes,
+        ...(terms.store ? { storeId: terms.store.id } : {}),
+      },
+    });
+    // Clear conversation geo data: a stale or out-of-area pin must not become
+    // the staff map link, nor be saved as this address's coordinates.
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        nearestStoreId: terms.store?.id ?? null,
+        isWithinService: null,
+        geoCheckJson: Prisma.DbNull,
+        customerLat: null,
+        customerLng: null,
+      },
+    });
+    Object.assign(ctx.conversation, {
+      nearestStoreId: terms.store?.id ?? null,
+      isWithinService: null,
+      geoCheckJson: null,
+      customerLat: null,
+      customerLng: null,
+    });
+
+    logger.info(
+      { tenantId, conversationId, orderId: order.id, outOfAreaPin: !!oos },
+      'Written delivery address accepted (no verified pin)',
+    );
+
+    await this.sendText(ctx, TEMPLATES.typedAddressAccepted(address, terms.store?.name ?? null, terms.deliveryFee));
+    const tmpl = TEMPLATES.addressConfirmButtons;
+    await whatsappService.sendInteractiveButtons(tenantId, conversationId, tmpl.body, tmpl.buttons);
+    return 'ADDRESS_COLLECTION';
+  }
+
+  private isTypedAddressOrder(order: { notes?: string | null } | null | undefined): boolean {
+    return !!order?.notes && order.notes.includes(TYPED_ADDRESS_NOTE);
+  }
+
+  private stripTypedAddressNote(notes: string | null | undefined): string | null {
+    // Shared with the orchestrator's summary (message-templates)
+    return stripTypedAddressFlag(notes);
+  }
+
+  /** Append a delivery note to the order (deduplicated, ' | '-separated, never overwrites). */
+  private async appendOrderNote(order: { id: string; notes: string | null }, note: string): Promise<void> {
+    const n = note.trim().substring(0, 160);
+    if (!n) return;
+    const existing = order.notes || '';
+    if (foldTr(existing).includes(foldTr(n))) return;
+    const notes = existing ? `${existing} | ${n}` : n;
+    await prisma.order.update({ where: { id: order.id }, data: { notes } });
+    order.notes = notes;
+  }
+
+  private joinParked(previous: string | null | undefined, next: string): string {
+    const prev = (previous || '').trim();
+    const cur = (next || '').trim();
+    if (!prev) return cur.substring(0, 400);
+    if (!cur) return prev.substring(0, 400);
+    const fp = foldTr(prev);
+    const fc = foldTr(cur);
+    if (fc.includes(fp)) return cur.substring(0, 400);
+    if (fp.includes(fc)) return prev.substring(0, 400);
+    return `${prev}, ${cur}`.substring(0, 400);
+  }
+
+  /** Filler replies ("tamam bir dakika", "tamam dogru", "kolay gelsin") are not an address. */
+  private isChatter(rawText: string): boolean {
+    const filler = new Set([
+      'tamam', 'tamamdir', 'ok', 'okey', 'peki', 'olur', 'evet', 'hayir', 'tesekkurler', 'tesekkur', 'ederim',
+      'sagol', 'sagolun', 'bekle', 'bekleyin', 'dakika', 'saniye', 'bir', 'hmm', 'anladim', 'simdi', 'hemen', 'bi',
+      'dogru', 'guzel', 'super', 'harika', 'adres', 'adresim', 'bu', 'merhaba', 'selam', 'kolay', 'gelsin',
+      'iyi', 'gunler', 'aksamlar', 'abi', 'hocam', 'efendim', 'ya', 'yok', 'aynen', 'tabi', 'tabii',
+    ]);
+    const ws = foldedWords(rawText);
+    return ws.length > 0 && ws.every((w) => filler.has(w));
+  }
+
+  /**
+   * Could this text be a written address? Not a question, filler, "wait, I am
+   * typing", complaint, refusal, payment question, undo or cancel. Without this
+   * "tamam yaziyorum" became the delivery address and reached staff.
+   */
+  private isPlausibleAddressReply(rawText: string): boolean {
+    const raw = (rawText || '').trim();
+    if (!raw || foldedWords(raw).length === 0) return false;
+    if (textHasQuestionSignal(raw) || this.isChatter(raw) || isAddressWaitReply(raw)) return false;
+    // Adres kaniti ("Camiye yakin Gul sokak no 3", "Acik adresim: Orhangazi Mah. ...")
+    // sikayet/ret kelimelerinden ONCE gelir. Pin sonrasi adres adimi eskiden her
+    // metni kabul ediyordu; "yakin", "acik adres" iceren tam adresi reddetmek o
+    // normal akisi kiran bir gerilemeydi (dogrulama bulgusu, 14.09).
+    if (hasAddressEvidence(raw) && !isPaymentQuestion(raw).asked) return true;
+    if (isAreaComplaint(raw) || isConfusionAboutCart(raw) || isLocationRefusal(raw)) return false;
+    if (isPaymentQuestion(raw).asked || isUndoLastChangeIntent(raw)) return false;
+    return !this.isFullCancelIntent(raw);
+  }
+
+  /**
+   * Cancel in the post-confirm steps. isFullCancelIntent only knows exact short
+   * phrases, so "iptal edin", "siparisi iptal etmek istiyorum" or "vazgectim"
+   * no longer cancelled — they were re-prompted or even saved as the address.
+   * A word starting iptal/vazgec counts in a short text, unless it is an address
+   * ("Vazgecmez Sok. 4"), a refusal or names a menu item ("kolayi iptal" is a removal).
+   */
+  private async isStepCancelIntent(ctx: FlowContext, rawText: string): Promise<boolean> {
+    const raw = (rawText || '').trim();
+    if (!raw || ctx.message.kind !== 'TEXT') return false;
+    if (ctx.payload.interactive?.buttonReply?.id || ctx.payload.interactive?.listReply?.id) return false;
+    if (this.isFullCancelIntent(raw)) return true;
+    const ws = foldedWords(raw);
+    if (ws.length === 0 || ws.length > 5) return false;
+    if (!ws.some((w) => w.startsWith('iptal') || w.startsWith('vazgec'))) return false;
+    if (classifyAddressText(raw).kind !== 'none') return false;
+    if (isLocationRefusal(raw) || isPaymentQuestion(raw).asked) return false;
+    return !(await this.menuMatchInCurrentText(ctx, raw));
+  }
+
+  /** Did we already ask for a written address for THIS order? (history marker, survives sub-state resets) */
+  private async hasAskedForAddress(ctx: FlowContext, order: { createdAt?: Date | string } | null): Promise<boolean> {
+    try {
+      const found = await prisma.message.findFirst({
+        where: {
+          conversationId: ctx.conversationId,
+          tenantId: ctx.tenantId,
+          direction: 'OUT',
+          text: { contains: ADDRESS_ASK_MARKER },
+          ...(order?.createdAt ? { createdAt: { gte: new Date(order.createdAt) } } : {}),
+        },
+        select: { id: true },
+      });
+      return !!found;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The stored geo check, only when it belongs to a pin sent for the CURRENT
+   * order. geoCheckJson lives on the conversation (one per customer), so
+   * without this a days-old out-of-area result would steer today's order.
+   */
+  private async getFreshGeoCheck(ctx: FlowContext): Promise<GeoCheckResult | null> {
+    try {
+      const geo = await inboxService.getConversationGeoCheck(ctx.tenantId, ctx.conversationId);
+      if (!geo) return null;
+      const lastPin = await prisma.message.findFirst({
+        where: { conversationId: ctx.conversationId, tenantId: ctx.tenantId, direction: 'IN', kind: 'LOCATION' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+      if (!lastPin) return null;
+      const pinAt = new Date(lastPin.createdAt).getTime();
+      const order = await this.getActiveOrder(ctx);
+      if (order && pinAt >= new Date(order.createdAt).getTime()) return geo;
+      // A pin sent shortly BEFORE this draft existed (while the customer was
+      // still choosing, or while the old gate held the chat and the draft was
+      // replayed later) belongs to this order too — unless an earlier order was
+      // finalised after it (then the pin was that order's).
+      if (Date.now() - pinAt > PRE_ORDER_PIN_MAX_AGE_MS) return null;
+      const usedByEarlierOrder = await prisma.order.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          conversationId: ctx.conversationId,
+          status: { notIn: ['DRAFT', 'CANCELLED'] },
+          updatedAt: { gte: new Date(pinAt) },
+          ...(order ? { id: { not: order.id } } : {}),
+        },
+        select: { id: true },
+      });
+      return usedByEarlierOrder ? null : geo;
+    } catch {
+      return null;
+    }
+  }
+
+  private async getFreshOutOfAreaGeo(ctx: FlowContext): Promise<GeoCheckResult | null> {
+    const geo = await this.getFreshGeoCheck(ctx);
+    return geo && !geo.isWithinServiceArea ? geo : null;
+  }
+
+  /**
+   * Distance worth quoting to the customer. Beyond ~3x the radius the pin is
+   * almost always wrong (another city, a default GPS fix): "312.4 km" insults
+   * the customer and invites the "size cok yakin" argument.
+   */
+  private meaningfulOosDistance(geo: GeoCheckResult): { distanceKm: number; radiusKm: number } | null {
+    if (geo.isWithinServiceArea) return null;
+    if (geo.reason && geo.reason !== 'OUT_OF_RADIUS') return null;
+    const d = geo.distance;
+    const r = geo.maxRadiusKm;
+    if (typeof d !== 'number' || !Number.isFinite(d) || typeof r !== 'number' || !(r > 0)) return null;
+    if (d <= r || d > Math.max(r * 3, 15)) return null;
+    return { distanceKm: d, radiusKm: r };
+  }
+
+  /** Out-of-area pin: one message with the three ways forward (the cart is kept). */
+  private async sendOutOfAreaOptions(ctx: FlowContext, geo: GeoCheckResult, lead?: string): Promise<ConversationPhase> {
+    const { tenantId, conversationId } = ctx;
+    if (geo.reason === 'NO_OPEN_STORE') {
+      const activeStores = await prisma.store.count({ where: { tenantId, isActive: true } });
+      if (activeStores > 0) {
+        // Every branch is closed: pickup is impossible too.
+        await this.sendText(ctx, TEMPLATES.storeClosed);
+      } else {
+        // No branch configured: a pin cannot be checked at all, a written address can.
+        await this.sendText(ctx, TEMPLATES.typedAddressPrompt);
+      }
+      return 'LOCATION_REQUEST';
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { pickupDiscountPercent: true },
+    });
+    const dist = this.meaningfulOosDistance(geo);
+    if (lead) await this.sendText(ctx, lead);
+    await whatsappService.sendInteractiveButtons(
+      tenantId,
+      conversationId,
+      TEMPLATES.locationOutOfService({
+        distanceKm: dist?.distanceKm ?? null,
+        radiusKm: dist?.radiusKm ?? null,
+        pickupDiscountPercent: tenant?.pickupDiscountPercent ?? null,
+      }),
+      TEMPLATES.locationOutOfServiceButtons,
+    );
+    return 'LOCATION_REQUEST';
+  }
+
+  private async sendOutOfAreaComplaint(ctx: FlowContext, geo: GeoCheckResult): Promise<ConversationPhase> {
+    const dist = this.meaningfulOosDistance(geo);
+    await whatsappService.sendInteractiveButtons(
+      ctx.tenantId,
+      ctx.conversationId,
+      TEMPLATES.outOfAreaComplaint({
+        distanceKm: dist?.distanceKm ?? null,
+        radiusKm: dist?.radiusKm ?? null,
+        storeName: geo.nearestStore?.name ?? null,
+        storePhone: geo.nearestStore?.phone ?? null,
+      }),
+      TEMPLATES.locationOutOfServiceButtons,
+    );
+    return 'LOCATION_REQUEST';
+  }
+
+  /** Gel Al (pickup). The discount is applied once — a second tap must not compound it. */
+  private async switchToPickup(
+    ctx: FlowContext,
+    order: any,
+    opts?: { fromOutOfArea?: boolean },
+  ): Promise<ConversationPhase> {
+    // `deliveryAddress: null` clears an address the customer may have typed
+    // BEFORE confirming (the pre-confirm guard parks it on the draft). A
+    // pickup order must never carry a delivery address onto the kitchen ticket.
+    const updateData: any = {
+      deliveryType: 'PICKUP',
+      deliveryAddress: null,
+      notes: this.stripTypedAddressNote(order.notes),
+    };
+    const prefix = opts?.fromOutOfArea ? 'Sepetiniz aynen korundu. ' : '';
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: ctx.tenantId } });
+    if (tenant?.pickupDiscountPercent && tenant.pickupDiscountPercent > 0 && !order.discountPercent) {
+      const totalPrice = Number(order.totalPrice);
+      const discountAmount = Math.round(totalPrice * tenant.pickupDiscountPercent) / 100;
+      const newTotal = totalPrice - discountAmount;
+      updateData.discountPercent = tenant.pickupDiscountPercent;
+      updateData.discountAmount = discountAmount;
+      updateData.totalPrice = newTotal;
+
+      await prisma.order.update({ where: { id: order.id }, data: updateData });
+      await this.sendText(
+        ctx,
+        `${prefix}Gel al secildi! %${tenant.pickupDiscountPercent} indirim uygulandı (${discountAmount.toFixed(2)} TL indirim). Yeni toplam: ${newTotal.toFixed(2)} TL`,
+      );
+    } else {
+      await prisma.order.update({ where: { id: order.id }, data: updateData });
+      await this.sendText(ctx, `${prefix}Gel al secildi!`);
+    }
+
+    // Skip address flow — go directly to payment
+    await this.sendPaymentButtons(ctx);
+    return 'PAYMENT_METHOD_SELECTION';
+  }
+
+  /**
+   * A pin: use the geo check stored for THIS pin. whatsapp.service stores one on
+   * receipt, but if that call failed geoCheckJson still holds the PREVIOUS
+   * pin's result (and the test console stores none) — recompute then.
+   */
+  private async processLocationPin(ctx: FlowContext): Promise<ConversationPhase> {
+    const { tenantId, conversationId, payload } = ctx;
+    const lat = payload.location!.latitude;
+    const lng = payload.location!.longitude;
+    const conv = await inboxService.getConversationRaw(tenantId, conversationId);
+    let geoCheck = await inboxService.getConversationGeoCheck(tenantId, conversationId);
+    if (!geoCheck || conv?.customerLat !== lat || conv?.customerLng !== lng) {
+      geoCheck = await geoService.checkServiceArea(tenantId, { lat, lng });
+      await inboxService.updateConversationGeoCheck(tenantId, conversationId, geoCheck, { lat, lng });
+    }
+    return this.processGeoResult(ctx, geoCheck);
+  }
+
+  /** Saved-address list (+ the address typed earlier as the first row). False when none are saved. */
+  private async sendSavedAddressList(ctx: FlowContext, parkedAddress: string | null): Promise<boolean> {
+    const savedAddresses = await savedAddressService.getByCustomerPhone(
+      ctx.tenantId, ctx.conversation.customerPhone,
+    );
+    if (savedAddresses.length === 0) return false;
+
+    // WhatsApp lists allow 10 rows: parked row + 8 saved + "Yeni Adres".
+    const rows: Array<{ id: string; title: string; description: string }> = [];
+    if (parkedAddress) {
+      rows.push({
+        id: 'use_parked_address',
+        title: TEMPLATES.parkedAddressRowTitle,
+        description: parkedAddress.substring(0, 72),
+      });
+    }
+    for (const addr of savedAddresses.slice(0, parkedAddress ? 8 : 9)) {
+      rows.push({
+        id: `saved_addr_${addr.id}`,
+        title: addr.name.substring(0, 24),
+        description: addr.address.substring(0, 72),
+      });
+    }
+    rows.push({
+      id: 'new_address',
+      title: TEMPLATES.newAddressRowTitle,
+      description: TEMPLATES.newAddressRowDescription,
+    });
+
+    await whatsappService.sendListMessage(
+      ctx.tenantId,
+      ctx.conversationId,
+      TEMPLATES.savedAddressListHeader,
+      TEMPLATES.savedAddressListButton,
+      [{ title: 'Adresler', rows }],
+    );
+    return true;
+  }
+
+  private async transcribeVoice(ctx: FlowContext): Promise<string | null> {
+    const voiceId = (ctx.message.payloadJson as any)?.voiceId;
+    if (!voiceId || !whisperService.isAvailable()) return null;
+    try {
+      return (await whisperService.transcribeVoiceMessage(ctx.tenantId, voiceId)) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ==================== LEGACY NEGATIVE-CONSTRAINT HOLD ====================
+
+  /** The wording of the old gate's reply (fallback template or the Claude version). */
+  private isConstraintGateReply(text: string): boolean {
+    const t = foldTr(text);
+    if (t.includes('ozel isteginizi not aldim')) return true;
+    return t.includes('gorevli') && ['kontrol', 'onayla', 'donus'].some((w) => t.includes(w));
+  }
+
+  /**
+   * A PENDING_AGENT status that ONLY the old gate produced: its reply is the
+   * last bot message and no human acted since (no assignment, no staff reply,
+   * no manual handoff). New bot replies never use this wording, so a status a
+   * person sets later cannot match. Returns null for every real takeover.
+   */
+  private async findLegacyConstraintGateHold(ctx: FlowContext): Promise<LegacyGateHold | null> {
+    const { tenantId, conversationId } = ctx;
+    try {
+      const assignment = await prisma.conversationAssignment.findUnique({ where: { conversationId } });
+      if (assignment) return null;
+
+      const gateReply = await prisma.message.findFirst({
+        where: { conversationId, tenantId, direction: 'OUT', kind: 'TEXT', senderUserId: null },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true, text: true },
+      });
+      if (!gateReply?.text || !this.isConstraintGateReply(gateReply.text)) return null;
+
+      const humanAction = await prisma.message.findFirst({
+        where: {
+          conversationId,
+          tenantId,
+          direction: 'OUT',
+          createdAt: { gt: gateReply.createdAt },
+          OR: [{ senderUserId: { not: null } }, { kind: 'SYSTEM' }],
+        },
+        select: { id: true },
+      });
+      if (humanAction) return null;
+
+      const heldMessage = await prisma.message.findFirst({
+        where: { conversationId, tenantId, direction: 'IN', kind: 'TEXT', createdAt: { lt: gateReply.createdAt } },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, text: true },
+      });
+      return { gateReplyAt: new Date(gateReply.createdAt), heldMessage };
+    } catch (error) {
+      // Cannot verify → stay silent (the safe side for a real takeover)
+      logger.warn({ error, tenantId, conversationId }, 'Legacy gate hold check failed');
+      return null;
+    }
+  }
+
+  /**
+   * Reopen a conversation the old gate parked. A fresh hold (<= 2h) replays
+   * the held order message through the current pipeline (the request becomes an
+   * order note); an older one restarts cleanly. Never silence.
+   */
+  private async resumeFromConstraintGateHold(
+    ctx: FlowContext,
+    hold: LegacyGateHold,
+  ): Promise<{ handled: true } | { handled: false; phase: ConversationPhase }> {
+    const { tenantId, conversationId, message } = ctx;
+
+    // Race-safe: if a person changed the status meanwhile, stay out of it.
+    const reopened = await prisma.conversation.updateMany({
+      where: { id: conversationId, tenantId, status: 'PENDING_AGENT' },
+      data: { status: 'OPEN' },
+    });
+    if (reopened.count === 0) {
+      // Lost the race to a concurrent turn for the same chat. If THAT turn
+      // reopened it, this message is processed normally — returning here
+      // dropped it without any reply.
+      const current = await inboxService.getConversationRaw(tenantId, conversationId);
+      if (!current || current.status !== 'OPEN') return { handled: true };
+      const lock = await prisma.conversationLock.findUnique({ where: { conversationId } });
+      if (lock && (!lock.expiresAt || new Date(lock.expiresAt).getTime() > Date.now())) return { handled: true };
+      Object.assign(ctx.conversation, current);
+      return { handled: false, phase: (current.phase as ConversationPhase) || 'IDLE' };
+    }
+    ctx.conversation.status = 'OPEN';
+    logger.info(
+      { tenantId, conversationId, gateReplyAt: hold.gateReplyAt.toISOString() },
+      'Resuming bot after legacy negative-constraint hold',
+    );
+
+    const phase = (ctx.conversation.phase as ConversationPhase) || 'IDLE';
+    const fresh = Date.now() - hold.gateReplyAt.getTime() <= LEGACY_HOLD_REPLAY_MS;
+
+    try {
+      if (fresh && hold.heldMessage?.text && ['IDLE', 'ORDER_COLLECTING', 'ORDER_REVIEW'].includes(phase)) {
+        const r = await nluOrchestratorService.processMessage(
+          tenantId, conversationId, hold.heldMessage.id, hold.heldMessage.text,
+        );
+        let replayed = false;
+        if (r.pendingOptionSelection && r.clarificationQuestion) {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { flowSubState: 'OPTION_SELECTION', activeOrderId: r.draftOrderId || ctx.conversation.activeOrderId },
+          });
+          await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_COLLECTING');
+          await this.sendText(ctx, 'Az once yazdiginiz siparise devam edelim.');
+          await this.sendOptionSelectionList(ctx, r.pendingOptionSelection);
+          replayed = true;
+        } else if (r.draftOrderId && r.confirmationMessage) {
+          await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_REVIEW', r.draftOrderId);
+          ctx.conversation.activeOrderId = r.draftOrderId;
+          ctx.conversation.phase = 'ORDER_REVIEW';
+          await this.sendText(ctx, 'Az once yazdiginiz siparisi ozel isteginizle birlikte hazirladim, kontrol edip onaylar misiniz?');
+          await this.sendOrderConfirmButtons(ctx, r.confirmationMessage);
+          await this.checkMinBasketWarning(ctx, r.draftOrderId);
+          replayed = true;
+        } else if (r.clarificationQuestion) {
+          await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_COLLECTING');
+          ctx.conversation.phase = 'ORDER_COLLECTING';
+          await this.sendText(ctx, r.clarificationQuestion);
+          replayed = true;
+        }
+
+        if (replayed) {
+          // Acknowledge what the customer sent while the bot was silent.
+          if (message.kind === 'LOCATION') {
+            // True now: getFreshGeoCheck accepts a pin sent before the replayed draft.
+            await this.sendText(ctx, TEMPLATES.locationReceivedEarly);
+          } else if (message.kind === 'TEXT' && message.text && message.id !== hold.heldMessage.id) {
+            // The replay just asked the product question; do not repeat it.
+            await this.sendPreConfirmNotice(ctx, normalizeTr(message.text), message.text, { skipOpenQuestion: true });
+          }
+          return { handled: true };
+        }
+      }
+
+      if (fresh) {
+        // Nothing to replay: continue in the current step with this message.
+        return { handled: false, phase };
+      }
+    } catch (error) {
+      logger.warn({ error, tenantId, conversationId }, 'Legacy hold replay failed, restarting conversation');
+    }
+
+    // Stale hold (or replay failed): start clean; do not revive a days-old cart.
+    await prisma.order.updateMany({
+      where: { tenantId, conversationId, status: 'DRAFT' },
+      data: { status: 'CANCELLED' },
+    });
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { phase: 'IDLE', activeOrderId: null, flowSubState: null, flowMetadata: null },
+    });
+    Object.assign(ctx.conversation, { phase: 'IDLE', activeOrderId: null, flowSubState: null, flowMetadata: null });
+    return { handled: false, phase: 'IDLE' };
   }
 
   private async cancelActiveOrder(ctx: FlowContext): Promise<void> {
@@ -3269,7 +4815,8 @@ export class ConversationFlowService {
       };
     });
     const total = Number(order.totalPrice);
-    return TEMPLATES.orderSummary(items, total, undefined, order.notes);
+    // The written-address flag is a staff instruction; the customer summary does not repeat it.
+    return TEMPLATES.orderSummary(items, total, undefined, this.stripTypedAddressNote(order.notes));
   }
 
   /**
@@ -3394,6 +4941,10 @@ export class ConversationFlowService {
     // Pure cancel keywords (1-3 word phrases)
     const fullCancelPhrases = [
       'iptal', 'vazgec', 'istemiyorum', 'temizle',
+      // everyday wording ("vazgeçtim" folds to vazgectim)
+      'vazgectim', 'vazgectik', 'iptal edin', 'tamam iptal', 'artik istemiyorum',
+      'siparisi istemiyorum', 'siparisimi istemiyorum', 'hicbirini istemiyorum',
+      'siparisimi iptal', 'siparisimi iptal et', 'siparisimi iptal edin', 'siparisi iptal edin',
       'siparis iptal', 'siparisi iptal', 'siparisi iptal et',
       'siparis sil', 'hepsini iptal', 'hepsini sil',
       'tum siparisi iptal', 'her seyi iptal',
@@ -3409,6 +4960,7 @@ export class ConversationFlowService {
     // If the text starts with "siparis" + cancel keyword, it's full cancel
     if (words.length <= 3 && words[0] === 'siparis' && CANCEL_KEYWORDS.some(k => text.includes(k))) return true;
     if (words.length <= 3 && words[0] === 'siparisi' && CANCEL_KEYWORDS.some(k => text.includes(k))) return true;
+    if (words.length <= 3 && words[0] === 'siparisimi' && CANCEL_KEYWORDS.some(k => text.includes(k))) return true;
 
     // Otherwise, likely item-level removal (e.g., "salata iptal", "1 kola sil")
     return false;

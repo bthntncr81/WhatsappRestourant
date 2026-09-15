@@ -102,6 +102,7 @@ export class MenuCandidateService {
             effectivePrice: item.effectivePrice ?? item.basePrice,
             synonymsMatched: score.matchedSynonyms,
             score: score.totalScore,
+            description: item.description,
           });
         }
       }
@@ -150,6 +151,7 @@ export class MenuCandidateService {
                   effectivePrice: item.effectivePrice ?? item.basePrice,
                   synonymsMatched: [],
                   score: embResult.score * 0.4,
+                  description: item.description,
                 });
                 break;
               }

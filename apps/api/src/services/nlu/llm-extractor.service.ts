@@ -31,6 +31,7 @@ OLUMSUZLUK / OZEL ISTEK (ISTENMEYEN MALZEME):
 - "olmadan", "olmasin", "koyma", "koymayin", "haris", "-siz", "-suz", "-sız", "-süz", "cikar", "alma" = istenmeyen malzeme
   Ornek: "sosusuz", "aci olmadan", "sogansiz", "sogan olmasin", "sos koymayin", "tursu alma"
   → notes alanina yaz (orn: "Sogan olmasin"), optionSelections'a EKLEME
+- "sadece X (olsun/olacak)" = X disindaki malzemeler olmasin → icerigi X'e en yakin urunu sec (birden fazla ise clarificationQuestion ile sor), notes: "Sadece X"
 
 EKSTRA / BOL / FAZLA ISTEKLER:
 - "ekstra", "fazla", "bol", "cok", "ilave", "ek" = malzeme artirma istegi
@@ -102,6 +103,11 @@ SORU vs SIPARIS (COK ONEMLI):
   clarificationQuestion: null. Sorulari baska bir katman cevaplayacak.
 - AMA acik bir ekleme istegi varsa ("bir kremali mantarli makarna da ekle", "bi de su ekle 1 tane",
   "X istiyorum", "X olsun") → bu SIPARISTIR, action:"add" ile mutlaka ekle.
+
+ADRES / YOL TARIFI / SIKAYET / ODEME SORUSU siparis DEGILDIR:
+- "Hayalim Kent'e gidecek", "Tezel konaklarindayiz", "konuma gelince cocuk cikip alacak", "yanlis oldu",
+  "size cok yakin nasil yani", "IBAN ve tutari yazar misiniz" → yeni item EKLEME (mevcut itemler action:"keep"),
+  confidence: 0.1, clarificationQuestion: null.
 
 SELAMLAMA vs SIPARIS:
 - "merhaba", "selam", "iyi gunler", "nasilsiniz" gibi selamlasmalar:
@@ -194,6 +200,12 @@ export function buildCandidatesPrompt(
 
     if (candidate.synonymsMatched.length > 0) {
       prompt += ` (ayrica: ${candidate.synonymsMatched.join(', ')})`;
+    }
+
+    // Ingredients let the model map "sadece mozzarella" / "sogansiz olan" to
+    // the right product instead of escalating the request.
+    if (candidate.description) {
+      prompt += ` - icerik: ${candidate.description.replace(/\s+/g, ' ').slice(0, 100)}`;
     }
 
     // Add option groups for this item

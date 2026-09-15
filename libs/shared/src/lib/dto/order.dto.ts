@@ -126,6 +126,8 @@ export interface MenuCandidateDto {
   effectivePrice?: number;
   synonymsMatched: string[];
   score: number;
+  /** Menu description (ingredients) so the extractor can map "sadece mozzarella" to the right item */
+  description?: string | null;
 }
 
 // ==================== LLM EXTRACTION ====================
