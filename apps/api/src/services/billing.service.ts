@@ -93,9 +93,18 @@ export class BillingService {
     });
 
     if (!subscription) {
-      // Create initial subscription — 15-day free trial (TRIAL plan, full access), then suspend until paid
-      const trialEndsAt = new Date();
-      trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
+      // 15-day free trial (full access) ONLY for self-registered tenants.
+      // OtOrder-linked tenants pay for Pro AI on OtOrder; a trial would expire on
+      // day 15 and switch their WhatsApp bot off, so they keep open-ended SILVER.
+      // SSO provisioning already writes that row; this covers tenants linked to
+      // OtOrder whose subscription was never created.
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { posApiUrl: true },
+      });
+      const otorderLinked = !!tenant?.posApiUrl;
+      const plan: 'SILVER' | 'TRIAL' = otorderLinked ? 'SILVER' : 'TRIAL';
+      const trialEndsAt = otorderLinked ? null : new Date(Date.now() + TRIAL_DAYS * 86400000);
 
       try {
         subscription = await prisma.subscription.upsert({
@@ -103,20 +112,25 @@ export class BillingService {
           update: {},
           create: {
             tenantId,
-            plan: 'TRIAL',
+            plan,
             status: 'ACTIVE',
             billingCycle: 'MONTHLY',
             trialEndsAt,
             currentPeriodStart: new Date(),
             currentPeriodEnd: null,
-            monthlyOrderLimit: PLAN_DEFINITIONS.TRIAL.features.monthlyOrderLimit,
-            monthlyMessageLimit: PLAN_DEFINITIONS.TRIAL.features.monthlyMessageLimit,
-            maxStores: PLAN_DEFINITIONS.TRIAL.features.maxStores,
-            maxUsers: PLAN_DEFINITIONS.TRIAL.features.maxUsers,
+            monthlyOrderLimit: PLAN_DEFINITIONS[plan].features.monthlyOrderLimit,
+            monthlyMessageLimit: PLAN_DEFINITIONS[plan].features.monthlyMessageLimit,
+            maxStores: PLAN_DEFINITIONS[plan].features.maxStores,
+            maxUsers: PLAN_DEFINITIONS[plan].features.maxUsers,
           },
         });
 
-        logger.info({ tenantId }, 'Created 15-day TRIAL subscription');
+        logger.info(
+          { tenantId, plan },
+          otorderLinked
+            ? 'Created SILVER subscription (OtOrder-linked tenant, no trial)'
+            : 'Created 15-day TRIAL subscription',
+        );
       } catch (error: any) {
         // If unique constraint error, subscription was created by another request
         if (error.code === 'P2002') {

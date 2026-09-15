@@ -13,6 +13,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import prisma from '../db/prisma';
 import { createLogger } from '../logger';
+import { PLAN_DEFINITIONS } from '@whatres/shared';
 import { posIntegrationService } from './pos-integration.service';
 
 const logger = createLogger();
@@ -188,7 +189,8 @@ async function uniqueSlug(nameOrSub: string): Promise<string> {
 /**
  * İlk giriş provizyonu: user + tenant + OWNER membership + varsayılan mağaza.
  * Yerel şifre rastgeledir ve kullanılmaz (giriş her zaman OtOrder'a delege).
- * SILVER aboneliği billing getOrCreateSubscription ile lazily açılır.
+ * Abonelik açılışta süresiz SILVER yazılır: OtOrder'dan gelen kiracı 15 günlük
+ * denemeye düşmez (Pro AI ödemesi OtOrder'da; deneme bitince bot kapanırdı).
  */
 export async function provisionFromOtorder(identity: OtorderIdentity): Promise<{ userId: string; tenantId: string }> {
   const slug = await uniqueSlug(identity.subdomain || identity.tenantName);
@@ -214,6 +216,22 @@ export async function provisionFromOtorder(identity: OtorderIdentity): Promise<{
         lng: 28.9784,
         isActive: true,
         isOpen: true,
+      },
+    });
+    // Open-ended SILVER — never falls into billing's 15-day trial branch
+    await tx.subscription.create({
+      data: {
+        tenantId: tenant.id,
+        plan: 'SILVER',
+        status: 'ACTIVE',
+        billingCycle: 'MONTHLY',
+        trialEndsAt: null,
+        currentPeriodStart: new Date(),
+        currentPeriodEnd: null,
+        monthlyOrderLimit: PLAN_DEFINITIONS.SILVER.features.monthlyOrderLimit,
+        monthlyMessageLimit: PLAN_DEFINITIONS.SILVER.features.monthlyMessageLimit,
+        maxStores: PLAN_DEFINITIONS.SILVER.features.maxStores,
+        maxUsers: PLAN_DEFINITIONS.SILVER.features.maxUsers,
       },
     });
     return { userId: user.id, tenantId: tenant.id };
