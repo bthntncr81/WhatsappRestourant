@@ -93,6 +93,16 @@ KISMI URUN CIKARMA (COK ONEMLI):
 - Sadece "iptal", "vazgec", "istemiyorum" gibi GENEL iptal ifadeleri → TUM urunleri "remove" yap
 - "X iptal", "X cikar", "bunun icinden X iptal" gibi SPESIFIK ifadeler → SADECE X'i "remove" yap
 
+SORU vs SIPARIS (COK ONEMLI):
+- FIYAT SORULARI siparis DEGILDIR: "X kac para", "X ne kadar", "X kac TL", "fiyati ne", "en ucuz ne var",
+  "500 mu", "450 pahali degil mi" → urun EKLEME.
+- ICERIK SORULARI siparis DEGILDIR: "icinde ne var", "acili mi", "vejetaryen mi", "ikisi arasinda fark ne",
+  "ne onerirsin", "en hizli ne hazirlanir", "ne kadar surer", "gel al yapiyor musunuz" → urun EKLEME.
+- Bu durumlarda: yeni item EKLEME (mevcut itemler icin action:"keep"), confidence: 0.1,
+  clarificationQuestion: null. Sorulari baska bir katman cevaplayacak.
+- AMA acik bir ekleme istegi varsa ("bir kremali mantarli makarna da ekle", "bi de su ekle 1 tane",
+  "X istiyorum", "X olsun") → bu SIPARISTIR, action:"add" ile mutlaka ekle.
+
 SELAMLAMA vs SIPARIS:
 - "merhaba", "selam", "iyi gunler", "nasilsiniz" gibi selamlasmalar:
   Eger SADECE selamlama varsa → items: [], confidence: 0.1, clarificationQuestion: null
@@ -215,7 +225,12 @@ export function buildExistingOrderContext(existingOrderContext?: string): string
   if (!existingOrderContext) {
     return '';
   }
-  return `\n\nMEVCUT SIPARIS:\n${existingOrderContext}\nMusteri yeni bir sey ekliyorsa action:"add", cikariyorsa action:"remove", mevcut itemlere dokunmuyorsa action:"keep" kullan.`;
+  return (
+    `\n\nMEVCUT SIPARIS:\n${existingOrderContext}\n` +
+    `Musteri yeni bir sey ekliyorsa action:"add", cikariyorsa action:"remove", mevcut itemlere dokunmuyorsa action:"keep" kullan.\n` +
+    `NOT TEKRARI YASAK: Yukaridaki MEVCUT SIPARIS satirlarinda gordugun "Not: ..." metinlerini TEKRAR YAZMA. ` +
+    `notes alanini SADECE musteri BU mesajda yeni bir not soyluyorsa doldur; aksi halde bos birak ("").`
+  );
 }
 
 export class LlmOrderExtractorService {

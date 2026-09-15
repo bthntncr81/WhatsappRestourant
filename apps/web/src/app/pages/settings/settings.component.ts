@@ -325,13 +325,25 @@ import { DialogService } from '../../shared/dialog.service';
             <!-- Connection Status Banner -->
             <div class="wa-status-banner" [ngClass]="posConfig()?.isConfigured ? 'connected' : 'disconnected'">
               <span class="status-dot"></span>
-              <span class="status-text">{{ posConfig()?.isConfigured ? 'Bağlı' : 'Bağlı Değil' }}</span>
-              @if (posConfig()?.lastMenuSync) {
+              @if (posConfig()?.isConfigured) {
+                <span class="status-text">OtOrder'a bağlı ✓ ({{ posSubdomain() }})</span>
                 <span class="text-muted status-date">
-                  Son sync: {{ posConfig()!.lastMenuSync | date:'medium' }}
+                  · Son senkron: {{ posConfig()?.lastMenuSync ? (posConfig()!.lastMenuSync | date:'medium') : 'henüz yok' }}
                 </span>
+              } @else {
+                <span class="status-text">Bağlı Değil</span>
               }
             </div>
+
+            <!-- Connected: menu is managed and auto-synced from POS -->
+            @if (posConfig()?.isConfigured) {
+              <div class="setting-item column">
+                <span class="setting-description text-muted">
+                  Menü OtOrder POS'tan otomatik senkronlanır (~10 dakikada bir + anlık webhook).
+                  Menüyü düzenlemek için POS panelini kullanın.
+                </span>
+              </div>
+            }
 
             <!-- Webhook URL (shown only when config exists) -->
             @if (posConfig()?.isConfigured) {
@@ -349,7 +361,8 @@ import { DialogService } from '../../shared/dialog.service';
               </div>
             }
 
-            <!-- OtOrder tek-tik baglanti -->
+            <!-- OtOrder tek-tik baglanti (yalnizca bagli DEGILKEN gorunur) -->
+            @if (!posConfig()?.isConfigured) {
             <div class="setting-item column otorder-connect">
               <span class="setting-label">OtOrder'a Bağla</span>
               <span class="setting-description text-muted">
@@ -382,8 +395,10 @@ import { DialogService } from '../../shared/dialog.service';
               }
               <span class="setting-description text-muted otorder-divider">veya API bilgilerini elle girin:</span>
             </div>
+            }
 
-            <!-- POS Credentials Form -->
+            <!-- POS Credentials Form (yalnizca bagli DEGILKEN gorunur) -->
+            @if (!posConfig()?.isConfigured) {
             <form [formGroup]="posForm" (ngSubmit)="savePosConfig()">
               <div class="setting-item column">
                 <span class="setting-label">API URL</span>
@@ -410,17 +425,10 @@ import { DialogService } from '../../shared/dialog.service';
                   <button type="submit" class="btn btn-primary" [disabled]="isPosSaving() || posForm.invalid">
                     {{ isPosSaving() ? 'Kaydediliyor...' : 'Kaydet' }}
                   </button>
-                  @if (posConfig()?.isConfigured) {
-                    <button type="button" class="btn btn-secondary" (click)="testPosConnection()" [disabled]="isPosTesting()">
-                      {{ isPosTesting() ? 'Test ediliyor...' : 'Baglantiyi Test Et' }}
-                    </button>
-                    <button type="button" class="btn btn-secondary" (click)="syncPosMenu()" [disabled]="isPosSyncing()">
-                      {{ isPosSyncing() ? 'Senkronize ediliyor...' : 'Menuyu Senkronize Et' }}
-                    </button>
-                  }
                 </div>
               </div>
             </form>
+            }
 
             <!-- POS Test Result -->
             @if (posTestResult()) {
@@ -916,6 +924,14 @@ export class SettingsComponent implements OnInit {
     apiKey: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     locationId: new FormControl('', { nonNullable: true }),
   });
+
+  /** Extracts the OtOrder subdomain from posApiUrl (falls back to the bare host). */
+  posSubdomain(): string {
+    const url = this.posConfig()?.apiUrl || '';
+    const match = url.match(/^https?:\/\/([^./]+)\.otorder\.com/i);
+    if (match) return match[1];
+    return url.replace(/^https?:\/\//i, '').replace(/\/+$/, '') || 'POS';
+  }
 
   // OtOrder tek-tik baglanti
   isOtorderConnecting = signal(false);

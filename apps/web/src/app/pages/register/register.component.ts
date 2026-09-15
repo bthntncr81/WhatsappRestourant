@@ -6,18 +6,18 @@ import { Router, RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { AuthService } from '../../services/auth.service';
 import { IconComponent } from '../../shared/icon.component';
+import { BrandLogoComponent } from '../../shared/brand-logo.component';
 
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, IconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, IconComponent, BrandLogoComponent],
   template: `
     <div class="auth-container">
       <div class="auth-card">
         <div class="auth-header">
           <div class="logo">
-            <span class="logo-text">OtOrder</span>
-            <span class="logo-ai">AI</span>
+            <app-brand-logo [height]="26"/>
           </div>
           <h1 class="auth-title">Çalışma alanınızı oluşturun</h1>
           <p class="auth-subtitle text-muted">Ücretsiz hesap oluşturun</p>
@@ -250,32 +250,6 @@ import { IconComponent } from '../../shared/icon.component';
         justify-content: center;
         gap: var(--spacing-sm);
         margin-bottom: var(--spacing-lg);
-      }
-
-      .logo-icon {
-        color: var(--color-accent-primary);
-      }
-
-      .logo-text {
-        font-family: var(--font-display, inherit);
-        font-size: 1.5rem;
-        font-weight: 800;
-        letter-spacing: -0.03em;
-      }
-
-      .logo-ai {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: 24px;
-        padding: 0 8px;
-        border-radius: 7px;
-        background: var(--color-accent-primary);
-        color: #ffffff;
-        font-family: var(--font-display, inherit);
-        font-size: 0.75rem;
-        font-weight: 800;
-        letter-spacing: 0.07em;
       }
 
       .auth-title {

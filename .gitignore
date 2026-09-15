@@ -45,3 +45,7 @@ mcp-server/node_modules/
 mcp-server/dist/
 
 
+
+# Canlı sunucu artıkları: sesli asistan görüşme kayıtları (kişisel veri) ve elle alınan yedekler
+voice-logs/
+*.bak-*

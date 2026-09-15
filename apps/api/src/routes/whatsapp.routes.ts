@@ -153,6 +153,15 @@ router.post(
         payload = validation.data;
       }
 
+      // "Yaziyor..." — mark read + show the typing bubble BEFORE any processing
+      // starts, so the customer never stares at dead air while the AI thinks.
+      // Fire-and-forget: it can never throw or delay the flow.
+      if (payload.messageId) {
+        void whatsappProviderService
+          .sendTypingIndicator(payload.messageId)
+          .catch(() => undefined);
+      }
+
       // Process incoming message (stores in DB + geo check side effect)
       const message = await whatsappService.processIncomingMessage(tenantId, payload);
 
@@ -272,6 +281,21 @@ router.post(
       if (!payload) {
         // Could be a status update - just acknowledge
         return res.status(200).json({ success: true, data: null });
+      }
+
+      // "Yaziyor..." — mark read + show the typing bubble BEFORE any processing
+      // starts, so the customer never stares at dead air while the AI thinks
+      // (the reply takes 5-9s). tenantConfig is already loaded above, so this
+      // costs no extra DB round-trip. Fire-and-forget: never throws, never
+      // delays the flow. The in-panel chatbot test path does not go through
+      // this route, so it is skipped automatically.
+      if (payload.messageId && tenantConfig?.phoneNumberId && tenantConfig?.accessToken) {
+        void whatsappProviderService
+          .sendTypingIndicatorWithConfig(payload.messageId, {
+            phoneNumberId: tenantConfig.phoneNumberId,
+            accessToken: tenantConfig.accessToken,
+          })
+          .catch(() => undefined);
       }
 
       // Process incoming message

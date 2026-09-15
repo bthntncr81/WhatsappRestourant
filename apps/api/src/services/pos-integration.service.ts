@@ -419,7 +419,11 @@ export class PosIntegrationService {
       customerPhone: order.customerPhone || undefined,
       customerAddress: order.deliveryAddress || undefined,
       notes: order.notes || undefined,
-      source: 'WHATSAPP',
+      // Sesli asistan siparişleri not imzasıyla ayrışır — whatres Order'da
+      // kaynak kolonu yok, şema değişikliğine değmeyecek kadar dar bir ihtiyaç.
+      // startsWith: müşteri serbest metni notes'a EKLENEBİLİYOR ama başa geçemez;
+      // sesli hattın notu her zaman [VOICE] ile başlar.
+      source: order.notes?.startsWith('[VOICE]') ? 'VOICE' : 'WHATSAPP',
       items,
       // locationId is auto-resolved from IntegrationPartner in POS API
       discount: order.discountAmount ? Number(order.discountAmount) : undefined,

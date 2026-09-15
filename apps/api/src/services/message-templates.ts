@@ -14,7 +14,7 @@ interface OrderSummaryItem {
 export const TEMPLATES = {
   // ==================== GREETING ====================
   greeting:
-    'Merhaba! Hosgeldiniz 🍽️\nSiparis vermek icin istediginiz urunleri yazabilirsiniz.\nMenumuzu gormek icin "menu" yazin.',
+    'Merhaba, hosgeldiniz. Bugun ne yemek istersiniz?',
 
   // ==================== ORDER ====================
   orderSummary(items: OrderSummaryItem[], total: number, deliveryFee?: number, orderNotes?: string | null): string {
@@ -52,15 +52,15 @@ export const TEMPLATES = {
     ],
   },
 
-  orderEmpty: 'Sepetiniz bos. Siparis vermek icin urun adini yazin.',
+  orderEmpty: 'Sepetiniz su an bos. Ne almak istersiniz?',
 
   orderItemAdded(itemName: string, qty: number): string {
-    return `✅ ${qty}x ${itemName} sepete eklendi.`;
+    return `${qty}x ${itemName} sepete eklendi.`;
   },
 
   seamlessAdditionConfirmed(orderNumber: number, addedItems: string, additionTotal: number, newTotal: number): string {
     return (
-      `➕ *${addedItems}* siparisinize (#${orderNumber}) eklendi!\n\n` +
+      `*${addedItems}* siparisinize (#${orderNumber}) eklendi!\n\n` +
       `Ek tutar: ${additionTotal.toFixed(2)} TL\n` +
       `Yeni toplam: ${newTotal.toFixed(2)} TL`
     );
@@ -68,9 +68,9 @@ export const TEMPLATES = {
 
   seamlessAdditionPaymentNeeded(orderNumber: number, addedItems: string, additionTotal: number, paymentUrl: string, newTotal: number): string {
     return (
-      `➕ *${addedItems}* siparisinize (#${orderNumber}) eklendi!\n\n` +
+      `*${addedItems}* siparisinize (#${orderNumber}) eklendi!\n\n` +
       `Ek tutar: ${additionTotal.toFixed(2)} TL\n` +
-      `💳 Ek odeme icin: ${paymentUrl}\n\n` +
+      `Ek odeme icin: ${paymentUrl}\n\n` +
       `Yeni toplam: ${newTotal.toFixed(2)} TL`
     );
   },
@@ -79,68 +79,68 @@ export const TEMPLATES = {
 
   paymentChangeLinkSent(orderNumber: number, total: number, url: string): string {
     return (
-      `💳 Siparis #${orderNumber} icin online odeme linki:\n\n` +
+      `Siparis #${orderNumber} icin online odeme linki:\n\n` +
       `${url}\n\n` +
       `Toplam: ${total.toFixed(2)} TL\n` +
-      `⏰ Link 30 dakika gecerlidir.\n` +
+      `Link 30 dakika gecerlidir.\n` +
       `Vazgecmek icin *"iptal"* yazabilirsiniz.`
     );
   },
 
   paymentChangeSuccess(orderNumber: number): string {
     return (
-      `✅ *Online odemeniz basariyla alindi!*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
-      `💳 Odeme yontemi guncellendi: Online kredi karti`
+      `*Online odemeniz basariyla alindi!*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Odeme yontemi guncellendi: Online kredi karti`
     );
   },
 
   // ==================== INACTIVITY TIMEOUT ====================
 
   inactivityWarning:
-    '⏳ Siparisiniz hala devam ediyor mu?\n\nDevam etmek icin herhangi bir mesaj gonderin.\n1 dakika icerisinde yanit alinmazsa siparisiniz *iptal* edilecektir.',
+    'Siparisiniz hala devam ediyor mu?\n\nDevam etmek icin herhangi bir mesaj gonderin.\n1 dakika icerisinde yanit alinmazsa siparisiniz *iptal* edilecektir.',
 
   inactivityCancelled:
-    '⏰ Uzun suredir yanit alinamadigi icin siparisiniz iptal edildi.\n\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
+    'Uzun suredir yanit alinamadigi icin siparisiniz iptal edildi.\n\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
 
   inactivityResumed:
-    '✅ Siparisiniz devam ediyor. Kaldiginiz yerden devam edebilirsiniz.',
+    'Siparisiniz devam ediyor. Kaldiginiz yerden devam edebilirsiniz.',
 
   // ==================== LOCATION ====================
   locationRequest:
-    '📍 Teslimat icin konumunuzu gonderin.\nAsagidaki butona tiklayarak konum paylasabilirsiniz.',
+    'Teslimat icin konumunuzu gonderin.\nAsagidaki butona tiklayarak konum paylasabilirsiniz.',
 
   locationOutOfService(message: string): string {
-    return `❌ ${message}\n\nLutfen farkli bir konum gonderin veya *"iptal"* yazin.`;
+    return `${message}\n\nLutfen farkli bir konum gonderin veya *"iptal"* yazin.`;
   },
 
   locationConfirmed(storeName: string, deliveryFee: number, distance: number): string {
     return (
-      `✅ *${storeName}* subemizden teslimat yapilacak.\n` +
-      `📏 Mesafe: ${distance.toFixed(1)} km\n` +
-      `🚚 Teslimat ucreti: ${deliveryFee.toFixed(2)} TL`
+      `*${storeName}* subemizden teslimat yapilacak.\n` +
+      `Mesafe: ${distance.toFixed(1)} km\n` +
+      `Teslimat ucreti: ${deliveryFee.toFixed(2)} TL`
     );
   },
 
   locationMinBasketNotMet(minBasket: number, currentTotal: number): string {
     return (
-      `⚠️ Minimum sepet tutari ${minBasket.toFixed(2)} TL.\n` +
+      `Minimum sepet tutari ${minBasket.toFixed(2)} TL.\n` +
       `Mevcut sepetiniz: ${currentTotal.toFixed(2)} TL\n\n` +
       `Lutfen daha fazla urun ekleyin veya *"iptal"* yazin.`
     );
   },
 
   reminderSendLocation:
-    '📍 Lutfen konum pininizi gonderin.\nKonum gondermek icin WhatsApp\'ta 📎 > Konum secenegini kullanin.',
+    'Lutfen konum pininizi gonderin.\nKonum gondermek icin WhatsApp\'taki ek (atac) menusunden Konum secenegini kullanabilirsiniz.',
 
   // ==================== ADDRESS COLLECTION ====================
   addressRequest:
-    '📝 Lutfen teslimat adresinizi yazin.\n' +
+    'Lutfen teslimat adresinizi yazin.\n' +
     'Ornek: _Ataturk Mah. Cumhuriyet Cad. No:12 Daire:5_',
 
   addressConfirmation(address: string): string {
     return (
-      `📍 Teslimat adresiniz:\n\n` +
+      `Teslimat adresiniz:\n\n` +
       `*${address}*`
     );
   },
@@ -154,7 +154,7 @@ export const TEMPLATES = {
   },
 
   addressRetry:
-    '📝 Lutfen teslimat adresinizi tekrar yazin.',
+    'Lutfen teslimat adresinizi tekrar yazin.',
 
   // ==================== PAYMENT ====================
   paymentMethodButtons: {
@@ -168,88 +168,88 @@ export const TEMPLATES = {
 
   paymentLinkSent(url: string): string {
     return (
-      `💳 Kredi karti ile odeme icin asagidaki linke tiklayiniz:\n\n` +
+      `Kredi karti ile odeme icin asagidaki linke tiklayiniz:\n\n` +
       `${url}\n\n` +
-      `⏰ Link 30 dakika gecerlidir.\n` +
+      `Link 30 dakika gecerlidir.\n` +
       `Nakit odemeye gecmek icin *"nakit"* yazabilirsiniz.`
     );
   },
 
   paymentSuccess(orderNumber: number): string {
     return (
-      `✅ *Odemeniz basariyla alindi!*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
-      `⏳ Restoran onayiniz bekleniyor...`
+      `*Odemeniz basariyla alindi!*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Restoran onayiniz bekleniyor...`
     );
   },
 
   paymentFailed:
-    '❌ Odeme basarisiz oldu.\nTekrar denemek icin *"kart"*, nakit odemek icin *"nakit"* yazin.',
+    'Odeme basarisiz oldu.\nTekrar denemek icin *"kart"*, nakit odemek icin *"nakit"* yazin.',
 
   cashConfirmed(orderNumber: number): string {
     return (
-      `✅ *Siparisiniz alindi!*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
-      `💵 Odeme: Kapida nakit\n` +
-      `⏳ Restoran onayiniz bekleniyor...`
+      `*Siparisiniz alindi!*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Odeme: Kapida nakit\n` +
+      `Restoran onayiniz bekleniyor...`
     );
   },
 
   reminderPayment(url: string): string {
     return (
-      `⏳ Odeme bekleniyor.\n\n` +
-      `💳 Odeme linkiniz: ${url}\n\n` +
+      `Odeme bekleniyor.\n\n` +
+      `Odeme linkiniz: ${url}\n\n` +
       `Nakit odemek icin *"nakit"* yazabilirsiniz.`
     );
   },
 
   pendingConfirmation(orderNumber: number): string {
     return (
-      `📦 Siparis No: #${orderNumber}\n` +
-      `⏳ Siparisiniz restoran tarafindan onay bekliyor.\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Siparisiniz restoran tarafindan onay bekliyor.\n` +
       `Onaylaninca size bildirim gonderecegiz.`
     );
   },
 
   restaurantApproved(orderNumber: number): string {
     return (
-      `✅ *Siparisiniz onaylandi!*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
-      `🎉 Siparisiniz hazirlaniyor!\n` +
-      `⏱️ Tahmini hazirlık suresi: 25-30 dakika`
+      `*Siparisiniz onaylandi!*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Siparisiniz hazirlaniyor!\n` +
+      `Tahmini hazirlık suresi: 25-30 dakika`
     );
   },
 
   // ==================== ORDER STATUS UPDATES ====================
   orderPreparing(orderNumber: number): string {
     return (
-      `👨‍🍳 *Siparisiniz hazirlaniyor!*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
-      `⏱️ Tahmini sure: 25-30 dakika`
+      `*Siparisiniz hazirlaniyor!*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Tahmini sure: 25-30 dakika`
     );
   },
 
   orderReady(orderNumber: number): string {
     return (
-      `🎉 *Siparisiniz hazir!*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
-      `🚀 Kurye yola cikmak uzere!`
+      `*Siparisiniz hazir!*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Kurye yola cikmak uzere!`
     );
   },
 
   orderDelivered(orderNumber: number): string {
     return (
-      `✅ *Siparisiniz teslim edildi!*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
-      `🍽️ Afiyet olsun!\n` +
+      `*Siparisiniz teslim edildi!*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
+      `Afiyet olsun!\n` +
       `Tekrar siparis icin urun yazabilirsiniz.`
     );
   },
 
   orderCancelledNotification(orderNumber: number): string {
     return (
-      `❌ *Siparisiniz iptal edildi.*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
+      `*Siparisiniz iptal edildi.*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
       `Yeni siparis icin urun yazabilirsiniz.`
     );
   },
@@ -261,23 +261,23 @@ export const TEMPLATES = {
 
   additionStarted(parentOrderNumber: number): string {
     return (
-      `➕ Siparis #${parentOrderNumber}'e ekleme yapiyorsunuz.\n` +
+      `Siparis #${parentOrderNumber}'e ekleme yapiyorsunuz.\n` +
       `Eklemek istediginiz urunleri yazin.`
     );
   },
 
-  newOrderPrompt: 'Yeni siparis icin urunlerinizi yazabilirsiniz.',
+  newOrderPrompt: 'Yeni siparisiniz icin buyurun, ne alalim?',
 
   additionNotAllowed(orderNumber: number): string {
     return (
-      `❌ Siparis #${orderNumber} teslim edilmis veya iptal edilmis.\n` +
+      `Siparis #${orderNumber} teslim edilmis veya iptal edilmis.\n` +
       `Yeni siparis vermek icin urun adini yazin.`
     );
   },
 
   additionReadyFoodOnly(nonReadyItemNames: string): string {
     return (
-      `⚠️ Siparisiniz hazir durumunda oldugu icin sadece hazir urunler eklenebilir.\n` +
+      `Siparisiniz hazir durumunda oldugu icin sadece hazir urunler eklenebilir.\n` +
       `Su urunler eklenemez: *${nonReadyItemNames}*\n\n` +
       `Lutfen sadece hazir urunler secin veya *"iptal"* yazin.`
     );
@@ -285,16 +285,16 @@ export const TEMPLATES = {
 
   additionApproved(orderNumber: number): string {
     return (
-      `✅ *Eklemeniz onaylandi!*\n\n` +
-      `📦 Siparis #${orderNumber}\n` +
+      `*Eklemeniz onaylandi!*\n\n` +
+      `Siparis #${orderNumber}\n` +
       `Ek urunleriniz hazirlaniyor.`
     );
   },
 
   additionRejected(orderNumber: number, reason: string): string {
     return (
-      `❌ *Eklemeniz reddedildi.*\n\n` +
-      `📦 Siparis #${orderNumber}\n` +
+      `*Eklemeniz reddedildi.*\n\n` +
+      `Siparis #${orderNumber}\n` +
       `Neden: *${reason}*\n\n` +
       `Yeni siparis vermek icin urun adini yazabilirsiniz.`
     );
@@ -302,8 +302,8 @@ export const TEMPLATES = {
 
   orderRejected(orderNumber: number, reason: string): string {
     return (
-      `❌ *Siparisiniz reddedildi.*\n\n` +
-      `📦 Siparis No: #${orderNumber}\n` +
+      `*Siparisiniz reddedildi.*\n\n` +
+      `Siparis No: #${orderNumber}\n` +
       `Neden: *${reason}*\n\n` +
       `Yeni siparis vermek icin urun adini yazabilirsiniz.`
     );
@@ -311,7 +311,7 @@ export const TEMPLATES = {
 
   refundInitiated(orderNumber: number): string {
     return (
-      `💳 Siparis #${orderNumber} icin odeme iadesi baslatildi.\n` +
+      `Siparis #${orderNumber} icin odeme iadesi baslatildi.\n` +
       `Iadeniz 3-5 is gunu icerisinde kartiniza yansiyacaktir.`
     );
   },
@@ -340,43 +340,43 @@ export const TEMPLATES = {
   },
 
   addressSaved(name: string): string {
-    return `✅ Adres *"${name}"* olarak kaydedildi.`;
+    return `Adres *"${name}"* olarak kaydedildi.`;
   },
 
   addressNotSaved: 'Tamam, adres kaydedilmedi.',
 
   savedAddressInvalid:
-    '⚠️ Sectiginiz adres artik hizmet alaninda degil.\nLutfen yeni konum gonderin.',
+    'Sectiginiz adres artik hizmet alaninda degil.\nLutfen yeni konum gonderin.',
 
   // ==================== STORE STATUS ====================
-  storeClosed: '⏰ Suanda kapaliyiz. Acildigimizda tekrar siparis verebilirsiniz.',
+  storeClosed: 'Suanda kapaliyiz. Acildigimizda tekrar siparis verebilirsiniz.',
 
   // ==================== GENERAL ====================
-  orderCancelled: '🚫 Siparisiniz iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
+  orderCancelled: 'Siparisiniz iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.',
 
   orderConfirmedNewOrder:
-    'Siparisiniz isleniyor! ⏳\nYeni siparis vermek icin urun yazabilirsiniz.',
+    'Siparisiniz isleniyor. Baska bir istegininiz olursa buradayim.',
 
   clarificationFallback:
-    'Anlayamadim. Siparis vermek icin urun adini yazin veya "menu" yazarak menuyu gorun.',
+    'Bunu tam cikaramadim. Neyi merak ediyorsunuz ya da ne almak istersiniz?',
 
   agentHandoff:
-    '👤 Sizi bir temsilciye yonlendiriyorum. Lutfen bekleyin...',
+    'Sizi bir temsilciye yonlendiriyorum. Lutfen bekleyin...',
 
   // ==================== MENU MEDIA ====================
-  menuMediaIntro: '📋 Menumuze goz atin:',
+  menuMediaIntro: 'Menumuze goz atin:',
 
-  menuMediaFooter: 'Siparis vermek icin istediginiz urunleri yazabilirsiniz.',
+  menuMediaFooter: 'Begendiginiz bir sey var mi?',
 
   menuNotAvailable:
-    'Menu henuz yuklenmemis. Siparis vermek icin urun adini yazabilirsiniz.',
+    'Menu gorseli henuz yuklenmemis ama urunlerimizi size sayabilirim. Ne tur bir sey ariyorsunuz?',
 
   // ==================== UPSELL ====================
   upsellButtons(price: number): { buttons: Array<{ id: string; title: string }> } {
     return {
       buttons: [
-        { id: 'upsell_accept', title: `✅ Ekle ${price.toFixed(0)} TL` },
-        { id: 'upsell_reject', title: '❌ Hayir' },
+        { id: 'upsell_accept', title: `Ekle ${price.toFixed(0)} TL` },
+        { id: 'upsell_reject', title: 'Hayir' },
       ],
     };
   },
@@ -385,16 +385,18 @@ export const TEMPLATES = {
   surveyAsk(orderNumber: number): string {
     return (
       `Siparis #${orderNumber} teslim edildi!\n\n` +
-      `Hizmetimizi nasil buldunuz? 🤔\n` +
+      `Hizmetimizi nasil buldunuz?\n` +
       `Lutfen 1-5 arasi puan verin:`
     );
   },
 
   surveyButtons: {
+    // Titles are plain text (no star emoji). The rating is carried by the id,
+    // so the handler is unaffected.
     buttons: [
-      { id: 'survey_5', title: '⭐⭐⭐⭐⭐' },
-      { id: 'survey_3', title: '⭐⭐⭐' },
-      { id: 'survey_1', title: '⭐' },
+      { id: 'survey_5', title: '5 - Cok iyi' },
+      { id: 'survey_3', title: '3 - Orta' },
+      { id: 'survey_1', title: '1 - Kotu' },
     ],
   },
 
@@ -402,17 +404,17 @@ export const TEMPLATES = {
     'Geri bildiriminiz icin tesekkurler. Bizi daha iyi yapabilmemiz icin neler yasadiginizi kisa bir mesajla yazar misiniz?',
 
   surveyThanksGood:
-    'Cok tesekkur ederiz! 🙏 Sizi memnun ettigimize sevindik. Yine bekleriz! 😊',
+    'Cok tesekkur ederiz! Sizi memnun ettigimize sevindik. Yine bekleriz!',
 
   surveyThanksBad:
-    'Geri bildiriminiz icin tesekkurler. 🙏 Sorunuzu en kisa surede degerlendirecegiz. Ozur dileriz!',
+    'Geri bildiriminiz icin tesekkurler. Sorunuzu en kisa surede degerlendirecegiz. Ozur dileriz!',
 
   surveyThanksNeutral:
-    'Puan icin tesekkurler! 🙏 Daha iyisini yapmak icin calisacagiz.',
+    'Puan icin tesekkurler! Daha iyisini yapmak icin calisacagiz.',
 
   // ==================== REORDER / FAVORITES ====================
   favoritesListHeader(count: number): string {
-    return `En cok siparis verdiginiz ${count} urun 👇`;
+    return `En cok siparis verdiginiz ${count} urun`;
   },
 
   favoritesListButton: 'Favorilerim',
@@ -424,7 +426,7 @@ export const TEMPLATES = {
 
   // ==================== BROADCAST / CAMPAIGN ====================
   broadcastOptInAsk:
-    'Kampanyalarimizdan ve size ozel firsatlardan haberdar olmak ister misiniz? 🎉',
+    'Kampanyalarimizdan ve size ozel firsatlardan haberdar olmak ister misiniz?',
 
   broadcastOptInButtons: {
     buttons: [

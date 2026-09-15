@@ -13,6 +13,7 @@ import {
 } from '../../services/menu.service';
 import { IconComponent } from '../../shared/icon.component';
 import { DialogService } from '../../shared/dialog.service';
+import { PosConfigService } from '../../services/pos-config.service';
 
 type Tab = 'versions' | 'items' | 'options' | 'synonyms';
 
@@ -28,9 +29,11 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           <p class="page-subtitle text-secondary">Menü versiyonlarını, ürünleri ve seçenekleri yönetin</p>
         </div>
         <div class="header-actions">
-          <button class="btn-secondary" (click)="handleImport()">
-            <app-icon name="download" [size]="16"/> İçe Aktar
-          </button>
+          @if (!posConnected()) {
+            <button class="btn-secondary" (click)="handleImport()">
+              <app-icon name="download" [size]="16"/> İçe Aktar
+            </button>
+          }
           @if (selectedVersion()) {
             <button class="btn-secondary" (click)="handleExport()">
               <app-icon name="upload" [size]="16"/> Dışa Aktar
@@ -38,6 +41,17 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           }
         </div>
       </div>
+
+      <!-- POS sync info banner (menu is read-only when connected to OtOrder POS) -->
+      @if (posConnected()) {
+        <div class="pos-sync-banner">
+          <app-icon name="refresh" [size]="16"/>
+          <span>Menü OtOrder POS'tan otomatik senkronlanır — düzenlemek için POS panelini kullanın.</span>
+          @if (posPanelUrl()) {
+            <a class="pos-panel-link" [href]="posPanelUrl()" target="_blank" rel="noopener">POS Panelini Aç</a>
+          }
+        </div>
+      }
 
       <!-- Tabs -->
       <div class="tabs">
@@ -95,9 +109,11 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           <div class="content-card">
             <div class="card-header">
               <h2>Menü Versiyonları</h2>
-              <button class="btn-primary" (click)="createVersion()">
-                <span>+</span> Yeni Versiyon
-              </button>
+              @if (!posConnected()) {
+                <button class="btn-primary" (click)="createVersion()">
+                  <span>+</span> Yeni Versiyon
+                </button>
+              }
             </div>
             <div class="card-content">
               @if (versions().length === 0) {
@@ -132,20 +148,22 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                         }
                       </div>
                       <div class="version-actions">
-                        @if (!v.publishedAt) {
-                          <button class="btn-sm btn-success" (click)="publishVersion(v)">
-                            Yayınla
-                          </button>
-                        }
-                        @if (v.publishedAt && v.id !== activeVersionId()) {
-                          <button class="btn-sm btn-active" (click)="setActiveVersion(v)">
-                            Aktif Yap
-                          </button>
+                        @if (!posConnected()) {
+                          @if (!v.publishedAt) {
+                            <button class="btn-sm btn-success" (click)="publishVersion(v)">
+                              Yayınla
+                            </button>
+                          }
+                          @if (v.publishedAt && v.id !== activeVersionId()) {
+                            <button class="btn-sm btn-active" (click)="setActiveVersion(v)">
+                              Aktif Yap
+                            </button>
+                          }
                         }
                         <button class="btn-sm" (click)="selectVersionAndSwitch(v)">
-                          Düzenle
+                          {{ posConnected() ? 'Görüntüle' : 'Düzenle' }}
                         </button>
-                        @if (v.id !== activeVersionId()) {
+                        @if (!posConnected() && v.id !== activeVersionId()) {
                           <button class="btn-sm btn-danger" (click)="deleteVersion(v)">
                             Sil
                           </button>
@@ -164,7 +182,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           <div class="content-card">
             <div class="card-header">
               <h2>Menü Ürünleri</h2>
-              @if (selectedVersion() && !selectedVersion()!.publishedAt) {
+              @if (!posConnected() && selectedVersion() && !selectedVersion()!.publishedAt) {
                 <button class="btn-primary" (click)="showItemForm.set(true)">
                   <span>+</span> Ürün Ekle
                 </button>
@@ -210,18 +228,20 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                             @if (item.description) {
                               <p class="item-description text-muted">{{ item.description }}</p>
                             }
-                            <div class="item-actions">
-                              <label class="toggle-switch" (click)="$event.stopPropagation()">
-                                <input type="checkbox" [checked]="item.isActive" (change)="toggleItemActive(item)"/>
-                                <span class="toggle-slider"></span>
-                              </label>
-                              <button class="btn-icon" (click)="editItem(item)" [title]="selectedVersion()!.publishedAt ? 'İndirim düzenle' : 'Düzenle'">
-                                <app-icon [name]="selectedVersion()!.publishedAt ? 'dollar-sign' : 'edit'" [size]="14"/>
-                              </button>
-                              @if (!selectedVersion()!.publishedAt) {
-                                <button class="btn-icon danger" (click)="deleteItem(item)"><app-icon name="trash" [size]="14"/></button>
-                              }
-                            </div>
+                            @if (!posConnected()) {
+                              <div class="item-actions">
+                                <label class="toggle-switch" (click)="$event.stopPropagation()">
+                                  <input type="checkbox" [checked]="item.isActive" (change)="toggleItemActive(item)"/>
+                                  <span class="toggle-slider"></span>
+                                </label>
+                                <button class="btn-icon" (click)="editItem(item)" [title]="selectedVersion()!.publishedAt ? 'İndirim düzenle' : 'Düzenle'">
+                                  <app-icon [name]="selectedVersion()!.publishedAt ? 'dollar-sign' : 'edit'" [size]="14"/>
+                                </button>
+                                @if (!selectedVersion()!.publishedAt) {
+                                  <button class="btn-icon danger" (click)="deleteItem(item)"><app-icon name="trash" [size]="14"/></button>
+                                }
+                              </div>
+                            }
                           </div>
                         }
                       </div>
@@ -327,7 +347,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           <div class="content-card">
             <div class="card-header">
               <h2>Seçenek Grupları</h2>
-              @if (selectedVersion() && !selectedVersion()!.publishedAt) {
+              @if (!posConnected() && selectedVersion() && !selectedVersion()!.publishedAt) {
                 <button class="btn-primary" (click)="showOptionGroupForm.set(true)">
                   <span>+</span> Grup Ekle
                 </button>
@@ -355,7 +375,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                             <span class="group-type badge required">Zorunlu</span>
                           }
                         </div>
-                        @if (!selectedVersion()!.publishedAt) {
+                        @if (!posConnected() && !selectedVersion()!.publishedAt) {
                           <div class="group-actions">
                             <button class="btn-sm" (click)="addOptionToGroup(group)">+ Seçenek</button>
                             <button class="btn-icon danger" (click)="deleteOptionGroup(group)"><app-icon name="trash" [size]="14"/></button>
@@ -375,7 +395,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                               @if (option.isDefault) {
                                 <span class="option-default">Varsayılan</span>
                               }
-                              @if (!selectedVersion()!.publishedAt) {
+                              @if (!posConnected() && !selectedVersion()!.publishedAt) {
                                 <button class="btn-icon small danger" (click)="deleteOption(option)"><app-icon name="x" [size]="16"/></button>
                               }
                             </div>
@@ -462,7 +482,7 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
           <div class="content-card">
             <div class="card-header">
               <h2>Eşanlamlılar</h2>
-              @if (selectedVersion()) {
+              @if (!posConnected() && selectedVersion()) {
                 <button class="btn-primary" (click)="showSynonymForm.set(true)">
                   <span>+</span> Eşanlamlı Ekle
                 </button>
@@ -489,7 +509,9 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
                         {{ syn.itemName || syn.optionName || 'Bilinmiyor' }}
                       </span>
                       <span class="synonym-weight text-muted">Ağırlık: {{ syn.weight }}</span>
-                      <button class="btn-icon small danger" (click)="deleteSynonym(syn)"><app-icon name="x" [size]="16"/></button>
+                      @if (!posConnected()) {
+                        <button class="btn-icon small danger" (click)="deleteSynonym(syn)"><app-icon name="x" [size]="16"/></button>
+                      }
                     </div>
                   }
                 </div>
@@ -584,6 +606,31 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
       .header-actions {
         display: flex;
         gap: var(--spacing-sm);
+      }
+
+      .pos-sync-banner {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-lg);
+        background: var(--color-bg-secondary);
+        border: 1px solid var(--color-accent-primary);
+        border-radius: var(--radius-md);
+        color: var(--color-text-primary);
+        font-size: 0.875rem;
+      }
+
+      .pos-panel-link {
+        margin-left: auto;
+        color: var(--color-accent-primary);
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+
+        &:hover {
+          text-decoration: underline;
+        }
       }
 
       .tabs {
@@ -1246,11 +1293,16 @@ type Tab = 'versions' | 'items' | 'options' | 'synonyms';
 export class MenuComponent implements OnInit {
   private menuService = inject(MenuService);
   private dialog = inject(DialogService);
+  private posConfigService = inject(PosConfigService);
 
   // State
   loading = signal(true);
   error = signal<string | null>(null);
   activeTab = signal<Tab>('versions');
+
+  // POS connection (menu becomes read-only when tenant is connected to OtOrder POS)
+  posConnected = signal(false);
+  posPanelUrl = signal<string | null>(null);
 
   // Data
   versions = signal<MenuVersionDto[]>([]);
@@ -1324,7 +1376,28 @@ export class MenuComponent implements OnInit {
   ];
 
   ngOnInit(): void {
+    this.loadPosStatus();
     this.loadData();
+  }
+
+  private loadPosStatus(): void {
+    this.posConfigService.getConfig().subscribe({
+      next: (response) => {
+        const config = response.success ? response.data : null;
+        const connected = !!config?.isConfigured;
+        this.posConnected.set(connected);
+        if (connected && config?.apiUrl) {
+          // posApiUrl is https://<subdomain>.otorder.com — POS panel lives under /pos/
+          this.posPanelUrl.set(`${config.apiUrl.replace(/\/+$/, '')}/pos/`);
+        } else {
+          this.posPanelUrl.set(null);
+        }
+      },
+      error: () => {
+        // If the check fails, keep the page editable (fail-open like today)
+        this.posConnected.set(false);
+      },
+    });
   }
 
   loadData(): void {

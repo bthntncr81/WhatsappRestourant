@@ -19,12 +19,12 @@ async function notifyCustomerStatusChange(
 ): Promise<void> {
   try {
     const statusMessages: Record<string, string> = {
-      CONFIRMED: '✅ Siparişiniz onaylandı! Hazırlanmaya başlanacak.',
-      PREPARING: '👨‍🍳 Siparişiniz hazırlanıyor...',
-      READY: '🎉 Siparişiniz hazır!',
-      DELIVERING: '🚗 Siparişiniz yola çıktı!',
-      DELIVERED: '📦 Siparişiniz teslim edildi. Afiyet olsun!',
-      CANCELLED: '❌ Siparişiniz iptal edildi.',
+      CONFIRMED: 'Siparişiniz onaylandı! Hazırlanmaya başlanacak.',
+      PREPARING: 'Siparişiniz hazırlanıyor...',
+      READY: 'Siparişiniz hazır!',
+      DELIVERING: 'Siparişiniz yola çıktı!',
+      DELIVERED: 'Siparişiniz teslim edildi. Afiyet olsun!',
+      CANCELLED: 'Siparişiniz iptal edildi.',
     };
 
     const message = statusMessages[status];

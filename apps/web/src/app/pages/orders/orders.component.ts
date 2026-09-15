@@ -529,7 +529,7 @@ import { DialogService } from '../../shared/dialog.service';
     }
 
     .order-card.status-preparing {
-      border-left: 4px solid #1B5583;
+      border-left: 4px solid #8b5cf6;
     }
 
     .order-card.status-ready {
@@ -757,7 +757,7 @@ import { DialogService } from '../../shared/dialog.service';
       border-radius: 4px;
       font-size: 0.7rem;
       font-weight: 600;
-      background: #1B5583;
+      background: var(--color-accent-primary);
       color: white;
       margin-left: 8px;
       vertical-align: middle;

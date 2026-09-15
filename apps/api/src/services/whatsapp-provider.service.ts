@@ -404,6 +404,87 @@ export class WhatsAppProviderService {
     return this.sendMessageWithConfig(to, { type: 'document', document }, tenantConfig);
   }
 
+  // ==================== READ RECEIPT + TYPING INDICATOR ====================
+
+  /**
+   * Mark the incoming message as read AND show the "typing..." bubble.
+   *
+   * WHY: the AI reply takes 5-9 seconds, which is dead air on WhatsApp. Meta
+   * Cloud API v21.0 combines the read receipt and the typing indicator in one
+   * call:
+   *   POST /<phoneNumberId>/messages
+   *   { messaging_product, status: "read", message_id, typing_indicator }
+   * The indicator lasts 25 seconds and clears automatically once we send the
+   * actual reply.
+   *
+   * NOTE: this cannot reuse sendMessage / sendMessageWithConfig — those force
+   * a `to` field into the body, and the status payload does not accept one.
+   *
+   * FIRE-AND-FORGET: never throws. A failure here must never affect the
+   * conversation flow.
+   */
+  async sendTypingIndicatorWithConfig(
+    messageId: string,
+    tenantConfig: { phoneNumberId: string; accessToken: string },
+  ): Promise<boolean> {
+    if (!messageId || !tenantConfig?.phoneNumberId || !tenantConfig?.accessToken) {
+      return false;
+    }
+    return this.postReadAndTyping(
+      messageId,
+      tenantConfig.phoneNumberId,
+      tenantConfig.accessToken,
+    );
+  }
+
+  /** Same as above, using the global env config (legacy/global webhook). */
+  async sendTypingIndicator(messageId: string): Promise<boolean> {
+    if (!messageId || !this.isConfigured()) return false;
+    return this.postReadAndTyping(
+      messageId,
+      this.config.phoneNumberId,
+      this.config.accessToken,
+    );
+  }
+
+  private async postReadAndTyping(
+    messageId: string,
+    phoneNumberId: string,
+    accessToken: string,
+  ): Promise<boolean> {
+    const apiVersion = this.config.apiVersion || 'v21.0';
+    const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          status: 'read',
+          message_id: messageId,
+          typing_indicator: { type: 'text' },
+        }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as any;
+        logger.warn(
+          { status: response.status, error: data?.error, messageId },
+          'Typing indicator request rejected (non-fatal)',
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      logger.warn({ error, messageId }, 'Typing indicator request failed (non-fatal)');
+      return false;
+    }
+  }
+
   // ==================== PRIVATE ====================
 
   private async sendMessageWithConfig(

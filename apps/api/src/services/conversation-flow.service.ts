@@ -2,6 +2,13 @@ import prisma from '../db/prisma';
 import { inboxService } from './inbox.service';
 import { whatsappService } from './whatsapp.service';
 import { nluOrchestratorService, OptionSelectionRequest } from './nlu/orchestrator.service';
+import {
+  conversationAnswerService,
+  CartLine,
+  GREETING_MARKER,
+  OFF_TOPIC_FIRST_MARKER,
+  OFF_TOPIC_FINAL_MARKER,
+} from './nlu/conversation-answer.service';
 import { whisperService } from './nlu/whisper.service';
 import { geoService } from './geo.service';
 import { orderService } from './order.service';
@@ -37,10 +44,38 @@ function normalizeTr(text: string): string {
     .trim();
 }
 
+/**
+ * Fold the remaining Turkish letters to ASCII for keyword matching.
+ *
+ * normalizeTr only handles the dotted/dotless i, so real customer spelling like
+ * "cikar" written as "çıkar", "değiştir", "nasıl ödeyeceğim" or
+ * "siparişi iptal et" never matched the ASCII keyword lists and silently fell
+ * through to the wrong branch. Used for MATCHING ONLY — the raw customer text
+ * is what reaches the LLM.
+ */
+function deaccentTr(text: string): string {
+  return normalizeTr(text)
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u')
+    .replace(/â/g, 'a')
+    .replace(/î/g, 'i')
+    .replace(/û/g, 'u');
+}
+
 // Keywords for user intent detection
 const CONFIRM_KEYWORDS = ['evet', 'onayla', 'tamam', 'olsun', 'tamamla', 'onayliyorum', 'harika', 'super', 'guzel', 'iyi', 'mükemmel', 'mukemmel', 'dogru', 'aynen', 'kesinlikle'];
 const CANCEL_KEYWORDS = ['iptal', 'vazgec', 'istemiyorum', 'sil', 'temizle'];
-const EDIT_KEYWORDS = ['hayir', 'degistir', 'degis', 'ekle', 'cikar'];
+// NOTE: 'ekle' and 'cikar' were REMOVED on purpose. They are content-bearing
+// order commands ("bi kremali mantarli makarna da ekle", "kolayi cikar") and
+// must reach the NLU so the product actually lands in / leaves the cart.
+// Keeping them here was the single cause of the 40x "Siparisinizi degistirmek
+// icin yeni urun yazin" dead-end where the product silently vanished.
+const EDIT_KEYWORDS = ['hayir', 'degistir', 'degis'];
+// Item-level removal verbs — routed to the NLU, never to a template.
+const REMOVE_KEYWORDS = ['cikar', 'kaldir'];
 const MENU_KEYWORDS = ['menu', 'men\u00fc', 'neler var', 'fiyat', 'liste'];
 const CASH_KEYWORDS = ['nakit', 'kapida', 'kap\u0131da'];
 const CARD_KEYWORDS = ['kart', 'kredi'];
@@ -177,7 +212,7 @@ export class ConversationFlowService {
         await this.cancelActiveOrder(ctx);
         // Always force phase to IDLE (cancelActiveOrder may skip if no active order)
         await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
-        await this.sendText(ctx, '🔄 Konuşma sıfırlandı. Yeni sipariş vermek için menüden seçim yapabilirsiniz.\n\n📋 *Menü* görmek için "menü" yazın.');
+        await this.sendText(ctx, 'Konuşma sıfırlandı. Yeni sipariş vermek için menüden seçim yapabilirsiniz.\n\n*Menü* görmek için "menü" yazın.');
         return;
       }
 
@@ -267,7 +302,8 @@ export class ConversationFlowService {
       }
     } catch (error) {
       logger.error({ error, tenantId, conversationId, phase: currentPhase }, 'Flow service error');
-      await this.sendText(ctx, 'Bir hata olustu. Lutfen tekrar deneyin.');
+      // Never expose a raw/technical error to the customer.
+      await this.sendText(ctx, 'Kusura bakmayin, bunu isleyemedim. Ne yapmak istediginizi tekrar yazar misiniz?');
     }
   }
 
@@ -368,15 +404,16 @@ export class ConversationFlowService {
             return this.handleIdle(fakeCtx);
           }
         }
-        await this.sendText(ctx, 'Sesli mesajinizi isleyemedim. Siparis vermek icin urun adini yazin.');
+        await this.sendText(ctx, 'Sesli mesajinizi anlayamadim. Ne almak istediginizi yazar misiniz?');
         return 'IDLE';
       }
       if (message.kind === 'IMAGE') {
-        await this.sendText(ctx, 'Gorsel mesaj isleyemiyorum. Siparis vermek icin urun adini yazin.');
+        await this.sendText(ctx, 'Gorseli okuyamiyorum. Ne almak istediginizi yazar misiniz?');
       } else if (message.kind === 'LOCATION') {
-        await this.sendText(ctx, 'Once siparis verin, sonra konum isteyecegiz. Siparis icin urun adini yazin.');
+        await this.sendText(ctx, 'Konumunuzu aldim, teslimat adimida kullanacagiz. Once ne yemek istersiniz?');
       } else {
-        await this.sendText(ctx, TEMPLATES.greeting);
+        // CATCH-ALL FIX: an unreadable message type is not a greeting.
+        await this.sendText(ctx, 'Bu mesaj turunu okuyamadim. Ne yapmak istediginizi yazar misiniz?');
       }
       return 'IDLE';
     }
@@ -401,7 +438,7 @@ export class ConversationFlowService {
       // Supports two UI shapes: top-level `closed: string[]` (settings) and per-day `closed: boolean` (onboarding).
       if (closedDays.includes(today) || daySchedule?.closed === true) {
         const nextOpen = this.getNextOpenDay(wh, today);
-        await this.sendText(ctx, `⏰ Bugun kapali gunumuz. ${nextOpen}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
+        await this.sendText(ctx, `Bugun kapali gunumuz. ${nextOpen}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
         return 'IDLE';
       }
 
@@ -414,7 +451,7 @@ export class ConversationFlowService {
           ? currentTime >= open && currentTime < close
           : currentTime >= open || currentTime < close;
         if (!isOpenNow) {
-          await this.sendText(ctx, `⏰ Su an siparis alamiyoruz. Bugunun calisma saati: ${open} - ${close}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
+          await this.sendText(ctx, `Su an siparis alamiyoruz. Bugunun calisma saati: ${open} - ${close}\n\nCalisma saatlerimiz:\n${this.formatWorkingHours(wh)}`);
           return 'IDLE';
         }
       }
@@ -424,7 +461,7 @@ export class ConversationFlowService {
     if (tenant?.isBusy) {
       const estimate = tenant.busyEstimateMinutes ? `Tahmini teslimat suresi: ~${tenant.busyEstimateMinutes} dakika.` : '';
       const custom = tenant.busyMessage || '';
-      const busyText = `⚠️ Su an yogun bir donemimiz var. ${estimate} ${custom}\n\nSiparis vermeye devam edebilirsiniz.`.trim();
+      const busyText = `Su an yogun bir donemimiz var. ${estimate} ${custom}\n\nSiparis vermeye devam edebilirsiniz.`.trim();
       await this.sendText(ctx, busyText);
     }
 
@@ -462,9 +499,9 @@ export class ConversationFlowService {
       });
       if (tenantForHours?.workingHours) {
         const formatted = this.formatWorkingHours(tenantForHours.workingHours as any);
-        await this.sendText(ctx, `🕐 Çalışma saatlerimiz:\n\n${formatted}\n\nSipariş vermek için ürün adını yazabilirsiniz.`);
+        await this.sendText(ctx, `Çalışma saatlerimiz:\n\n${formatted}\n\nSipariş vermek için ürün adını yazabilirsiniz.`);
       } else {
-        await this.sendText(ctx, '🕐 Çalışma saatlerimiz henüz ayarlanmamış. Sipariş vermek için ürün adını yazabilirsiniz.');
+        await this.sendText(ctx, 'Çalışma saatlerimiz henüz ayarlanmamış. Sipariş vermek için ürün adını yazabilirsiniz.');
       }
       return 'IDLE';
     }
@@ -476,18 +513,21 @@ export class ConversationFlowService {
     // Greeting / thanks — only if message is PURELY a greeting (no order content)
     const words = text.split(/\s+/).filter(w => w.length > 1);
     if (!hasOrderSignal && words.length <= 3 && (this.matchesKeyword(text, GREETING_KEYWORDS) || this.matchesKeyword(text, THANKS_KEYWORDS))) {
-      await this.sendText(ctx, TEMPLATES.greeting);
+      // This is the ONLY legitimate greeting site, and even here the template
+      // is used at most once per conversation.
+      await this.sendGreetingOnce(ctx, 'Buyurun, sizi dinliyorum.');
       return 'IDLE';
     }
 
     // Help request
     if (!hasOrderSignal && this.matchesKeyword(text, HELP_KEYWORDS)) {
-      await this.sendText(ctx, '🤖 Size nasıl yardımcı olabilirim?\n\n• Sipariş vermek için ürün adını yazın\n• Menüyü görmek için "menü" yazın\n• Çalışma saatlerini öğrenmek için "saat kaçta açılıyorsunuz" yazın\n• Önceki siparişinizi tekrar vermek için "tekrar" yazın');
+      await this.sendText(ctx, 'Tabii, yardimci olayim. Ne yemek istersiniz ya da menu hakkinda neyi merak ediyorsunuz?');
       return 'IDLE';
     }
 
-    // Menu request — only if no order signal (pure "menü göster" request)
-    if (!hasOrderSignal && this.matchesKeyword(text, MENU_KEYWORDS)) {
+    // Menu request — only a short, explicit "show me the menu" request gets the
+    // photo/PDF dump. A real question that merely mentions the menu is answered.
+    if (!hasOrderSignal && this.isMenuMediaRequest(text)) {
       const sent = await this.sendMenuMedia(ctx);
       if (!sent) {
         await this.sendText(ctx, TEMPLATES.menuNotAvailable);
@@ -532,7 +572,7 @@ export class ConversationFlowService {
         return this.handleSeamlessAddition(ctx, activeParentOrder, addResult.draftOrderId);
       }
 
-      if (addResult.clarificationQuestion) {
+      if (addResult.clarificationQuestion && !addResult.weakClarification) {
         await inboxService.updateConversationPhase(
           tenantId, conversationId, 'ORDER_COLLECTING', null,
         );
@@ -547,9 +587,19 @@ export class ConversationFlowService {
         return 'ORDER_COLLECTING';
       }
 
-      if (!addResult.itemsExtracted) {
-        // Not a food item — greeting or general message
-        await this.sendText(ctx, TEMPLATES.greeting);
+      // `|| weakClarification` closes a fall-through hole: without it a weak
+      // "anlayamadim" with itemsExtracted=true would drop past this block and
+      // run the NLU a second time on the same message.
+      if (!addResult.itemsExtracted || addResult.weakClarification) {
+        // CATCH-ALL FIX: not an order action — this is a real question about the
+        // restaurant, so answer it instead of firing the greeting template.
+        // (No pre-confirm guard here: this order is already confirmed.)
+        if (await this.answerConversationally(ctx, message.text || '')) return 'IDLE';
+        if (addResult.clarificationQuestion) {
+          await this.sendText(ctx, addResult.clarificationQuestion);
+          return 'IDLE';
+        }
+        await this.sendGreetingOnce(ctx, 'Buyurun, nasil yardimci olabilirim?');
         return 'IDLE';
       }
     }
@@ -586,13 +636,31 @@ export class ConversationFlowService {
       return 'ORDER_REVIEW';
     }
 
-    if (result.clarificationQuestion) {
+    // A real, useful question from the model ("Et Doner mi Tavuk Doner mi?")
+    // is asked as-is. A generic "anlayamadim" placeholder is not — that path
+    // goes to the conversational answer layer below.
+    if (result.clarificationQuestion && !result.weakClarification) {
       await this.sendText(ctx, result.clarificationQuestion);
       return 'ORDER_COLLECTING';
     }
 
-    if (!result.itemsExtracted) {
-      await this.sendText(ctx, TEMPLATES.greeting);
+    // `|| weakClarification` is REQUIRED here. `itemsExtracted` is
+    // `extraction.items.length > 0`, which is also true for keep/remove-only
+    // extractions — exactly what a pure question produces ("ikisi arasinda
+    // fark ne" keeps the cart untouched). Without this the message fell to the
+    // tail below and the customer got the generic "Siparisinizi tam
+    // anlayamadim" again — the 38x defect.
+    if (!result.itemsExtracted || result.weakClarification) {
+      // CATCH-ALL FIX (87x "Merhaba! Hosgeldiniz"): the customer asked
+      // something real ("gel al yapiyor musunuz", "peperoni piza ne kadar",
+      // "en hizli ne hazirlanir"). Answer it.
+      if (await this.sendPreConfirmNotice(ctx, text, message.text || '')) return 'IDLE';
+      if (await this.answerConversationally(ctx, message.text || '')) return 'IDLE';
+      if (result.clarificationQuestion) {
+        await this.sendText(ctx, result.clarificationQuestion);
+        return 'ORDER_COLLECTING';
+      }
+      await this.sendGreetingOnce(ctx, 'Buyurun, nasil yardimci olabilirim?');
       return 'IDLE';
     }
 
@@ -804,7 +872,7 @@ export class ConversationFlowService {
           }
         }
 
-        if (addResult.clarificationQuestion) {
+        if (addResult.clarificationQuestion && !addResult.weakClarification) {
           await this.sendText(ctx, addResult.clarificationQuestion);
           return 'ORDER_COLLECTING';
         }
@@ -815,7 +883,13 @@ export class ConversationFlowService {
           data: { flowSubState: null, flowMetadata: null },
         });
         await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
-        await this.sendText(ctx, TEMPLATES.greeting);
+        // CATCH-ALL FIX: answer the question instead of greeting again.
+        if (await this.answerConversationally(ctx, message.text || '')) return 'IDLE';
+        if (addResult.clarificationQuestion) {
+          await this.sendText(ctx, addResult.clarificationQuestion);
+          return 'IDLE';
+        }
+        await this.sendGreetingOnce(ctx, 'Buyurun, baska ne yapabilirim?');
         return 'IDLE';
       }
     }
@@ -848,11 +922,11 @@ export class ConversationFlowService {
             return this.handleOrderCollecting(fakeCtx);
           }
         }
-        await this.sendText(ctx, 'Sesli mesajinizi isleyemedim. Urun adini yazarak siparis verebilirsiniz.');
+        await this.sendText(ctx, 'Sesli mesajinizi anlayamadim. Ne eklemek istediginizi yazar misiniz?');
         return 'ORDER_COLLECTING';
       }
       if (message.kind === 'IMAGE') {
-        await this.sendText(ctx, 'Gorsel mesaj isleyemiyorum. Urun adini yazarak siparis verebilirsiniz.');
+        await this.sendText(ctx, 'Gorseli okuyamiyorum. Ne eklemek istediginizi yazar misiniz?');
       }
       return 'ORDER_COLLECTING';
     }
@@ -865,8 +939,8 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // Menu request — show menu media without touching the order
-    if (this.matchesKeyword(text, MENU_KEYWORDS)) {
+    // Menu request — only for a short, explicit "show me the menu"
+    if (this.isMenuMediaRequest(text)) {
       const sent = await this.sendMenuMedia(ctx);
       if (!sent) {
         await this.sendText(ctx, TEMPLATES.menuNotAvailable);
@@ -905,12 +979,27 @@ export class ConversationFlowService {
       if (result.draftOrderId) {
         await this.checkMinBasketWarning(ctx, result.draftOrderId);
       }
+      // Flow-order guard: the cart was still updated, we only add the honest
+      // one-liner about what comes when.
+      if (!(await this.sendPreConfirmNotice(ctx, text, message.text || ''))) {
+        // Product AND question in the same message: the cart is already shown
+        // above, now answer the question too.
+        await this.answerSideQuestion(ctx, message.text || '');
+      }
       return 'ORDER_REVIEW';
-    } else if (result.clarificationQuestion) {
+    } else if (result.clarificationQuestion && !result.weakClarification) {
       await this.sendText(ctx, result.clarificationQuestion);
-    } else if (!result.itemsExtracted) {
-      // Adim 8: Akilli fallback mesajlari
-      await this.sendSmartFallback(ctx, text);
+    } else if (!result.itemsExtracted || result.weakClarification) {
+      // See handleIdle: keep-only extractions set itemsExtracted=true, so the
+      // weak flag must be part of this condition or the generic
+      // "tam anlayamadim" leaks out through the tail branch.
+      if (await this.sendPreConfirmNotice(ctx, text, message.text || '')) {
+        return 'ORDER_COLLECTING';
+      }
+      // Conversational answer layer (full menu + descriptions + cart).
+      // The model's own clarification (when it had one) is the fallback text,
+      // used only if the answer layer is unreachable.
+      await this.sendSmartFallback(ctx, text, result.clarificationQuestion);
     }
 
     return 'ORDER_COLLECTING';
@@ -952,8 +1041,10 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // "X iptal" gibi urun cikarma ifadelerini NLU'ya gonder
-    if (!this.isFullCancelIntent(text) && this.matchesKeyword(text, CANCEL_KEYWORDS)) {
+    // "X iptal" / "kolayi cikar" / "ayrani kaldir" — item-level removal goes to
+    // the NLU. REMOVE_KEYWORDS is included because 'cikar' and 'kaldir' used to
+    // be swallowed by the edit-template dead-end below.
+    if (!this.isFullCancelIntent(text) && this.matchesKeyword(text, [...CANCEL_KEYWORDS, ...REMOVE_KEYWORDS])) {
       // Save order state before NLU processing (in case NLU incorrectly removes all items)
       const orderBefore = await this.getActiveOrder(ctx);
       const itemCountBefore = orderBefore?.items?.length || 0;
@@ -1005,8 +1096,11 @@ export class ConversationFlowService {
             totalPrice,
             notes: orderBefore?.notes || null,
             items: {
-              create: savedItems.map((item: any, idx: number) => ({
-                tenantId,
+              // NOTE: `tenantId` and `sortOrder` are NOT columns on OrderItem
+              // (see schema.prisma). Sending them made every restore throw a
+              // PrismaClientValidationError, which surfaced to the customer as
+              // "Bir hata olustu" AND lost the order.
+              create: savedItems.map((item: any) => ({
                 menuItemId: item.menuItemId,
                 menuItemName: item.menuItemName,
                 qty: item.qty,
@@ -1014,7 +1108,6 @@ export class ConversationFlowService {
                 optionsJson: item.optionsJson,
                 extrasJson: item.extrasJson,
                 notes: item.notes,
-                sortOrder: idx,
               })),
             },
           },
@@ -1040,14 +1133,19 @@ export class ConversationFlowService {
       return 'IDLE';
     }
 
-    // Edit -> back to collecting
-    if (this.matchesKeyword(text, EDIT_KEYWORDS)) {
-      await this.sendText(ctx, 'Siparisinizi degistirmek icin yeni urun yazin veya "iptal" yazin.');
+    // Edit -> back to collecting.
+    // ONLY for a bare "hayir" / "degistir" with no other content. Anything that
+    // also names a product ("bi kremali mantarli makarna da ekle") must fall
+    // through to the NLU below so the product actually reaches the cart —
+    // this branch used to swallow those messages and the product vanished.
+    const reviewWords = text.split(/\s+/).filter(Boolean);
+    if (reviewWords.length <= 2 && this.matchesKeyword(text, EDIT_KEYWORDS)) {
+      await this.sendText(ctx, 'Tabii, siparisinizde neyi degistirelim?');
       return 'ORDER_COLLECTING';
     }
 
-    // Menu request — show menu media without touching the order
-    if (this.matchesKeyword(text, MENU_KEYWORDS)) {
+    // Menu request — only for a short, explicit "show me the menu"
+    if (this.isMenuMediaRequest(text)) {
       const sent = await this.sendMenuMedia(ctx);
       if (!sent) {
         await this.sendText(ctx, TEMPLATES.menuNotAvailable);
@@ -1073,10 +1171,16 @@ export class ConversationFlowService {
     }
 
     if (result.confirmationMessage) {
-      // Send updated order summary with confirm/cancel buttons
+      // Item WAS added/changed — always show the up-to-date cart.
       await this.sendOrderConfirmButtons(ctx, result.confirmationMessage);
+      if (!(await this.sendPreConfirmNotice(ctx, text, message.text || ''))) {
+        // Product AND question in the same message — answer the question too.
+        await this.answerSideQuestion(ctx, message.text || '');
+      }
       return 'ORDER_REVIEW';
-    } else if (result.clarificationQuestion) {
+    }
+
+    if (result.clarificationQuestion && !result.weakClarification) {
       // Send clarification, then re-show current order with buttons
       await this.sendText(ctx, result.clarificationQuestion);
       const order = await this.getActiveOrder(ctx);
@@ -1087,7 +1191,21 @@ export class ConversationFlowService {
       return 'ORDER_REVIEW';
     }
 
-    // NLU couldn't parse — re-send existing order
+    // Not an order action — flow-order guard first, then answer the question.
+    // The confirm/cancel buttons from the previous summary stay usable, so the
+    // summary is NOT re-sent on every chat turn.
+    if (await this.sendPreConfirmNotice(ctx, text, message.text || '')) {
+      return 'ORDER_REVIEW';
+    }
+    if (await this.answerConversationally(ctx, message.text || '')) {
+      return 'ORDER_REVIEW';
+    }
+    if (result.clarificationQuestion) {
+      await this.sendText(ctx, result.clarificationQuestion);
+      return 'ORDER_REVIEW';
+    }
+
+    // Last resort — re-show the cart so the customer is never left in silence.
     const existingOrder = await this.getActiveOrder(ctx);
     if (existingOrder && existingOrder.items.length > 0) {
       const summary = this.buildOrderSummary(existingOrder);
@@ -1201,7 +1319,7 @@ export class ConversationFlowService {
           data: { totalPrice: newTotal },
         });
 
-        await this.sendText(ctx, `✅ ${upsellMeta.upsellItemName} sepete eklendi!`);
+        await this.sendText(ctx, `${upsellMeta.upsellItemName} sepete eklendi!`);
 
         // Log upsell event
         await upsellService.logEvent(
@@ -1292,7 +1410,7 @@ export class ConversationFlowService {
       );
 
       await this.sendText(ctx, TEMPLATES.orderItemAdded(result.itemName, 1));
-      await this.sendText(ctx, 'Baska urun eklemek icin yazin veya "evet" ile onaylayin.');
+      await this.sendText(ctx, 'Yaninda baska bir sey ister misiniz?');
 
       return 'ORDER_COLLECTING';
     } catch (error) {
@@ -1343,8 +1461,13 @@ export class ConversationFlowService {
     const isDelivery = buttonId === 'delivery_type_delivery' || this.isDeliveryIntent(text);
 
     if (isPickup) {
-      // Gel Al selected
-      const updateData: any = { deliveryType: 'PICKUP' };
+      // Gel Al selected.
+      // `deliveryAddress: null` clears an address the customer may have typed
+      // BEFORE confirming (the pre-confirm guard parks it on the draft). A
+      // pickup order must never carry a delivery address onto the kitchen
+      // ticket. In the normal pickup flow this column is already null, so the
+      // reset is a no-op.
+      const updateData: any = { deliveryType: 'PICKUP', deliveryAddress: null };
 
       // Apply pickup discount if configured
       const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -1512,7 +1635,7 @@ export class ConversationFlowService {
         ctx,
         'Yazili adres kabul edemiyoruz, hizmet alanimizi kontrol etmemiz icin konum pininize ihtiyacimiz var.\n\n' +
         'Farkli bir konumdan gondermek icin:\n' +
-        '📎 simgesine tiklayip > *Konum* secenegini kullanin.\n\n' +
+        'simgesine tiklayip > *Konum* secenegini kullanin.\n\n' +
         'Siparisi iptal etmek icin "iptal" yazin.',
       );
     } else {
@@ -1642,7 +1765,7 @@ export class ConversationFlowService {
           where: { id: conversationId },
           data: { flowSubState: null },
         });
-        await this.sendText(ctx, 'Online odeme iptal edildi. Mevcut odeme yonteminiz gecerlidir. ✅');
+        await this.sendText(ctx, 'Online odeme iptal edildi. Mevcut odeme yonteminiz gecerlidir.');
         return 'ORDER_CONFIRMED';
       }
       // Remind about payment link
@@ -1680,13 +1803,13 @@ export class ConversationFlowService {
             data: { status: 'CANCELLED' },
           });
           await inboxService.updateConversationPhase(tenantId, conversationId, 'IDLE', null);
-          await this.sendText(ctx, '🚫 Siparisiniz iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.');
+          await this.sendText(ctx, 'Siparisiniz iptal edildi.\nYeni siparis icin istediginiz urunleri yazabilirsiniz.');
           return 'IDLE';
         } else {
           // Order already confirmed/preparing — block cancel
           await this.sendText(
             ctx,
-            '⚠️ Siparisiniz hazirlaniyor. Bu asamada iptal yapilamaz.\nYardim icin *"destek"* yazabilirsiniz.',
+            'Siparisiniz hazirlaniyor. Bu asamada iptal yapilamaz.\nYardim icin *"destek"* yazabilirsiniz.',
           );
           return 'ORDER_CONFIRMED';
         }
@@ -1918,10 +2041,10 @@ export class ConversationFlowService {
     const locationText = isPickup ? 'Kasada nakit' : 'Kapida nakit';
     await this.sendText(
       ctx,
-      `✅ *Siparisiniz alindi!*\n\n` +
-      `📦 Siparis No: #${pendingOrder.orderNumber || 0}\n` +
-      `💵 Odeme: ${locationText}\n` +
-      `⏳ Restoran onayiniz bekleniyor...`,
+      `*Siparisiniz alindi!*\n\n` +
+      `Siparis No: #${pendingOrder.orderNumber || 0}\n` +
+      `Odeme: ${locationText}\n` +
+      `Restoran onayiniz bekleniyor...`,
     );
     await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
     return 'ORDER_CONFIRMED';
@@ -1950,10 +2073,10 @@ export class ConversationFlowService {
     const locationText = isPickup ? 'Kasada kredi karti' : 'Kapida kredi karti';
     await this.sendText(
       ctx,
-      `✅ *Siparisiniz alindi!*\n\n` +
-      `📦 Siparis No: #${pendingOrder.orderNumber || 0}\n` +
-      `💳 Odeme: ${locationText}\n` +
-      `⏳ Restoran onayiniz bekleniyor...`,
+      `*Siparisiniz alindi!*\n\n` +
+      `Siparis No: #${pendingOrder.orderNumber || 0}\n` +
+      `Odeme: ${locationText}\n` +
+      `Restoran onayiniz bekleniyor...`,
     );
     await inboxService.updateConversationPhase(tenantId, conversationId, 'ORDER_CONFIRMED', null);
     return 'ORDER_CONFIRMED';
@@ -2321,6 +2444,19 @@ export class ConversationFlowService {
     const distance = geoCheck.distance || 0;
 
     await this.sendText(ctx, TEMPLATES.locationConfirmed(storeName, deliveryFee, distance));
+
+    // If the customer already gave an address earlier (before confirming), it
+    // was parked on the order — bring it back here for confirmation instead of
+    // asking them to type it again.
+    if (order?.deliveryAddress) {
+      await this.sendText(ctx, TEMPLATES.addressConfirmation(order.deliveryAddress));
+      const tmpl = TEMPLATES.addressConfirmButtons;
+      await whatsappService.sendInteractiveButtons(
+        ctx.tenantId, ctx.conversationId, tmpl.body, tmpl.buttons,
+      );
+      return 'ADDRESS_COLLECTION';
+    }
+
     // Ask for open text address before payment
     await this.sendText(ctx, TEMPLATES.addressRequest);
 
@@ -2371,58 +2507,332 @@ export class ConversationFlowService {
   // ==================== SMART FALLBACK (Adim 8) ====================
 
   /**
-   * Adim 8: Akilli fallback mesajlari
-   * NLU sonuc donmediginde mesajin icerigi analiz edilerek uygun yanit secilir
+   * Fallback when the NLU produced no order action.
+   *
+   * Previously this dumped a "here is how you type an order" tutorial (the
+   * 11x "Anlayamadim, eklemek istediginiz urunu..." defect). Now every such
+   * message goes through the conversational answer layer, which sees the FULL
+   * menu (with descriptions) and answers the actual question. A canned line is
+   * only used when the model is unreachable.
    */
-  private async sendSmartFallback(ctx: FlowContext, text: string): Promise<void> {
-    // Selamlama kontrolu
-    if (this.matchesKeyword(text, GREETING_KEYWORDS)) {
-      const order = await this.getActiveOrder(ctx);
-      if (order && order.items.length > 0) {
-        await this.sendText(ctx, 'Merhaba! Siparisininize devam edebilirsiniz. Urun eklemek icin urun adini yazin veya onay butonuna basin.');
-      } else {
-        await this.sendText(ctx, 'Merhaba! Siparis vermek icin urun adini yazabilirsiniz.');
-      }
+  private async sendSmartFallback(
+    ctx: FlowContext,
+    text: string,
+    fallbackText?: string,
+  ): Promise<void> {
+    const rawText = (ctx.message.text || text || '').trim();
+
+    // Pure greeting / thanks: short human reply, greeting template at most once
+    // per conversation (see rule "Selamlama sablonu en fazla bir kez").
+    const words = text.split(/\s+/).filter((w) => w.length > 1);
+    if (words.length <= 3 && this.matchesKeyword(text, THANKS_KEYWORDS)) {
+      await this.sendText(ctx, 'Rica ederim, afiyet olsun.');
+      return;
+    }
+    if (words.length <= 3 && this.matchesKeyword(text, GREETING_KEYWORDS)) {
+      await this.sendGreetingOnce(ctx, 'Buyurun, sizi dinliyorum.');
       return;
     }
 
-    // Tesekkur kontrolu
-    if (this.matchesKeyword(text, THANKS_KEYWORDS)) {
-      const order = await this.getActiveOrder(ctx);
-      if (order && order.items.length > 0) {
-        await this.sendText(ctx, 'Rica ederim! Baska urun ekleyebilir veya onay butonuna basabilirsiniz.');
-      } else {
-        await this.sendText(ctx, 'Rica ederim! Siparis vermek isterseniz urun adini yazabilirsiniz.');
-      }
+    const answered = await this.answerConversationally(ctx, rawText);
+    if (answered) return;
+
+    // Model unreachable. If the extractor produced its own useful line
+    // (a suggestion list, an option question), prefer it over a canned reply.
+    if (fallbackText) {
+      await this.sendText(ctx, fallbackText);
       return;
     }
 
-    // Yardim kontrolu
-    if (this.matchesKeyword(text, HELP_KEYWORDS)) {
-      await this.sendText(
-        ctx,
-        'Siparis vermek icin:\n' +
-        '1. Urun adini yazin (orn: "1 Et Doner", "2 Kola")\n' +
-        '2. Birden fazla urun ekleyebilirsiniz\n' +
-        '3. Hazir olunca onay butonuna basin\n' +
-        '4. Menuyu gormek icin "menu" yazin',
-      );
-      return;
-    }
-
-    // Varsayilan fallback
+    // Otherwise: polite, context-aware, never a raw error and never a
+    // "type this" tutorial.
     const order = await this.getActiveOrder(ctx);
     if (order && order.items.length > 0) {
-      await this.sendText(
-        ctx,
-        'Anlayamadim. Urun eklemek icin urun adini yazin (orn: "1 Kola") veya onay butonuna basin.',
-      );
+      await this.sendText(ctx, 'Bunu su an net cikaramadim. Siparisinize eklemek istediginiz baska bir sey var mi?');
     } else {
-      await this.sendText(
-        ctx,
-        'Anlayamadim, eklemek istediginiz urunu biraz daha acik yazar misiniz? Ornegin: "1 Kola", "Tavuk Doner" gibi.',
-      );
+      await this.sendText(ctx, 'Bunu su an net cikaramadim. Bugun canin ne cekiyor, yardimci olayim?');
     }
+  }
+
+  // ==================== CONVERSATIONAL ANSWER LAYER ====================
+
+  /**
+   * Does this message also carry a question, on top of whatever order action
+   * it performed? ("bi kola ekle, icinde seker var mi")
+   *
+   * Deliberately narrow: only an explicit question mark, a standalone Turkish
+   * question particle (mi/mi/mu/mu — folded to mi/mu) or an unambiguous
+   * question phrase counts. Bare "ne"/"kac" are NOT included, because
+   * "2 kola kac tane" style order text would trip them and every ordinary
+   * order turn would pay an extra LLM round-trip.
+   */
+  private hasQuestionSignal(rawText: string): boolean {
+    if (!rawText) return false;
+    if (rawText.includes('?')) return true;
+
+    const folded = deaccentTr(rawText);
+    const words = folded.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    if (words.includes('mi') || words.includes('mu')) return true;
+
+    const phrases = [
+      'nedir', 'kac para', 'kac tl', 'kac lira', 'ne kadar', 'icinde ne',
+      'neler var', 'fark ne', 'farki ne', 'hangisi', 'nasil', 'ne onerir',
+      'ne kadar surer', 'kac dakika', 'vejetaryen', 'vejeteryan', 'glutensiz',
+      'helal', 'acili',
+    ];
+    return phrases.some((p) => folded.includes(p));
+  }
+
+  /**
+   * The order action already happened and the cart was shown. If the SAME
+   * message also asked something, answer that too — rule "aynı mesajda hem
+   * ürün hem soru varsa ikisi de karşılanmalı".
+   *
+   * Gated by hasQuestionSignal so a plain "2 kola" order never pays the extra
+   * 5-9s model call.
+   */
+  private async answerSideQuestion(ctx: FlowContext, rawText: string): Promise<void> {
+    if (!this.hasQuestionSignal(rawText)) return;
+    // Silent on failure: the cart summary has already been delivered, so an
+    // extra apology line here would just be noise.
+    await this.answerConversationally(ctx, rawText, { answerOnly: true });
+  }
+
+  /**
+   * Ask the conversational answer layer (full menu + descriptions + cart +
+   * recent turns) and send its reply. Returns true when something was sent.
+   *
+   * Handles the scope guard: general chit-chat gets ONE polite redirect per
+   * conversation; the second attempt gets a single closing line and nothing
+   * more is generated in that lane.
+   *
+   * `answerOnly` suppresses the off-topic redirect/closing lines. Used when an
+   * order action ALREADY succeeded for this message: telling a customer who
+   * just filled their cart "I am only the order assistant" would be absurd,
+   * and it would burn an off-topic strike on a legitimate order turn.
+   */
+  private async answerConversationally(
+    ctx: FlowContext,
+    rawText: string,
+    opts?: { answerOnly?: boolean },
+  ): Promise<boolean> {
+    if (!rawText || !conversationAnswerService.isAvailable()) return false;
+
+    try {
+      const strikes = await this.countOffTopicStrikes(ctx);
+      const cart = await this.buildCartContext(ctx);
+
+      const result = await conversationAnswerService.answer({
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        userText: rawText,
+        cart: cart.lines,
+        cartTotal: cart.total,
+        priceObjection: this.detectPriceObjection(normalizeTr(rawText)),
+        offTopicStrikes: strikes,
+      });
+
+      if (!result) return false;
+
+      // An order action already succeeded for this message — say nothing
+      // rather than redirecting/closing the customer down.
+      if (opts?.answerOnly && result.kind !== 'answer') return false;
+
+      // Second off-topic attempt in the same conversation: stop producing.
+      if (result.kind === 'closed' && strikes >= 2) {
+        return true; // silence — the closing line was already spent
+      }
+
+      await this.sendText(ctx, result.text);
+      return true;
+    } catch (error) {
+      logger.warn({ error, conversationId: ctx.conversationId }, 'Conversational answer failed');
+      return false;
+    }
+  }
+
+  /** Current draft cart as plain lines for the answer prompt. */
+  private async buildCartContext(
+    ctx: FlowContext,
+  ): Promise<{ lines: CartLine[] | null; total: number | null }> {
+    try {
+      const order = await this.getDraftOrder(ctx);
+      if (!order || order.items.length === 0) return { lines: null, total: null };
+      return {
+        lines: order.items.map((item: any) => ({
+          name: item.menuItemName,
+          qty: item.qty,
+          unitPrice: Number(item.unitPrice),
+          notes: item.notes,
+        })),
+        total: Number(order.totalPrice),
+      };
+    } catch {
+      return { lines: null, total: null };
+    }
+  }
+
+  /**
+   * How many off-topic redirects were already sent in this conversation.
+   * Counted from the outbound message history so it survives restarts and does
+   * not fight with flowSubState/flowMetadata (which the order flow owns).
+   */
+  private async countOffTopicStrikes(ctx: FlowContext): Promise<number> {
+    try {
+      const [redirects, closings] = await Promise.all([
+        prisma.message.count({
+          where: {
+            conversationId: ctx.conversationId,
+            tenantId: ctx.tenantId,
+            direction: 'OUT',
+            text: { contains: OFF_TOPIC_FIRST_MARKER },
+          },
+        }),
+        prisma.message.count({
+          where: {
+            conversationId: ctx.conversationId,
+            tenantId: ctx.tenantId,
+            direction: 'OUT',
+            text: { contains: OFF_TOPIC_FINAL_MARKER },
+          },
+        }),
+      ]);
+      return redirects + closings;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Send the greeting template AT MOST ONCE per conversation. Every later
+   * greeting-shaped message gets the short alternative instead — this is what
+   * kills the 87x "Merhaba! Hosgeldiniz" spam.
+   */
+  private async sendGreetingOnce(ctx: FlowContext, alternative: string): Promise<void> {
+    let alreadySent = false;
+    try {
+      const found = await prisma.message.findFirst({
+        where: {
+          conversationId: ctx.conversationId,
+          tenantId: ctx.tenantId,
+          direction: 'OUT',
+          text: { contains: GREETING_MARKER },
+        },
+        select: { id: true },
+      });
+      alreadySent = !!found;
+    } catch {
+      alreadySent = false;
+    }
+
+    await this.sendText(ctx, alreadySent ? alternative : TEMPLATES.greeting);
+  }
+
+  // ==================== FLOW-ORDER GUARDS (payment / address) ====================
+
+  /**
+   * The order of the flow is fixed:
+   *   cart -> CONFIRM -> delivery type -> [address] -> payment method -> [link]
+   * Anything asked before its turn gets a single, honest sentence instead of a
+   * confusing or wrong answer.
+   *
+   * Returns the notice to send, or null when the message is not an early
+   * payment / address message.
+   */
+  private preConfirmNotice(rawText: string): 'payment' | 'address' | null {
+    // ASCII only — the text is folded with deaccentTr above.
+    const text = deaccentTr(rawText);
+    const paymentPhrases = [
+      'odeme linki', 'odeme link', 'link gonder', 'link atar', 'link at',
+      'nasil odeyecegim', 'nasil odeyecem', 'nasil odiycem', 'nasil odenecek',
+      'online odeme', 'kartla odeme', 'kredi karti ile',
+      'iban', 'havale', 'papara',
+    ];
+    if (paymentPhrases.some((p) => text.includes(p))) return 'payment';
+    return null;
+  }
+
+  /**
+   * Conservative address detector.
+   *
+   * Requires either TWO street/neighbourhood tokens, or one plus an explicit
+   * detail word ("no", "daire", "kat"). A bare digit is never enough, so an
+   * order line for a product whose name happens to contain "sokak" is not
+   * mistaken for an address, and "eve gelsin" never is either.
+   */
+  private detectEarlyAddress(rawText: string): string | null {
+    const t = deaccentTr(rawText);
+    const placeTokens = ['mah', 'cad', 'sok', 'bulvar', 'blv', 'apartman', 'site'];
+    // Exact-word matches only: "kat" must not match "katkisiz".
+    const detailTokens = ['no', 'nu', 'daire', 'kat', 'blok', 'apt'];
+
+    const words = t.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    const placeCount = words.filter((w) => placeTokens.some((p) => w.startsWith(p))).length;
+    if (placeCount === 0) return null;
+
+    const hasDetailWord = words.some((w) => detailTokens.includes(w));
+    if (placeCount < 2 && !hasDetailWord) return null;
+
+    const address = rawText.trim();
+    return address.length >= 10 ? address.substring(0, 400) : null;
+  }
+
+  /**
+   * Applies the pre-confirmation guards for payment/address questions.
+   * Returns true when a notice was sent.
+   *
+   * IMPORTANT: this NEVER short-circuits the order flow. It is called only in
+   * pre-confirm phases and only decides whether an extra sentence is appended;
+   * products in the same message are still extracted by the NLU.
+   */
+  private async sendPreConfirmNotice(ctx: FlowContext, text: string, rawText: string): Promise<boolean> {
+    if (this.preConfirmNotice(text) === 'payment') {
+      await this.sendText(ctx, 'Odeme islemi siparis onaylandiktan sonra tercihlerinize gore sekillenecek.');
+      return true;
+    }
+
+    const address = this.detectEarlyAddress(rawText);
+    if (address) {
+      // Do not lose the address: park it on the draft order so the address step
+      // can offer it back for confirmation. No follow-up detail (floor,
+      // company) is asked before the order is confirmed.
+      try {
+        const order = await this.getDraftOrder(ctx);
+        if (order && !order.deliveryAddress) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { deliveryAddress: address },
+          });
+        }
+      } catch (error) {
+        logger.warn({ error, conversationId: ctx.conversationId }, 'Failed to park early address');
+      }
+      await this.sendText(ctx, 'Adres bilgisi siparis onaylandiktan sonra alinacak.');
+      return true;
+    }
+
+    return false;
+  }
+
+  /** Detects price pushback so the answer layer switches to the empathetic,
+   *  no-bargaining tone (price stays fixed, a cheaper item may be suggested). */
+  private detectPriceObjection(rawText: string): boolean {
+    const text = deaccentTr(rawText);
+    const phrases = [
+      'pahali', 'tuzlu', 'indirim', 'ucuz', 'fazla degil mi', 'cok para',
+      'uygun bir sey', 'butcem', 'hesapli', 'kampanya var mi',
+    ];
+    return phrases.some((p) => text.includes(p));
+  }
+
+  /**
+   * Menu media (photos / PDF) should only be pushed for an actual "show me the
+   * menu" request. A real question that merely contains the word "menude"
+   * ("en ucuz ne var menude") deserves an answer, not a photo dump.
+   */
+  private isMenuMediaRequest(text: string): boolean {
+    const words = deaccentTr(text).split(/\s+/).filter(Boolean);
+    return words.length <= 3 && this.matchesKeyword(text, MENU_KEYWORDS);
   }
 
   // ==================== MIN BASKET WARNING (Adim 9) ====================
@@ -2612,6 +3022,23 @@ export class ConversationFlowService {
   }
 
   /**
+   * Current draft order, looked up by conversation rather than by the possibly
+   * stale activeOrderId snapshot on ctx.conversation. Used by the answer layer
+   * and the flow-order guards, which run right after the NLU may have created
+   * or replaced the draft in this same turn.
+   */
+  private async getDraftOrder(ctx: FlowContext) {
+    const byId = await this.getActiveOrder(ctx);
+    if (byId) return byId;
+
+    return prisma.order.findFirst({
+      where: { tenantId: ctx.tenantId, conversationId: ctx.conversationId, status: 'DRAFT' },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true },
+    });
+  }
+
+  /**
    * Seamless addition: transfer draft items to active order, handle payment delta
    */
   private async handleSeamlessAddition(
@@ -2627,7 +3054,10 @@ export class ConversationFlowService {
     });
 
     if (!draft || draft.items.length === 0) {
-      await this.sendText(ctx, TEMPLATES.greeting);
+      // CATCH-ALL FIX: nothing to add is not a reason to greet again.
+      if (!(await this.answerConversationally(ctx, ctx.message.text || ''))) {
+        await this.sendText(ctx, 'Siparisinize eklenecek bir sey bulamadim. Ne eklemek istersiniz?');
+      }
       return 'IDLE';
     }
 
@@ -2729,7 +3159,7 @@ export class ConversationFlowService {
     // Already paid online — nothing to change
     const wasOnline = await this.wasOriginalPaymentOnline(tenantId, activeOrder.id);
     if (wasOnline) {
-      await this.sendText(ctx, 'Siparisiniz zaten online odeme ile onaylandi. ✅');
+      await this.sendText(ctx, 'Siparisiniz zaten online odeme ile onaylandi.');
       return 'ORDER_CONFIRMED';
     }
 
@@ -2842,8 +3272,30 @@ export class ConversationFlowService {
     return TEMPLATES.orderSummary(items, total, undefined, order.notes);
   }
 
+  /**
+   * Keyword matching with word boundaries.
+   *
+   * The old implementation was a raw `text.includes(kw)`, which made every
+   * message containing a keyword as a SUBSTRING take the wrong branch:
+   *   - "fiyat ne 450 mi pahali ya" matched MENU_KEYWORDS via "fiyat" ...
+   *     but so did "pahali" style messages via other keys,
+   *   - "salata"/"saat" matched the greeting keyword "sa",
+   *   - "eklemek" style words matched edit keywords.
+   *
+   * Now a keyword matches only at a word start (Turkish is agglutinative, so
+   * "kartla", "nakitle", "iptal edelim" must still match), and very short
+   * keywords ("sa") require an exact word.
+   */
   private matchesKeyword(text: string, keywords: string[]): boolean {
-    return keywords.some((kw) => text.includes(kw));
+    const folded = deaccentTr(text);
+    const words = folded.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return keywords.some((raw) => {
+      const kw = deaccentTr(raw);
+      if (!kw) return false;
+      if (kw.includes(' ')) return folded.includes(kw);
+      if (kw.length <= 2) return words.includes(kw);
+      return words.some((w) => w.startsWith(kw));
+    });
   }
 
   /**
@@ -2913,7 +3365,10 @@ export class ConversationFlowService {
    * "iptal", "siparis iptal", "siparisi iptal et", "vazgec" → full cancel
    * "salata iptal", "kolayi sil", "1 ayrani cikar", "bunun icinden X iptal" → item removal (NOT full cancel)
    */
-  private isFullCancelIntent(text: string): boolean {
+  private isFullCancelIntent(rawText: string): boolean {
+    // Fold Turkish accents: "siparişi iptal et" and "vazgeçtim" must match the
+    // ASCII phrase lists below.
+    const text = deaccentTr(rawText);
     const words = text.split(/\s+/).filter(Boolean);
 
     // Item-level indicators → definitely NOT a full cancel

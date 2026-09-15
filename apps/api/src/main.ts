@@ -25,6 +25,7 @@ import { menuMediaRouter } from './routes/menu-media.routes';
 import { webhookRouter } from './routes/webhook.routes';
 import { integrationRouter } from './routes/integration.routes';
 import { dashboardRouter } from './routes/dashboard.routes';
+import { voiceRouter } from './routes/voice.routes';
 import { requireActiveSubscription } from './middleware/subscription-gate.middleware';
 import prisma from './db/prisma';
 import redis from './db/redis';
@@ -85,6 +86,11 @@ app.use(`${config.server.apiPrefix}/auth`, authRouter);
 app.use(`${config.server.apiPrefix}/admin`, adminRouter);
 app.use(`${config.server.apiPrefix}/billing`, billingRouter);
 app.use(`${config.server.apiPrefix}/whatsapp`, whatsappRouter);
+
+// Sesli siparis demosu (Adim 1 kaniti) — PUBLIC, abonelik kapisi YOK.
+// Bu router istekten tenant kimligi kabul etmez; tum erisimler kodda sabit
+// 'ai-sandbox' tenant'i ile sinirlidir (bkz. voice-sandbox.constants.ts).
+app.use(`${config.server.apiPrefix}/voice`, voiceRouter);
 
 // Routes — gated by active subscription
 app.use(`${config.server.apiPrefix}/menu`, requireActiveSubscription, menuRouter);

@@ -50,12 +50,12 @@ router.post(
       const html = result.success
         ? `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Odeme Basarili</title></head>
            <body style="font-family:sans-serif;text-align:center;padding:50px">
-           <h1>✅ Odemeniz Basariyla Alindi!</h1>
+           <h1>Odemeniz Basariyla Alindi!</h1>
            <p>WhatsApp'a donerek siparisinizi takip edebilirsiniz.</p>
            </body></html>`
         : `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Odeme Basarisiz</title></head>
            <body style="font-family:sans-serif;text-align:center;padding:50px">
-           <h1>❌ Odeme Basarisiz</h1>
+           <h1>Odeme Basarisiz</h1>
            <p>WhatsApp'tan tekrar deneyebilir veya nakit odeme secebilirsiniz.</p>
            </body></html>`;
 

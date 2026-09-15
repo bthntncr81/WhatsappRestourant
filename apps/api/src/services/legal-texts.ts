@@ -139,17 +139,17 @@ export const WHATSAPP_KVKK_MESSAGE = `Siparişinizi oluşturabilmemiz için baz�
 
 kabul etmiş sayılırsınız.
 
-Bu mesaja yanıt vererek siparişinize devam edebilirsiniz. 🍽️`;
+Bu mesaja yanıt vererek siparişinize devam edebilirsiniz.`;
 
-export const WHATSAPP_KVKK_ACCEPTED = `Teşekkürler! Onayınız kaydedildi. ✅
+export const WHATSAPP_KVKK_ACCEPTED = `Teşekkürler! Onayınız kaydedildi.
 
-Artık sipariş verebilirsiniz. Menümüzü görmek için "menü" yazabilir veya doğrudan istediğiniz ürünleri yazabilirsiniz. 🍽️`;
+Artık sipariş verebilirsiniz. Menümüzü görmek için "menü" yazabilir veya doğrudan istediğiniz ürünleri yazabilirsiniz.`;
 
 export const WHATSAPP_MARKETING_ASK = `Kampanya, indirim ve duyuru içerikli ticari elektronik iletilerin (WhatsApp) tarafınıza gönderilmesini istiyoruz.
 
 Bu mesajları almak istiyorsanız lütfen *ONAYLIYORUM* yazarak cevap veriniz.
 İstemiyorsanız *HAYIR* yazabilirsiniz.`;
 
-export const WHATSAPP_MARKETING_ACCEPTED = `Ticari ileti izniniz kaydedildi. ✅ Kampanya ve fırsatlardan haberdar olacaksınız.`;
+export const WHATSAPP_MARKETING_ACCEPTED = `Ticari ileti izniniz kaydedildi. Kampanya ve fırsatlardan haberdar olacaksınız.`;
 
 export const WHATSAPP_MARKETING_DECLINED = `Anladık, ticari ileti göndermeyeceğiz. İstediğiniz zaman fikrinizi değiştirebilirsiniz.`;

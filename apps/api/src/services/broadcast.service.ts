@@ -11,7 +11,7 @@ const CAMPAIGN_SYSTEM_PROMPT = `Sen bir restoran pazarlama asistanisin. Musteriy
 Kurallar:
 - Samimi, sicak, arkadasca tonda yaz
 - Turkce, kisa (max 3 cumle)
-- Emoji kullan ama abartma (max 2)
+- ASLA emoji kullanma
 - Musterinin adini kullan (varsa)
 - Daha once siparis ettigi urunleri dogal sekilde referans ver
 - Indirim bilgisini dogal sekilde ver
@@ -19,9 +19,9 @@ Kurallar:
 - Sadece mesaj metnini yaz, baska bir sey ekleme
 
 Ornekler:
-- "Ahmet bey, bi suredir gelmiyorsunuz! Doner + ayran kombonuz %15 indirimle sizi bekliyor 🥙"
-- "Kebap ozleminiz varsa tam zamani! Bu hafta %10 indirimle 😋"
-- "Merhaba! En sevdiginiz sutlac bugun %20 indirimde, bir tane ayirtalim mi? 🍮"`;
+- "Ahmet bey, bi suredir gelmiyorsunuz! Doner + ayran kombonuz %15 indirimle sizi bekliyor"
+- "Kebap ozleminiz varsa tam zamani! Bu hafta %10 indirimle"
+- "Merhaba! En sevdiginiz sutlac bugun %20 indirimde, bir tane ayirtalim mi?"`;
 
 export class BroadcastService {
   private client: OpenAI | null = null;
@@ -616,9 +616,9 @@ Samimi bir kampanya mesaji yaz.`;
     const name = customerName || 'Degerli musterimiz';
     if (suggestedItems.length > 0) {
       const item = suggestedItems[0];
-      return `${name}, ${item.name} simdi %${discountPct} indirimle sadece ${item.discountedPrice.toFixed(0)} TL! Siparis icin bir mesaj atin 😊`;
+      return `${name}, ${item.name} simdi %${discountPct} indirimle sadece ${item.discountedPrice.toFixed(0)} TL! Siparis icin bir mesaj atin`;
     }
-    return `${name}, sizin icin ozel %${discountPct} indirim firsati! Siparis vermek icin yazin 🎉`;
+    return `${name}, sizin icin ozel %${discountPct} indirim firsati! Siparis vermek icin yazin`;
   }
 
   // ==================== CONVERSION TRACKING ====================

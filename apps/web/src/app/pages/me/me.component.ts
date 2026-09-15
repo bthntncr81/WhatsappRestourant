@@ -273,12 +273,12 @@ import { IconComponent } from '../../shared/icon.component';
         letter-spacing: 0.02em;
 
         &[data-role='OWNER'] {
-          background: #1B5583;
+          background: var(--color-accent-primary);
           color: white;
         }
 
         &[data-role='ADMIN'] {
-          background: rgba(27, 85, 131, 0.15);
+          background: rgba(187, 30, 16, 0.12);
           color: var(--color-accent-primary);
         }
 

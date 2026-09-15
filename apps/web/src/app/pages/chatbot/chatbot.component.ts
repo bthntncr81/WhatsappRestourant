@@ -129,7 +129,7 @@ interface ChatMessage {
     .chat-header {
       text-align: center;
       padding: var(--spacing-md);
-      background: #1B5583;
+      background: var(--color-accent-primary);
       border-radius: var(--radius-lg);
       color: white;
     }
@@ -231,11 +231,11 @@ interface ChatMessage {
     }
 
     .message.user .message-avatar {
-      background: #1B5583;
+      background: var(--color-accent-primary);
     }
 
     .message.assistant .message-avatar {
-      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      background: linear-gradient(135deg, var(--brand-deep, #8a1610) 0%, var(--brand, #bb1e10) 100%);
     }
 
     .message-content {
@@ -245,7 +245,7 @@ interface ChatMessage {
     }
 
     .message.user .message-content {
-      background: #1B5583;
+      background: var(--color-accent-primary);
       color: white;
     }
 
@@ -280,9 +280,9 @@ interface ChatMessage {
     .inline-btn {
       padding: 8px 16px;
       border-radius: 20px;
-      border: 2px solid #1B5583;
+      border: 2px solid var(--color-accent-primary);
       background: transparent;
-      color: #1B5583;
+      color: var(--color-accent-primary);
       cursor: pointer;
       font-size: 0.85rem;
       font-weight: 600;
@@ -290,7 +290,7 @@ interface ChatMessage {
     }
 
     .inline-btn:hover:not(:disabled) {
-      background: #1B5583;
+      background: var(--color-accent-primary);
       color: white;
       transform: scale(1.05);
     }
@@ -365,14 +365,14 @@ interface ChatMessage {
     }
 
     .quick-btn.location-btn {
-      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      background: var(--color-accent-primary);
       color: white;
-      border-color: #11998e;
+      border-color: var(--color-accent-primary);
     }
 
     .quick-btn.location-btn:hover:not(:disabled) {
-      background: linear-gradient(135deg, #0d7a71 0%, #2bc968 100%);
-      border-color: #0d7a71;
+      background: var(--brand-deep, #8a1610);
+      border-color: var(--brand-deep, #8a1610);
     }
 
     .quick-btn.cash-btn {
@@ -423,7 +423,7 @@ interface ChatMessage {
       padding: var(--spacing-md) var(--spacing-lg);
       border-radius: var(--radius-md);
       border: none;
-      background: #1B5583;
+      background: var(--color-accent-primary);
       color: white;
       font-size: 1.2rem;
       cursor: pointer;
@@ -473,7 +473,7 @@ export class ChatbotComponent {
   messages = signal<ChatMessage[]>([
     {
       role: 'system',
-      content: '🎉 Hoş geldiniz! Ben sipariş asistanınızım. Menüden sipariş vermek için yazmanız yeterli.',
+      content: 'Hoş geldiniz! Ben sipariş asistanınızım. Menüden sipariş vermek için yazmanız yeterli.',
       timestamp: new Date()
     }
   ]);
@@ -503,7 +503,7 @@ export class ChatbotComponent {
     // Kullanıcı mesajı olarak göster
     this.messages.update(msgs => [...msgs, {
       role: 'user',
-      content: `📍 Konum: ${loc.name} (${loc.lat}, ${loc.lng})`,
+      content: `Konum: ${loc.name} (${loc.lat}, ${loc.lng})`,
       timestamp: new Date()
     }]);
 
@@ -532,7 +532,7 @@ export class ChatbotComponent {
         const errorMessage = error instanceof Error ? error.message : 'Konum gönderilemedi';
         this.messages.update(msgs => [...msgs, {
           role: 'assistant',
-          content: `❌ Hata: ${errorMessage}`,
+          content: `Hata: ${errorMessage}`,
           timestamp: new Date()
         }]);
         this.isLoading.set(false);
@@ -578,7 +578,7 @@ export class ChatbotComponent {
         const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
         this.messages.update(msgs => [...msgs, {
           role: 'assistant',
-          content: `❌ Hata oluştu: ${errorMessage}\n\nAPI bağlantısını kontrol edin.`,
+          content: `Hata oluştu: ${errorMessage}\n\nAPI bağlantısını kontrol edin.`,
           timestamp: new Date()
         }]);
         this.isLoading.set(false);
@@ -592,7 +592,7 @@ export class ChatbotComponent {
 
     this.messages.update(msgs => [...msgs, {
       role: 'user',
-      content: '💳 Ödeme simülasyonu (sandbox callback)',
+      content: 'Ödeme simülasyonu (sandbox callback)',
       timestamp: new Date()
     }]);
 
@@ -620,7 +620,7 @@ export class ChatbotComponent {
         console.error('Payment simulation error:', error);
         this.messages.update(msgs => [...msgs, {
           role: 'assistant',
-          content: '❌ Ödeme simülasyonu başarısız.',
+          content: 'Ödeme simülasyonu başarısız.',
           timestamp: new Date()
         }]);
         this.isLoading.set(false);
@@ -641,7 +641,7 @@ export class ChatbotComponent {
       next: () => {
         this.messages.set([{
           role: 'system',
-          content: '🔄 Sohbet sıfırlandı! Yeni sipariş vermek için yazabilirsiniz.',
+          content: 'Sohbet sıfırlandı! Yeni sipariş vermek için yazabilirsiniz.',
           timestamp: new Date()
         }]);
         this.userInput = '';
@@ -650,7 +650,7 @@ export class ChatbotComponent {
       error: () => {
         this.messages.set([{
           role: 'system',
-          content: '🔄 Sohbet sıfırlandı!',
+          content: 'Sohbet sıfırlandı!',
           timestamp: new Date()
         }]);
         this.userInput = '';

@@ -17,7 +17,7 @@ const UPSELL_SYSTEM_PROMPT = `Sen bir restoran chatbotusun. Musteriye capraz sat
 Kurallar:
 - Samimi, esprili, arkadasca tonda yaz
 - Turkce, kisa (max 2 cumle)
-- Emoji kullan ama abartma (max 1)
+- ASLA emoji kullanma
 - Musterinin adini kullan (varsa)
 - Fiyat bilgisini dogal sekilde ver
 - Baskici olma, teklif et
@@ -25,9 +25,9 @@ Kurallar:
 
 Ornekler:
 - "Sutlaci unuttun sanki :) sadece 8 TL!"
-- "Doner yanina bir ayran ne gider be! 🥛 5 TL"
-- "Bu siparis tatlisiz olmaz, baklava ekleyelim mi? 😋 12 TL"
-- "Ahmet bey, her zamanki ayraninizi da ekleyelim mi? 🥛 5 TL"`;
+- "Doner yanina bir ayran ne gider be! 5 TL"
+- "Bu siparis tatlisiz olmaz, baklava ekleyelim mi? 12 TL"
+- "Ahmet bey, her zamanki ayraninizi da ekleyelim mi? 5 TL"`;
 
 export class UpsellService {
   private client: OpenAI | null = null;
@@ -267,7 +267,7 @@ export class UpsellService {
     if (previousCount > 0) {
       return `${name}${suggestion.itemName}'i unuttun sanki :) sadece ${price}!`;
     }
-    return `${name}${currentItemNames[0]} yanina ${suggestion.itemName} ne gider be! 😄 ${price}`;
+    return `${name}${currentItemNames[0]} yanina ${suggestion.itemName} ne gider be! ${price}`;
   }
 
   /**

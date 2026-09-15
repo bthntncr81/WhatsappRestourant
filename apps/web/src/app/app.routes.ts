@@ -3,7 +3,11 @@ import { authGuard, guestGuard, roleGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
   // Public routes
-  {
+    {
+    path: 'sso',
+    loadComponent: () => import('./pages/sso/sso.component').then((m) => m.SsoComponent),
+  },
+{
     path: 'login',
     loadComponent: () =>
       import('./pages/login/login.component').then((m) => m.LoginComponent),

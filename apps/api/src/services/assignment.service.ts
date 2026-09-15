@@ -122,7 +122,7 @@ export class AssignmentService {
       select: { customerPhone: true },
     });
 
-    const handoffText = '🔄 Sizi bir temsilciye bağlıyorum. Lütfen bekleyin.';
+    const handoffText = 'Sizi bir temsilciye bağlıyorum. Lütfen bekleyin.';
 
     // Save system message to DB
     await inboxService.createMessage(

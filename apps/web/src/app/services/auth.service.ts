@@ -141,6 +141,23 @@ export class AuthService {
     return headers;
   }
 
+  /** POS "OtOrder AI" düğmesi: token'la parolasız giriş (SSO). */
+  ssoWithOtorderToken(token: string, subdomain: string): Observable<ApiResponse<AuthResponse>> {
+    return this.http
+      .post<ApiResponse<AuthResponse>>(`${environment.apiBaseUrl}/auth/otorder-sso`, { token, subdomain })
+      .pipe(
+        tap((response) => {
+          if (response.success && response.data) {
+            this.storeAuth(response.data);
+          }
+        }),
+        catchError((error) => {
+          console.error('OtOrder SSO error:', error);
+          return throwError(() => error);
+        })
+      );
+  }
+
   register(dto: RegisterDto): Observable<ApiResponse<AuthResponse>> {
     return this.http
       .post<ApiResponse<AuthResponse>>(`${environment.apiBaseUrl}/auth/register`, dto)

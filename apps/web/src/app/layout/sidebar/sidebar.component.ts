@@ -3,6 +3,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
 import { IconComponent } from '../../shared/icon.component';
+import { BrandLogoComponent } from '../../shared/brand-logo.component';
 
 interface NavItem {
   label: string;
@@ -13,13 +14,12 @@ interface NavItem {
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent],
+  imports: [CommonModule, RouterLink, RouterLinkActive, IconComponent, BrandLogoComponent],
   template: `
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <span class="logo-text">OtOrder</span>
-          <span class="logo-ai">AI</span>
+          <app-brand-logo [height]="24"/>
         </div>
         @if (authService.tenant(); as tenant) {
           <div class="tenant-badge">
@@ -87,38 +87,6 @@ interface NavItem {
         align-items: center;
         gap: var(--spacing-sm);
         margin-bottom: var(--spacing-md);
-      }
-
-      .logo-img {
-        height: 28px;
-        border-radius: 6px;
-        object-fit: contain;
-      }
-
-      .logo-icon {
-        color: var(--color-accent-primary);
-      }
-
-      .logo-text {
-        font-family: var(--font-display, inherit);
-        font-size: 1.25rem;
-        font-weight: 800;
-        letter-spacing: -0.03em;
-      }
-
-      .logo-ai {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: 21px;
-        padding: 0 7px;
-        border-radius: 6px;
-        background: var(--color-accent-primary);
-        color: #ffffff;
-        font-family: var(--font-display, inherit);
-        font-size: 0.6875rem;
-        font-weight: 800;
-        letter-spacing: 0.07em;
       }
 
       .tenant-badge {

@@ -27,16 +27,24 @@
   --font-display: 'Sora', 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
+  // OtOrder brand identity (single source of truth — matches otorder.com)
+  --brand: #bb1e10;
+  --brand-deep: #8a1610;
+
   // Accent colors (shared between themes) — OtOrder AI brand red
-  --color-accent-primary: #bb1e10;
+  --color-accent-primary: var(--brand);
   --color-accent-primary-hover: #d93a2b;
+  // WhatsApp green — ONLY for WhatsApp-specific micro indicators (connection dots etc.)
   --color-accent-secondary: #25D366;
   --color-accent-warning: #f59e0b;
   --color-accent-danger: #ef4444;
-  --color-accent-success: #25D366;
+  --color-accent-success: #10b981;
+
+  // Legacy alias — some pages still reference --color-primary
+  --color-primary: var(--color-accent-primary);
 
   // Flat primary (no gradient — modern uniform look)
-  --gradient-primary: #bb1e10;
+  --gradient-primary: var(--brand);
 }
 
 // Dark Theme (default)
@@ -79,8 +87,8 @@
   --color-text-secondary: #475569;
   --color-text-muted: #94a3b8;
 
-  --color-accent-primary: #a81b0e;
-  --color-accent-primary-hover: #8c1409;
+  --color-accent-primary: var(--brand);
+  --color-accent-primary-hover: var(--brand-deep);
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -147,6 +155,14 @@ body {
   color: var(--color-text-primary);
   line-height: 1.6;
   min-height: 100vh;
+}
+
+// Brand display font for headings (body copy stays on DM Sans for readability)
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
 a {

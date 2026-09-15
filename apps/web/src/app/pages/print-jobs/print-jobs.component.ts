@@ -488,8 +488,8 @@ pnpm dev</pre>
     }
 
     .action-btn.retry:hover {
-      background: #1B5583;
-      border-color: #1B5583;
+      background: var(--color-accent-primary);
+      border-color: var(--color-accent-primary);
     }
 
     .action-btn.delete:hover {

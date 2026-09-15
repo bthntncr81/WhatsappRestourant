@@ -173,8 +173,8 @@ import { IconComponent } from './icon.component';
       }
 
       .variant-info .dialog-icon {
-        background: color-mix(in srgb, var(--color-accent-primary, #1B5583) 12%, transparent);
-        color: var(--color-accent-primary, #1B5583);
+        background: color-mix(in srgb, var(--color-accent-primary, #bb1e10) 12%, transparent);
+        color: var(--color-accent-primary, #bb1e10);
       }
       .variant-success .dialog-icon {
         background: rgba(16, 185, 129, 0.12);
@@ -231,11 +231,11 @@ import { IconComponent } from './icon.component';
       }
 
       .btn-primary {
-        background: var(--color-accent-primary, #1B5583);
+        background: var(--color-accent-primary, #bb1e10);
         color: white;
       }
       .btn-primary:hover {
-        background: var(--color-accent-primary-hover, #154269);
+        background: var(--color-accent-primary-hover, #8a1610);
         transform: translateY(-1px);
       }
 
@@ -303,8 +303,8 @@ import { IconComponent } from './icon.component';
       .toast-error .toast-icon { color: #ef4444; }
       .toast-warning { border-left-color: #f59e0b; }
       .toast-warning .toast-icon { color: #f59e0b; }
-      .toast-info { border-left-color: var(--color-accent-primary, #1B5583); }
-      .toast-info .toast-icon { color: var(--color-accent-primary, #1B5583); }
+      .toast-info { border-left-color: var(--color-accent-primary, #bb1e10); }
+      .toast-info .toast-icon { color: var(--color-accent-primary, #bb1e10); }
 
       .toast-icon {
         display: flex;

@@ -44,6 +44,10 @@ function computeEffectivePrice(
 // Confidence threshold for auto-confirmation
 const CONFIDENCE_THRESHOLD = 0.7;
 
+// Hard cap for merged item/order notes (defensive: keeps a looping model from
+// producing a kitchen ticket nobody can read)
+const MAX_NOTES_LENGTH = 240;
+
 // Type for option groups map
 type OptionGroupsMap = Map<
   string,
@@ -79,7 +83,52 @@ export interface OrchestrationResult {
   orderIntent?: OrderIntentDto;
   confirmationMessage?: string;
   needsAgentHandoff?: boolean;
+  /**
+   * True when `clarificationQuestion` is only a generic "I did not understand"
+   * placeholder (not a real, useful question from the model). The flow layer
+   * prefers the conversational answer layer over these — they are the source
+   * of the "Siparisinizi tam anlayamadim" spam.
+   */
+  weakClarification?: boolean;
   error?: string;
+}
+
+/**
+ * Local, LLM-free detector for informational questions ("kac para", "icinde ne
+ * var", "ikisi arasinda fark ne"). Used to keep the bundle force-add fallback
+ * from silently dropping a product into the cart when the customer only asked
+ * a question.
+ */
+export function isInformationalQuestion(text: string): boolean {
+  // Fold Turkish letters to ASCII so "kaç para" / "içinde ne var" match the
+  // ASCII phrase lists below.
+  const t = text
+    .toLocaleLowerCase('tr')
+    .replace(/̇/g, '')
+    .replace(/ı/g, 'i')
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ü/g, 'u');
+
+  // An explicit add/order request always wins over the question heuristic.
+  const orderIntentPhrases = [
+    'ekle', 'istiyorum', 'olsun', 'alayim', 'alalim', 'siparis ver',
+    'getir', 'gonder', 'yollayin', 'lutfen bir', 'bir tane',
+  ];
+  if (orderIntentPhrases.some((p) => t.includes(p))) return false;
+
+  const questionPhrases = [
+    'kac para', 'kac tl', 'kac lira', 'ne kadar', 'kaca', 'fiyat',
+    'icinde ne', 'icinde var', 'neler var', 'ne var',
+    'fark ne', 'farki ne', 'hangisi', 'daha iyi', 'onerir', 'oneri',
+    'acili mi', 'vejetaryen', 'vejeteryan', 'glutensiz', 'helal',
+    'ne kadar surer', 'ne zaman gelir', 'kac dakika',
+    'yapiyor musunuz', 'var mi', 'olur mu', 'mumkun mu',
+    'pahali', 'ucuz', 'tuzlu',
+  ];
+  return questionPhrases.some((p) => t.includes(p));
 }
 
 export class NluOrchestratorService {
@@ -300,8 +349,10 @@ export class NluOrchestratorService {
       let hasExtractedItems = extraction.items.filter(i => i.action === 'add').length > 0;
 
       // If LLM didn't extract items but candidates include bundle items with required options,
-      // force-add the best matching bundle candidate
-      if (!hasExtractedItems && candidates.length > 0) {
+      // force-add the best matching bundle candidate.
+      // NEVER do this for a pure question ("meat five kac para") — the customer
+      // asked, they did not order.
+      if (!hasExtractedItems && candidates.length > 0 && !isInformationalQuestion(userText)) {
         for (const c of candidates) {
           const groups = optionGroups.get(c.menuItemId);
           if (groups?.some(g => g.required)) {
@@ -319,6 +370,16 @@ export class NluOrchestratorService {
           }
         }
       }
+
+      // A "no-op keep" is an extraction that names menu items but changes
+      // nothing: no add, no remove, no new note. That is a QUESTION about the
+      // cart, not an edit to it. Note changes ("az tuz olsun") are explicitly
+      // excluded so they still update — and still re-show — the order.
+      const hasRemoveAction = extraction.items.some((i) => i.action === 'remove');
+      const hasNoteChange =
+        !!extraction.orderNotes || extraction.items.some((i) => !!i.notes);
+      const isNoOpKeep =
+        extraction.items.length > 0 && !hasExtractedItems && !hasRemoveAction && !hasNoteChange;
 
       const missingOptionsEarly = hasExtractedItems
         ? this.findMissingRequiredOptions(extraction.items, optionGroups, candidates)
@@ -347,16 +408,24 @@ export class NluOrchestratorService {
         };
         result.clarificationQuestion = `${stepNum}. ${cleanGroupName} seçin:`;
       } else if (!hasExtractedItems && (extraction.clarificationQuestion || extraction.confidence < CONFIDENCE_THRESHOLD)) {
-        result.clarificationQuestion =
-          extraction.clarificationQuestion ||
-          'Siparisinizi tam anlayamadim. Lutfen ne istediginizi biraz daha aciklar misiniz?';
+        if (extraction.clarificationQuestion) {
+          // A real question from the model ("Et Doner mi Tavuk Doner mi?") —
+          // keep it, it is useful.
+          result.clarificationQuestion = extraction.clarificationQuestion;
+        } else {
+          // Generic "I did not understand" placeholder. Flagged weak so the
+          // flow layer can answer conversationally instead.
+          result.clarificationQuestion =
+            'Siparisinizi tam anlayamadim. Lutfen ne istediginizi biraz daha aciklar misiniz?';
+          result.weakClarification = true;
+        }
       } else if (lowConfidenceItems.length > 0 && !extraction.clarificationQuestion) {
         // Some items have low per-item confidence — ask about those specifically
         const itemNames = lowConfidenceItems
           .map((i) => candidates.find((c) => c.menuItemId === i.menuItemId)?.name || i.menuItemId)
           .join(', ');
         result.clarificationQuestion = `${itemNames} icin emin olamadim. Tam olarak ne istediginizi belirtir misiniz?`;
-      } else if (extraction.items.length > 0) {
+      } else if (extraction.items.length > 0 && !isNoOpKeep) {
         // Check for missing required options before creating draft
         const missingOptions = this.findMissingRequiredOptions(extraction.items, optionGroups, candidates);
         if (missingOptions.length > 0) {
@@ -398,8 +467,19 @@ export class NluOrchestratorService {
             // always fall back to a local suggestion (free-text, therefore
             // eligible for the hybrid Claude rewrite below).
             result.clarificationQuestion = this.buildSuggestionFallback(candidates);
+            result.weakClarification = true;
           }
         }
+      } else if (isNoOpKeep) {
+        // Keep-only, no note change: the model recognised menu items in the
+        // text but is not changing anything — i.e. the customer asked a
+        // QUESTION about products already in the cart ("ikisi arasinda fark
+        // ne", "icinde ne var"). Without this branch createDraftOrder returns
+        // the unchanged order and the flow re-sends the whole cart summary
+        // instead of answering — the cart-summary noise from the transcripts.
+        result.clarificationQuestion =
+          'Siparisinizi tam anlayamadim. Lutfen ne istediginizi biraz daha aciklar misiniz?';
+        result.weakClarification = true;
       }
 
       logger.info(
@@ -487,7 +567,9 @@ export class NluOrchestratorService {
 KURALLAR:
 - Musterinin dilinde yaz (varsayilan Turkce).
 - Sadece asagidaki menu bilgisine dayan; menu disinda urun veya fiyat uydurma.
-- Kisa yaz (1-3 cumle), en fazla 1 emoji.
+- Kisa yaz (1-3 cumle). ASLA emoji kullanma.
+- Fiyatlar sabittir: indirim, pazarlik veya "size ozel yapariz" gibi seyler ASLA teklif etme.
+- ASLA musteriye "su kelimeyi yaz" gibi talimat verme; cevabin ya bilgi ya da net bir soru olsun.
 - Siparisi kendin onaylama veya olusturma; sana verilen DURUM talimatini uygula.
 - Yanitin SADECE musteriye gidecek mesaj metni olsun; baslik, aciklama veya JSON ekleme.` +
       buildCandidatesPrompt(opts.candidates, opts.optionGroups) +
@@ -604,7 +686,7 @@ KURALLAR:
     }
 
     const fallbackText =
-      'Ozel isteginizi not aldim. 👍 Siparisinizi gorevlimiz kontrol edip sizinle onaylayacak.';
+      'Ozel isteginizi not aldim. Siparisinizi gorevlimiz kontrol edip sizinle onaylayacak.';
 
     const result: OrchestrationResult = {
       success: true,
@@ -857,6 +939,45 @@ KURALLAR:
   }
 
   /**
+   * Merge order/item notes without ever repeating the same note.
+   *
+   * ROOT CAUSE this fixes: the existing draft's notes are rendered into the
+   * LLM prompt ("MEVCUT SIPARIS: ... - Not: Bol peynir") and the model echoes
+   * them back on every turn. The old code blindly concatenated, so the note
+   * length doubled each turn (L -> 2L -> 4L ...); 7 turns produced the
+   * observed 128 repetitions.
+   *
+   * Rules: the same note appears once, DIFFERENT notes are all preserved, and
+   * the result is capped so a runaway model cannot blow up the kitchen ticket.
+   */
+  private mergeNotes(existing: string | null | undefined, incoming?: string | null): string | null {
+    const seen = new Set<string>();
+    const out: string[] = [];
+
+    for (const part of `${existing ?? ''},${incoming ?? ''}`.split(',')) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      // Turkish-aware dedup key (İ/I/ı/i collapse to the same letter)
+      const key = trimmed
+        .toLocaleLowerCase('tr')
+        .replace(/̇/g, '')
+        .replace(/ı/g, 'i')
+        .replace(/\s+/g, ' ');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(trimmed);
+    }
+
+    if (out.length === 0) return null;
+
+    let merged = out.join(', ');
+    if (merged.length > MAX_NOTES_LENGTH) {
+      merged = merged.substring(0, MAX_NOTES_LENGTH).replace(/,\s*[^,]*$/, '');
+    }
+    return merged || null;
+  }
+
+  /**
    * Create or update draft order with smart merge logic.
    * Handles action: 'add', 'remove', 'keep' from LLM extraction.
    */
@@ -918,14 +1039,19 @@ KURALLAR:
           // Same item+options → increase qty
           existing.qty += item.qty;
           existing.unitPrice = unitPrice; // Update price in case options changed
-          if (item.notes) {
-            existing.notes = item.notes;
+          if (item.notes === '__CLEAR__') {
+            existing.notes = null;
+          } else if (item.notes) {
+            // Merge (not overwrite): a second note on the same line must not
+            // erase the first one, and a repeated note must not duplicate.
+            existing.notes = this.mergeNotes(existing.notes, item.notes);
           }
           if (extrasJson) {
             existing.extrasJson = extrasJson;
           }
         } else {
-          // New item
+          // New item — dedup inside the incoming string too, in case the model
+          // emitted "Bol peynir, Bol peynir" in one shot.
           existingItemsMap.set(key, {
             menuItemId: item.menuItemId,
             menuItemName: candidate.name,
@@ -933,7 +1059,7 @@ KURALLAR:
             unitPrice,
             optionsJson,
             extrasJson,
-            notes: item.notes,
+            notes: item.notes === '__CLEAR__' ? null : this.mergeNotes(null, item.notes),
           });
         }
       } else if (action === 'remove') {
@@ -962,9 +1088,7 @@ KURALLAR:
             // Special marker: clear notes from this item
             existingItem.notes = null;
           } else if (item.notes) {
-            existingItem.notes = existingItem.notes
-              ? `${existingItem.notes}, ${item.notes}`
-              : item.notes;
+            existingItem.notes = this.mergeNotes(existingItem.notes, item.notes);
           }
           if (extrasJson) {
             existingItem.extrasJson = extrasJson;
@@ -1004,7 +1128,7 @@ KURALLAR:
           ...(extraction.orderNotes === '__CLEAR__'
             ? { notes: null }
             : extraction.orderNotes
-              ? { notes: extraction.orderNotes }
+              ? { notes: this.mergeNotes(existingDraft.notes, extraction.orderNotes) }
               : {}),
           items: {
             create: finalItems.map((item) => ({
@@ -1032,7 +1156,10 @@ KURALLAR:
           conversationId,
           status: 'DRAFT',
           totalPrice,
-          notes: extraction.orderNotes || null,
+          notes:
+            extraction.orderNotes && extraction.orderNotes !== '__CLEAR__'
+              ? this.mergeNotes(null, extraction.orderNotes)
+              : null,
           items: {
             create: finalItems.map((item) => ({
               menuItemId: item.menuItemId,

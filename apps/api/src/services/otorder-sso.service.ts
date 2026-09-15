@@ -1,5 +1,5 @@
 // ============================================================================
-// OtOrder SSO + oto-provizyon — whatsapp.otorder.com girişini OtOrder'a delege eder.
+// OtOrder SSO + oto-provizyon — ai.otorder.com girişini OtOrder'a delege eder.
 // ============================================================================
 // OtOrder'da "Pro AI" (whatsappAI feature) paketi olan restoran sahibi buraya
 // POS e-posta+şifresiyle girer:
@@ -86,6 +86,41 @@ export async function otorderPlanFeatures(token: string): Promise<{ whatsappAI: 
     return { whatsappAI: !!plan?.features?.whatsappAI, whatsappLink: !!plan?.features?.whatsappLink, planKey };
   } catch {
     return { whatsappAI: false, whatsappLink: false };
+  }
+}
+
+/**
+ * POS oturum token'ıyla kimlik (SSO düğmesi) — parola sorulmaz.
+ * /api/auth/me host'tan bağımsızdır; subdomain POS sayfasının kendi host'undan
+ * gelir. Yanlış subdomain iddiası akışın devamında OtOrder tarafında kesilir:
+ * plan kapısı token'ın KENDİ tenant'ına bakar, bağlantı ucu (whatsapp/connect)
+ * host-tenant yetkisi ister ve eşleşmeyen token'a 403 döner.
+ */
+export async function otorderIdentityFromToken(token: string, subdomain: string): Promise<OtorderIdentity | null> {
+  const sub = String(subdomain || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!sub || !token || token.length < 10) return null;
+  try {
+    const res = await fetch(`https://${sub}.otorder.com/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: TIMEOUT(),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => ({}))) as any;
+    const u = data?.user;
+    if (!u?.email) return null;
+    // Garson/kasa token'ları panel açamaz — parola akışıyla aynı kural
+    if (!['OWNER', 'ADMIN'].includes(String(u.role))) return null;
+    return {
+      token,
+      tenantId: '',
+      tenantName: sub.charAt(0).toUpperCase() + sub.slice(1),
+      subdomain: sub,
+      role: String(u.role),
+      userName: u.name || u.email,
+      email: String(u.email).toLowerCase(),
+    };
+  } catch {
+    return null;
   }
 }
 

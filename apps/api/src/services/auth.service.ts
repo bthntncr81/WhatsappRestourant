@@ -13,6 +13,7 @@ import {
 import { AppError } from '../middleware/error-handler';
 import {
   otorderLogin,
+  otorderIdentityFromToken,
   otorderHasAIPlan,
   otorderPlanFeatures,
   provisionFromOtorder,
@@ -155,7 +156,27 @@ export class AuthService {
   private async loginViaOtorder(dto: LoginDto): Promise<AuthResponseDto | null> {
     const identity = await otorderLogin(dto.email, dto.password);
     if (!identity) return null;
+    return this.finishOtorderLogin(identity);
+  }
 
+  /**
+   * POS "OtOrder AI" düğmesinden token'la gelen SSO — kullanıcı POS'ta zaten
+   * oturum açmış, burada parola SORULMAZ. Aynı plan kapısı + provizyon akışı.
+   */
+  async loginWithOtorderToken(token: string, subdomain: string): Promise<AuthResponseDto> {
+    const identity = await otorderIdentityFromToken(token, subdomain);
+    if (!identity) {
+      throw new AppError(401, 'INVALID_SSO', 'OtOrder oturumu doğrulanamadı — POS panelinden tekrar deneyin.');
+    }
+    const result = await this.finishOtorderLogin(identity);
+    if (!result) {
+      throw new AppError(401, 'INVALID_SSO', 'SSO girişi tamamlanamadı — POS panelinden tekrar deneyin.');
+    }
+    return result;
+  }
+
+  // Parola ve token SSO'sunun ORTAK kuyruğu: plan kapısı + provizyon + yanıt.
+  private async finishOtorderLogin(identity: import('./otorder-sso.service').OtorderIdentity): Promise<AuthResponseDto | null> {
     const gate = await otorderHasAIPlan(identity.token);
     if (!gate.ok) {
       throw new AppError(
@@ -166,7 +187,7 @@ export class AuthService {
     }
 
     let user = await prisma.user.findUnique({
-      where: { email: dto.email },
+      where: { email: identity.email },
       include: { memberships: { include: { tenant: true } } },
     });
 
@@ -179,7 +200,7 @@ export class AuthService {
         ssoLogger.warn({ error: e, tenantId: p.tenantId }, 'OtOrder oto-bağlantı başarısız — Entegrasyonlar sayfasından tekrar denenebilir');
       }
       user = await prisma.user.findUnique({
-        where: { email: dto.email },
+        where: { email: identity.email },
         include: { memberships: { include: { tenant: true } } },
       });
     } else {

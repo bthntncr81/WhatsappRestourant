@@ -13,6 +13,7 @@ import {
 } from '../../services/whatsapp-config.service';
 import { DialogService } from '../../shared/dialog.service';
 import { IconComponent } from '../../shared/icon.component';
+import { BrandLogoComponent } from '../../shared/brand-logo.component';
 
 type StepKey = 'welcome' | 'store' | 'whatsapp' | 'menu' | 'operations' | 'done';
 
@@ -32,14 +33,13 @@ interface WorkingHoursDay {
 @Component({
   selector: 'app-onboarding',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, IconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, IconComponent, BrandLogoComponent],
   template: `
     <div class="onboarding-page">
       <!-- Top nav -->
       <nav class="top-nav">
         <div class="nav-brand">
-          <span style="font-family: var(--font-display, inherit); font-weight:800; letter-spacing:-0.03em;">OtOrder</span>
-          <span style="display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:6px; background:#bb1e10; color:#fff; font-family: var(--font-display, inherit); font-size:11px; font-weight:800; letter-spacing:0.07em;">AI</span>
+          <app-brand-logo [height]="22"/>
         </div>
         <div class="nav-right">
           <button class="icon-btn" (click)="themeService.toggleTheme()" aria-label="Tema">
@@ -519,7 +519,7 @@ interface WorkingHoursDay {
         font-weight: 700;
         font-size: 1rem;
       }
-      .nav-brand app-icon { color: var(--color-accent-primary, #1B5583); }
+      .nav-brand app-icon { color: var(--color-accent-primary, #bb1e10); }
 
       .nav-right {
         display: inline-flex;
@@ -620,10 +620,10 @@ interface WorkingHoursDay {
       }
 
       .progress-step.active .step-dot {
-        background: var(--color-accent-primary, #1B5583);
-        border-color: var(--color-accent-primary, #1B5583);
+        background: var(--color-accent-primary, #bb1e10);
+        border-color: var(--color-accent-primary, #bb1e10);
         color: white;
-        box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent-primary, #1B5583) 12%, transparent);
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent-primary, #bb1e10) 12%, transparent);
       }
 
       .progress-step.done .step-dot {
@@ -670,8 +670,8 @@ interface WorkingHoursDay {
         height: 64px;
         margin: 0 auto 16px;
         border-radius: 16px;
-        background: color-mix(in srgb, var(--color-accent-primary, #1B5583) 10%, transparent);
-        color: var(--color-accent-primary, #1B5583);
+        background: color-mix(in srgb, var(--color-accent-primary, #bb1e10) 10%, transparent);
+        color: var(--color-accent-primary, #bb1e10);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -712,8 +712,8 @@ interface WorkingHoursDay {
         width: 40px;
         height: 40px;
         border-radius: 10px;
-        background: color-mix(in srgb, var(--color-accent-primary, #1B5583) 12%, transparent);
-        color: var(--color-accent-primary, #1B5583);
+        background: color-mix(in srgb, var(--color-accent-primary, #bb1e10) 12%, transparent);
+        color: var(--color-accent-primary, #bb1e10);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -783,8 +783,8 @@ interface WorkingHoursDay {
       }
       .form input:focus {
         outline: none;
-        border-color: var(--color-accent-primary, #1B5583);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-primary, #1B5583) 15%, transparent);
+        border-color: var(--color-accent-primary, #bb1e10);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent-primary, #bb1e10) 15%, transparent);
       }
       .latlng {
         display: grid;
@@ -860,7 +860,7 @@ interface WorkingHoursDay {
       }
       .choice-card:hover {
         transform: translateY(-2px);
-        border-color: var(--color-accent-primary, #1B5583);
+        border-color: var(--color-accent-primary, #bb1e10);
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.07);
       }
       .choice-icon {
@@ -875,8 +875,8 @@ interface WorkingHoursDay {
         margin-bottom: 12px;
       }
       .choice-icon.primary {
-        background: color-mix(in srgb, var(--color-accent-primary, #1B5583) 12%, transparent);
-        color: var(--color-accent-primary, #1B5583);
+        background: color-mix(in srgb, var(--color-accent-primary, #bb1e10) 12%, transparent);
+        color: var(--color-accent-primary, #bb1e10);
       }
       .choice-card h3 {
         font-size: 1rem;
@@ -895,7 +895,7 @@ interface WorkingHoursDay {
         gap: 4px;
         font-size: 0.82rem;
         font-weight: 600;
-        color: var(--color-accent-primary, #1B5583);
+        color: var(--color-accent-primary, #bb1e10);
       }
 
       /* ========== Operations ========== */
@@ -1097,11 +1097,11 @@ interface WorkingHoursDay {
       .btn.big { padding: 13px 28px; font-size: 0.95rem; }
 
       .btn-primary {
-        background: var(--color-accent-primary, #1B5583);
+        background: var(--color-accent-primary, #bb1e10);
         color: white;
       }
       .btn-primary:hover:not(:disabled) {
-        background: var(--color-accent-primary-hover, #154269);
+        background: var(--color-accent-primary-hover, #8a1610);
         transform: translateY(-1px);
       }
       .btn-ghost {

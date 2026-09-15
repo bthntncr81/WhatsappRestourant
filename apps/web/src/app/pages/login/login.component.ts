@@ -4,19 +4,19 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { IconComponent } from '../../shared/icon.component';
+import { BrandLogoComponent } from '../../shared/brand-logo.component';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, IconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, IconComponent, BrandLogoComponent],
   template: `
     <div class="auth-page">
       <!-- Left: brand panel -->
       <aside class="brand-panel">
         <div class="brand-panel-inner">
           <div class="wordmark">
-            <span class="wordmark-name">OtOrder</span>
-            <span class="wordmark-ai">AI</span>
+            <app-brand-logo theme="dark" [height]="26"/>
           </div>
 
           <div class="brand-copy">
@@ -51,8 +51,7 @@ import { IconComponent } from '../../shared/icon.component';
       <main class="form-panel">
         <div class="form-card">
           <div class="form-brand">
-            <span class="form-brand-name">OtOrder</span>
-            <span class="wordmark-ai">AI</span>
+            <app-brand-logo theme="light" [height]="24"/>
           </div>
 
           <h1 class="form-title">Tekrar hoş geldin</h1>
@@ -176,29 +175,6 @@ import { IconComponent } from '../../shared/icon.component';
         align-items: center;
         gap: 10px;
         animation: rise 0.5s ease both;
-      }
-
-      .wordmark-name {
-        font-family: var(--font-display, 'Sora', sans-serif);
-        font-size: 1.375rem;
-        font-weight: 800;
-        letter-spacing: -0.03em;
-        color: #ffffff;
-      }
-
-      .wordmark-ai {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: 24px;
-        padding: 0 8px;
-        border-radius: 7px;
-        background: #bb1e10;
-        color: #ffffff;
-        font-family: var(--font-display, 'Sora', sans-serif);
-        font-size: 0.75rem;
-        font-weight: 800;
-        letter-spacing: 0.07em;
       }
 
       .brand-copy {
@@ -366,14 +342,6 @@ import { IconComponent } from '../../shared/icon.component';
         align-items: center;
         gap: 9px;
         margin-bottom: 28px;
-      }
-
-      .form-brand-name {
-        font-family: var(--font-display, 'Sora', sans-serif);
-        font-size: 1.25rem;
-        font-weight: 800;
-        letter-spacing: -0.03em;
-        color: #16181d;
       }
 
       .form-title {

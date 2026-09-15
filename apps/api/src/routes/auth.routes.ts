@@ -27,6 +27,11 @@ const registerSchema = z.object({
   }),
 });
 
+const otorderSsoSchema = z.object({
+  token: z.string().min(10).max(4096),
+  subdomain: z.string().min(1).max(63),
+});
+
 const loginSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: z.string().min(1, 'Password is required'),
@@ -129,6 +134,32 @@ router.post(
         success: true,
         data: result,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /auth/otorder-sso
+ * POS "OtOrder AI" düğmesi: OtOrder oturum token'ıyla parolasız giriş.
+ */
+router.post(
+  '/otorder-sso',
+  authRateLimiter,
+  async (req: Request, res: Response<ApiResponse<AuthResponseDto>>, next: NextFunction) => {
+    try {
+      const validation = otorderSsoSchema.safeParse(req.body);
+      if (!validation.success) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'Invalid input', {
+          errors: validation.error.flatten().fieldErrors,
+        });
+      }
+      const result = await authService.loginWithOtorderToken(
+        validation.data.token,
+        validation.data.subdomain,
+      );
+      res.json({ success: true, data: result });
     } catch (error) {
       next(error);
     }

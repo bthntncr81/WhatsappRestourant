@@ -40,7 +40,7 @@ export class OrderService {
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
-        include: { 
+        include: {
           items: true,
           store: { select: { id: true, name: true } },
         },
@@ -60,7 +60,7 @@ export class OrderService {
   async getOrder(tenantId: string, orderId: string): Promise<OrderDto> {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
-      include: { 
+      include: {
         items: true,
         store: { select: { id: true, name: true } },
       },
@@ -89,7 +89,7 @@ export class OrderService {
 
     const order = await prisma.order.findFirst({
       where,
-      include: { 
+      include: {
         items: true,
         store: { select: { id: true, name: true } },
       },
@@ -393,7 +393,7 @@ export class OrderService {
   ): Promise<void> {
     const order = await prisma.order.findFirst({
       where: { id: orderId, tenantId },
-      include: { 
+      include: {
         items: true,
         store: { select: { name: true } },
       },
@@ -673,12 +673,13 @@ export class OrderService {
 
     let mapsLink = '';
     if (conversation.customerLat && conversation.customerLng) {
-      mapsLink = `\n📍 Konum: https://maps.google.com/?q=${conversation.customerLat},${conversation.customerLng}`;
+      mapsLink = `\nKonum: https://maps.google.com/?q=${conversation.customerLat},${conversation.customerLng}`;
     }
 
-    const deliveryAddr = order.deliveryAddress ? `\n🏠 Adres: ${order.deliveryAddress}` : '';
+    const deliveryAddr = order.deliveryAddress ? `\nAdres: ${order.deliveryAddress}` : '';
 
-    const message = `🔔 *YENİ SİPARİŞ #${order.orderNumber}*\n\n👤 ${customerName}\n📱 ${customerPhone}\n\n📋 *Ürünler:*\n${items}\n\n💰 *Toplam: ${Number(order.totalPrice)} TL*${deliveryAddr}${mapsLink}`;
+    // Text labels replace the emoji that used to carry the meaning here.
+    const message = `*YENİ SİPARİŞ #${order.orderNumber}*\n\nMüşteri: ${customerName}\nTelefon: ${customerPhone}\n\n*Ürünler:*\n${items}\n\n*Toplam: ${Number(order.totalPrice)} TL*${deliveryAddr}${mapsLink}`;
 
     // Get WhatsApp credentials for sending
     const waConfig = await whatsappConfigService.getDecryptedConfig(tenantId);

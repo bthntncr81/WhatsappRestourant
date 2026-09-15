@@ -1784,11 +1784,11 @@ export class InboxComponent implements OnInit, OnDestroy {
   getKindLabel(kind: string): string {
     switch (kind) {
       case 'LOCATION':
-        return '📍 Konum';
+        return 'Konum';
       case 'IMAGE':
-        return '🖼️ Görsel';
+        return 'Görsel';
       case 'VOICE':
-        return '🎤 Sesli Mesaj';
+        return 'Sesli Mesaj';
       case 'SYSTEM':
         return 'Sistem mesajı';
       default:

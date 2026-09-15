@@ -2,6 +2,7 @@ import { getConfig } from '@whatres/config';
 import { broadcastService } from '../../api/src/services/broadcast.service';
 import { inactivityTimeoutService } from '../../api/src/services/inactivity-timeout.service';
 import { billingService } from '../../api/src/services/billing.service';
+import { posIntegrationService } from '../../api/src/services/pos-integration.service';
 import prisma from '../../api/src/db/prisma';
 
 const config = getConfig();
@@ -81,6 +82,44 @@ async function processSubscriptionLifecycle() {
   }
 }
 
+// POS menu sync: runs every 10 minutes.
+// For every POS-connected tenant, compares the POS menu hash with the last
+// synced hash and pulls the menu only when it changed. Errors on one tenant
+// never block the others.
+const POS_MENU_SYNC_INTERVAL_MS = 10 * 60_000;
+let posMenuSyncRunning = false;
+
+async function syncPosMenus() {
+  if (posMenuSyncRunning) return; // avoid overlapping runs on slow syncs
+  posMenuSyncRunning = true;
+  try {
+    const tenants = await prisma.tenant.findMany({
+      where: { posApiUrl: { not: null }, posApiKey: { not: null } },
+      select: { id: true, name: true },
+    });
+
+    for (const t of tenants) {
+      try {
+        const changed = await posIntegrationService.checkMenuChanged(t.id);
+        if (!changed) continue;
+
+        const result = await posIntegrationService.pullMenu(t.id);
+        console.log(
+          `POS menu sync [${t.id}] (${t.name}): ${result.itemsCreated} items, ` +
+            `${result.optionGroupsCreated} option groups, ${result.categoriesFound} categories (version ${result.versionId})`,
+        );
+      } catch (err) {
+        console.error(`POS menu sync error [${t.id}] (${t.name}):`, err);
+        // continue with next tenant
+      }
+    }
+  } catch (err) {
+    console.error('POS menu sync loop error:', err);
+  } finally {
+    posMenuSyncRunning = false;
+  }
+}
+
 async function main() {
   console.log('Worker is ready');
 
@@ -89,9 +128,12 @@ async function main() {
   setInterval(syncProfiles, SYNC_INTERVAL_MS);
   setInterval(processInactivityTimeouts, INACTIVITY_CHECK_INTERVAL_MS);
   setInterval(processSubscriptionLifecycle, SUBSCRIPTION_CHECK_INTERVAL_MS);
+  setInterval(syncPosMenus, POS_MENU_SYNC_INTERVAL_MS);
 
   // Run initial sync after 10 seconds
   setTimeout(syncProfiles, 10_000);
+  // Run initial POS menu check after 30 seconds
+  setTimeout(syncPosMenus, 30_000);
 
   process.on('SIGTERM', () => {
     console.log('Worker shutting down...');
