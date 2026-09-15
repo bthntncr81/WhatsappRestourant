@@ -22,7 +22,7 @@ import {
 const logger = createLogger();
 
 // Trial period in days
-const TRIAL_DAYS = 14;
+const TRIAL_DAYS = 15;
 
 /**
  * Resolve the iyzico pricing plan reference code for a given (plan, cycle)
@@ -93,7 +93,7 @@ export class BillingService {
     });
 
     if (!subscription) {
-      // Create initial subscription — no free trial, starts with SILVER (unpaid)
+      // Create initial subscription — 15-day free trial (TRIAL plan, full access), then suspend until paid
       const trialEndsAt = new Date();
       trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DAYS);
 
@@ -103,20 +103,20 @@ export class BillingService {
           update: {},
           create: {
             tenantId,
-            plan: 'SILVER',
+            plan: 'TRIAL',
             status: 'ACTIVE',
             billingCycle: 'MONTHLY',
-            trialEndsAt: null,
+            trialEndsAt,
             currentPeriodStart: new Date(),
             currentPeriodEnd: null,
-            monthlyOrderLimit: PLAN_DEFINITIONS.SILVER.features.monthlyOrderLimit,
-            monthlyMessageLimit: PLAN_DEFINITIONS.SILVER.features.monthlyMessageLimit,
-            maxStores: PLAN_DEFINITIONS.SILVER.features.maxStores,
-            maxUsers: PLAN_DEFINITIONS.SILVER.features.maxUsers,
+            monthlyOrderLimit: PLAN_DEFINITIONS.TRIAL.features.monthlyOrderLimit,
+            monthlyMessageLimit: PLAN_DEFINITIONS.TRIAL.features.monthlyMessageLimit,
+            maxStores: PLAN_DEFINITIONS.TRIAL.features.maxStores,
+            maxUsers: PLAN_DEFINITIONS.TRIAL.features.maxUsers,
           },
         });
 
-        logger.info({ tenantId }, 'Created initial SILVER subscription');
+        logger.info({ tenantId }, 'Created 15-day TRIAL subscription');
       } catch (error: any) {
         // If unique constraint error, subscription was created by another request
         if (error.code === 'P2002') {

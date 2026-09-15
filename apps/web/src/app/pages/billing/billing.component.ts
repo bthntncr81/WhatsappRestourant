@@ -141,7 +141,7 @@ interface ComparisonRow {
                   <div class="amount-row">
                     <span class="amount">Ücretsiz</span>
                   </div>
-                  <span class="period">14 gün deneme</span>
+                  <span class="period">15 gün deneme</span>
                 } @else {
                   @if (selectedCycle() === 'ANNUAL') {
                     <div class="amount-row">
